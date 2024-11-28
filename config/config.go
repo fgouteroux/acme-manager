@@ -28,10 +28,11 @@ type Common struct {
 }
 
 type Issuer struct {
-	CADirURL string `yaml:"ca_dir_url"`
-	EAB      bool   `yaml:"eab"`
-	KID      string `yaml:"kid,omitempty"`
-	HMAC     string `yaml:"hmac,omitempty"`
+	CADirURL     string `yaml:"ca_dir_url"`
+	EAB          bool   `yaml:"eab"`
+	KID          string `yaml:"kid,omitempty"`
+	HMAC         string `yaml:"hmac,omitempty"`
+	DNSChallenge string `yaml:"dns_challenge"`
 }
 
 // Storage represents storage config.

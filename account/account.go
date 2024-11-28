@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/lego"
-	"github.com/go-acme/lego/v4/providers/dns/ns1"
+	"github.com/go-acme/lego/v4/providers/dns"
 	"github.com/go-acme/lego/v4/registration"
 
 	"github.com/fgouteroux/acme_manager/config"
@@ -150,17 +150,18 @@ func Setup(logger log.Logger, cfg config.Config) error {
 			return err
 		}
 
-		// env var NS1_API_KEY must exist
-		dnsProvider, err := ns1.NewDNSProvider()
-		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
-			return err
-		}
+		if issuerConf.DNSChallenge != "" {
+			dnsProvider, err := dns.NewDNSChallengeProviderByName(issuerConf.DNSChallenge)
+			if err != nil {
+				level.Error(logger).Log("err", err) // #nosec G104
+				return err
+			}
 
-		err = client.Challenge.SetDNS01Provider(dnsProvider)
-		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
-			return err
+			err = client.Challenge.SetDNS01Provider(dnsProvider)
+			if err != nil {
+				level.Error(logger).Log("err", err) // #nosec G104
+				return err
+			}
 		}
 		AcmeClient[issuer] = client
 	}

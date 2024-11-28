@@ -146,7 +146,7 @@ acme_manager_build_info{branch="",goarch="amd64",goos="linux",goversion="go1.22.
 
 ### Limitations
 
-Currently only NS1 DNS challenge is supported and vault storage with app role login.
+Currently only DNS challenge is supported and vault storage with app role login.
 
 ### TLS and basic authentication
 
