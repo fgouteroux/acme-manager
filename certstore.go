@@ -484,17 +484,13 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 			if daysLeft < c.RenewalDays {
 				hasChange = true
 				level.Info(logger).Log("msg", fmt.Sprintf("[%s] acme: Trying renewal with %d days remaining", certData.Domain, daysLeft)) // #nosec G104
-				err := deleteRemoteCertificateResource(certData.Domain, certData.Issuer, logger)
+				cert, err := createRemoteCertificateResource(certData, logger)
 				if err != nil {
 					return err
 				}
 				if globalConfig.Common.CertDeploy {
 					deletelocalCertificateResource(certData.Domain, certData.Issuer, logger)
 
-				}
-				cert, err := createRemoteCertificateResource(certData, logger)
-				if err != nil {
-					return err
 				}
 				dataCopy[i] = cert
 				if globalConfig.Common.CertDeploy {
