@@ -303,7 +303,7 @@ func createlocalCertificateResource(certName, issuer string, logger log.Logger) 
 	if err != nil {
 		level.Error(logger).Log("err", err) // #nosec G104
 	} else if secret == nil {
-		level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath)) // #nosec G104
+		level.Error(logger).Log("msg", fmt.Sprintf("No data found in vault secret key %s", secretKeyPath)) // #nosec G104
 	} else {
 		if cert64, ok := secret["cert"]; ok {
 			certBytes, _ := base64.StdEncoding.DecodeString(cert64.(string))
@@ -315,7 +315,7 @@ func createlocalCertificateResource(certName, issuer string, logger log.Logger) 
 				level.Info(logger).Log("msg", fmt.Sprintf("Deployed certificate %s", certFilePath)) // #nosec G104
 			}
 		} else {
-			level.Error(logger).Log("msg", fmt.Sprintf("No private key found in vault secret key %s", secretKeyPath), "err", err) // #nosec G104
+			level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath), "err", err) // #nosec G104
 		}
 
 		if key64, ok := secret["key"]; ok {
