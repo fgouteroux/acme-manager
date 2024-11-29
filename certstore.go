@@ -408,7 +408,6 @@ func createRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 	err = os.RemoveAll(baseCertificateFilePath)
 	if err != nil {
 		level.Error(logger).Log("err", err) // #nosec G104
-		return newCert, err
 	}
 
 	newCert, err = kvStore(certData, resource.Certificate, resource.PrivateKey)
