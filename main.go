@@ -54,6 +54,7 @@ var (
 	checkRenewalInterval           = kingpin.Flag("check-renewal-interval", "Time interval to check if renewal needed").Default("1h").Duration()
 	checkConfigInterval            = kingpin.Flag("check-config-interval", "Time interval to check if config file changes").Default("30s").Duration()
 	checkCertificateConfigInterval = kingpin.Flag("check-certificate-config-interval", "Time interval to check if certificate config file changes").Default("30s").Duration()
+	checkLocalCertificateInterval  = kingpin.Flag("check-local-certificate-interval", "Time interval to check if local certificate changes").Default("5m").Duration()
 
 	localCache   = memcache.NewLocalCache()
 	vaultClient  *vaultApi.Client
@@ -183,6 +184,9 @@ func main() {
 
 	// renewal certificate
 	go WatchCertExpiration(amStore, logger, *checkRenewalInterval)
+
+	// check local certificate
+	go WatchLocalCertificate(amStore, logger, *checkLocalCertificateInterval)
 
 	http.Handle("/", indexHandler("", indexPage))
 	http.HandleFunc("/ring/leader", func(w http.ResponseWriter, req *http.Request) {

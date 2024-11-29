@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -445,6 +446,126 @@ func deleteRemoteCertificateResource(name, issuer string, logger log.Logger) err
 		level.Error(logger).Log("err", fmt.Errorf("No cert found in vault secret key: %s", vaultSecretPath)) // #nosec G104
 	}
 	return nil
+}
+
+func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error {
+	// not deploy certs
+	if !globalConfig.Common.CertDeploy {
+		return nil
+	}
+
+	data, err := amStore.GetKVRing()
+	if err != nil {
+		return err
+	}
+
+	var hasChange bool
+	for _, certData := range data {
+		certFilePath := globalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".crt"
+		keyFilePath := globalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".key"
+
+		certFileExists := utils.FileExists(certFilePath)
+		keyFileExists := utils.FileExists(keyFilePath)
+
+		if !certFileExists && !keyFileExists {
+			hasChange = true
+			createlocalCertificateResource(certData.Domain, certData.Issuer, logger)
+		} else {
+			var certBytes, keyBytes []byte
+			if certFileExists {
+				certBytes, err = os.ReadFile(filepath.Clean(certFilePath))
+				if err != nil {
+					level.Error(logger).Log("err", err) // #nosec G104
+				}
+			} else {
+				level.Error(logger).Log("msg", fmt.Sprintf("Certificate file %s doesn't exists", certFilePath)) // #nosec G104
+				err := utils.CreateNonExistingFolder(globalConfig.Common.CertDir + certData.Issuer)
+				if err != nil {
+					level.Error(logger).Log("err", err) // #nosec G104
+					continue
+				}
+			}
+
+			if keyFileExists {
+				keyBytes, err = os.ReadFile(filepath.Clean(keyFilePath))
+				if err != nil {
+					level.Error(logger).Log("err", err) // #nosec G104
+				}
+			} else {
+				level.Error(logger).Log("msg", fmt.Sprintf("Private key file %s doesn't exists", keyFilePath)) // #nosec G104
+				err := utils.CreateNonExistingFolder(globalConfig.Common.CertDir + certData.Issuer)
+				if err != nil {
+					level.Error(logger).Log("err", err) // #nosec G104
+					continue
+				}
+			}
+
+			var secret map[string]interface{}
+			if utils.GenerateFingerprint(certBytes) != certData.Fingerprint {
+				hasChange = true
+				secretKeyPath := globalConfig.Storage.Vault.SecretPrefix + "/" + certData.Issuer + "/" + certData.Domain
+				secret, err = vault.GetSecretWithAppRole(vaultClient, globalConfig.Storage.Vault, secretKeyPath)
+				if err != nil {
+					level.Error(logger).Log("err", err) // #nosec G104
+					continue
+				}
+
+				if cert64, ok := secret["cert"]; ok {
+					certBytes, _ := base64.StdEncoding.DecodeString(cert64.(string))
+
+					err := os.WriteFile(certFilePath, certBytes, 0600)
+					if err != nil {
+						level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err) // #nosec G104
+					} else {
+						level.Info(logger).Log("msg", fmt.Sprintf("Deployed certificate %s", certFilePath)) // #nosec G104
+					}
+				} else {
+					level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath), "err", err) // #nosec G104
+				}
+			}
+
+			if utils.GenerateFingerprint(keyBytes) != certData.KeyFingerprint {
+				hasChange = true
+				secretKeyPath := globalConfig.Storage.Vault.SecretPrefix + "/" + certData.Issuer + "/" + certData.Domain
+				if secret == nil {
+					secret, err = vault.GetSecretWithAppRole(vaultClient, globalConfig.Storage.Vault, secretKeyPath)
+					if err != nil {
+						level.Error(logger).Log("err", err) // #nosec G104
+						continue
+					}
+				}
+				if key64, ok := secret["key"]; ok {
+					keyBytes, _ := base64.StdEncoding.DecodeString(key64.(string))
+
+					err := os.WriteFile(keyFilePath, keyBytes, 0600)
+					if err != nil {
+						level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err) // #nosec G104
+					} else {
+						level.Info(logger).Log("msg", fmt.Sprintf("Deployed private key %s", keyFilePath)) // #nosec G104
+					}
+				} else {
+					level.Error(logger).Log("msg", fmt.Sprintf("No private key found in vault secret key %s", secretKeyPath), "err", err) // #nosec G104
+				}
+			}
+		}
+	}
+	if hasChange && globalConfig.Common.CmdEnabled {
+		cmd.Execute(logger, globalConfig)
+	}
+	return nil
+}
+
+func WatchLocalCertificate(amStore *CertStore, logger log.Logger, interval time.Duration) {
+	// create a new Ticker
+	tk := time.NewTicker(interval)
+
+	// start the ticker
+	for range tk.C {
+		err := CheckAndDeployLocalCertificate(amStore, logger)
+		if err != nil {
+			level.Error(logger).Log("msg", "Check local certificate failed", "err", err) // #nosec G104
+		}
+	}
 }
 
 func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
