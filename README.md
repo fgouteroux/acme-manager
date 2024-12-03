@@ -33,23 +33,26 @@ Flags:
       --web.telemetry-path="/metrics"  
                                  Path under which to expose metrics.
       --web.prefix-path=""       Prefix path for all http requests.
-      --[no-]web.systemd-socket  Use systemd socket activation listeners instead of port listeners (Linux only).
+      --[no-]web.systemd-socket  Use systemd socket activation listeners instead of port listeners
+                                 (Linux only).
       --web.listen-address=:8989 ...  
-                                 Addresses on which to expose metrics and web interface. Repeatable for multiple addresses.
-      --web.config.file=""       [EXPERIMENTAL] Path to configuration file that can enable TLS or authentication. See: https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md
+                                 Addresses on which to expose metrics and web interface. Repeatable for
+                                 multiple addresses.
+      --web.config.file=""       [EXPERIMENTAL] Path to configuration file
+                                 that can enable TLS or authentication. See:
+                                 https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md
       --config-path="config.yml"  
                                  Config path
       --certificate-config-path="certificate.yml"  
                                  Certificate config path
-      --cert-days=90             Number of days before certificate expired.
-      --cert-days-renewal=30     Number of days before certificate should be renewed.
       --ring.instance-id=RING.INSTANCE-ID  
                                  Instance ID to register in the ring.
       --ring.instance-addr=RING.INSTANCE-ADDR  
                                  IP address to advertise in the ring. Default is auto-detected.
       --ring.instance-port=7946  Port to advertise in the ring.
       --ring.instance-interface-names=RING.INSTANCE-INTERFACE-NAMES  
-                                 List of network interface names to look up when finding the instance IP address.
+                                 List of network interface names to look up when finding the instance
+                                 IP address.
       --ring.join-members=RING.JOIN-MEMBERS  
                                  Other cluster members to join.
       --check-renewal-interval=1h  
@@ -58,7 +61,10 @@ Flags:
                                  Time interval to check if config file changes
       --check-certificate-config-interval=30s  
                                  Time interval to check if certificate config file changes
-      --log.level=info           Only log messages with the given severity or above. One of: [debug, info, warn, error]
+      --check-local-certificate-interval=5m  
+                                 Time interval to check if local certificate changes
+      --log.level=info           Only log messages with the given severity or above. One of: [debug,
+                                 info, warn, error]
       --log.format=logfmt        Output format of log messages. One of: [logfmt, json]
       --[no-]version             Show application version.
 ```
