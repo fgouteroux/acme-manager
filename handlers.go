@@ -16,6 +16,8 @@ import (
 	"github.com/grafana/dskit/kv/memberlist"
 
 	cert "github.com/fgouteroux/acme_manager/certificate"
+	"github.com/fgouteroux/acme_manager/certstore"
+	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/ring"
 )
 
@@ -114,8 +116,8 @@ func memberlistStatusHandler(httpPathPrefix string, kvs *memberlist.KVInitServic
 	return memberlist.NewHTTPStatusHandler(kvs, templ)
 }
 
-func leaderHandler(w http.ResponseWriter, _ *http.Request, ringConfig ring.AcmeManagerRing) {
-	name, _ := ring.GetLeader(ringConfig)
+func leaderHandler(w http.ResponseWriter, _ *http.Request) {
+	name, _ := ring.GetLeader(certstore.AmStore.RingConfig)
 	_, _ = io.WriteString(w, fmt.Sprintf("{\"name\":\"%s\"}", name))
 }
 
@@ -128,9 +130,8 @@ type certificateHandlerData struct {
 	Certificates []cert.Certificate
 }
 
-func certificateHandler(w http.ResponseWriter, r *http.Request, amStore *CertStore) {
-
-	data, err := amStore.GetKVRing()
+func certificateHandler(w http.ResponseWriter, r *http.Request) {
+	data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -138,7 +139,7 @@ func certificateHandler(w http.ResponseWriter, r *http.Request, amStore *CertSto
 	v := &certificateHandlerData{
 		Now:          time.Now(),
 		Certificates: data,
-		DefaultDays:  *certDays,
+		DefaultDays:  config.GlobalConfig.Common.CertDays,
 	}
 
 	accept := r.Header.Get("Accept")
@@ -165,5 +166,18 @@ func certificateHandler(w http.ResponseWriter, r *http.Request, amStore *CertSto
 	err = templ.Execute(w, v)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
+	data, err := certstore.AmStore.GetKVRingTokenChallenge(certstore.AmRingChallengeKey)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	if val, ok := data[r.RequestURI]; ok {
+		_, _ = io.WriteString(w, val)
+	} else {
+		http.Error(w, fmt.Sprintf("key %s not found", r.RequestURI), http.StatusNotFound)
 	}
 }

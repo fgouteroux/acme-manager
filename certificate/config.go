@@ -53,6 +53,8 @@ type Certificate struct {
 	SAN            string `json:"san,omitempty" yaml:"san,omitempty"`
 	Days           int    `json:"days,omitempty" yaml:"days,omitempty"`
 	RenewalDays    int    `json:"renewal_days,omitempty" yaml:"renewal_days,omitempty"`
+	DNSChallenge   string `json:"dns_challenge,omitempty" yaml:"dns_challenge,omitempty"`
+	HTTPChallenge  string `json:"http_challenge,omitempty" yaml:"http_challenge,omitempty"`
 	Expires        string `json:"expires"`
 	Fingerprint    string `json:"fingerprint"`
 	KeyFingerprint string `json:"key_fingerprint"`

@@ -1,6 +1,8 @@
-package main
+package certstore
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,8 +12,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
-	"github.com/fgouteroux/acme_manager/account"
 	cert "github.com/fgouteroux/acme_manager/certificate"
+	"github.com/fgouteroux/acme_manager/cmd"
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/ring"
 
@@ -36,7 +38,7 @@ func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPat
 			continue
 		}
 
-		oldConfigBytes, err := yaml.Marshal(globalConfig)
+		oldConfigBytes, err := yaml.Marshal(config.GlobalConfig)
 		if err != nil {
 			level.Error(logger).Log("msg", "Unable to yaml marshal the globalconfig", "err", err) // #nosec G104
 			continue
@@ -48,23 +50,23 @@ func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPat
 		if string(oldConfigBytes) != string(newConfigBytes) {
 			level.Info(logger).Log("msg", "modified file", "name", configPath) // #nosec G104
 
-			err = account.Setup(logger, cfg)
+			err = Setup(logger, cfg)
 			if err != nil {
 				level.Error(logger).Log("msg", fmt.Sprintf("Ignoring issuer changes in file %s because of error", configPath), "err", err) // #nosec G104
 				continue
 			}
-			globalConfig = cfg
+			config.GlobalConfig = cfg
 		}
 	}
 }
 
-func WatchCertificateFileChanges(amStore *CertStore, logger log.Logger, interval time.Duration, configPath string) {
+func WatchCertificateFileChanges(logger log.Logger, interval time.Duration, configPath string) {
 	// create a new Ticker
 	tk := time.NewTicker(interval)
 
 	// start the ticker
 	for range tk.C {
-		isLeaderNow, _ := ring.IsLeader(amStore.RingConfig)
+		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 		if isLeaderNow {
 
 			newConfigBytes, err := os.ReadFile(filepath.Clean(configPath))
@@ -91,13 +93,13 @@ func WatchCertificateFileChanges(amStore *CertStore, logger log.Logger, interval
 			if string(oldConfigBytes) != string(newConfigBytes) {
 				level.Info(logger).Log("msg", "modified file", "name", configPath) // #nosec G104
 
-				old, _ := amStore.GetKVRing()
+				old, _ := AmStore.GetKVRingCert(AmRingKey)
 
 				var newCertList []cert.Certificate
 				for _, certData := range cfg.Certificate {
 					// Setting default days
 					if certData.Days == 0 {
-						certData.Days = *certDays
+						certData.Days = config.GlobalConfig.Common.CertDays
 					}
 
 					idx := slices.IndexFunc(old, func(c cert.Certificate) bool {
@@ -153,14 +155,62 @@ func WatchCertificateFileChanges(amStore *CertStore, logger log.Logger, interval
 				if hasChanged {
 					certInfo, err := applyCertFileChanges(diff, logger)
 					if err == nil {
-						localCache.Set(amRingKey, certInfo)
-						amStore.PutKVRing(certInfo)
+						localCache.Set(AmRingKey, certInfo)
+						AmStore.PutKVRing(AmRingKey, certInfo)
+						certConfig = cfg
 					} else {
 						level.Error(logger).Log("err", err) // #nosec G104
 					}
 				}
-				certConfig = cfg
 			}
 		}
 	}
+}
+
+func WatchLocalCertificate(logger log.Logger, interval time.Duration) {
+	// create a new Ticker
+	tk := time.NewTicker(interval)
+
+	// start the ticker
+	for range tk.C {
+		err := CheckAndDeployLocalCertificate(AmStore, logger)
+		if err != nil {
+			level.Error(logger).Log("msg", "Check local certificate failed", "err", err) // #nosec G104
+		}
+	}
+}
+
+func WatchRingKvStoreChanges(logger log.Logger) {
+	AmStore.RingConfig.KvStore.WatchKey(context.Background(), AmRingKey, ring.JSONCodec, func(in interface{}) bool {
+		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
+		if !isLeaderNow {
+			val := in.(*ring.Data)
+			var newCertList []cert.Certificate
+			_ = json.Unmarshal([]byte(val.Content), &newCertList)
+
+			old, found := localCache.Get(AmRingKey)
+			if !found {
+				level.Error(logger).Log("msg", "Empty local cache store") // #nosec G104
+			} else {
+				diff, hasChanged := checkCertDiff(old.Value.([]cert.Certificate), newCertList, logger)
+
+				if hasChanged {
+					level.Info(logger).Log("msg", "kv store key changes") // #nosec G104
+
+					if config.GlobalConfig.Common.CertDeploy {
+						applyRingKvStoreChanges(diff, logger)
+					}
+					localCache.Set(AmRingKey, newCertList)
+
+					if config.GlobalConfig.Common.CmdEnabled {
+						cmd.Execute(logger, config.GlobalConfig)
+					}
+				} else {
+					level.Info(logger).Log("msg", "kv store key no changes") // #nosec G104
+				}
+			}
+		}
+
+		return true // yes, keep watching
+	})
 }

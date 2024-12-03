@@ -1,4 +1,4 @@
-package account
+package certstore
 
 import (
 	"crypto"
@@ -13,8 +13,12 @@ import (
 	"encoding/json"
 
 	"github.com/go-acme/lego/v4/certcrypto"
+	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/providers/dns"
+	"github.com/go-acme/lego/v4/providers/http/memcached"
+	"github.com/go-acme/lego/v4/providers/http/s3"
+	"github.com/go-acme/lego/v4/providers/http/webroot"
 	"github.com/go-acme/lego/v4/registration"
 
 	"github.com/fgouteroux/acme_manager/config"
@@ -88,10 +92,11 @@ func Setup(logger log.Logger, cfg config.Config) error {
 			level.Warn(logger).Log("err", err) // #nosec G104
 		}
 		var account Account
-		err = json.Unmarshal(accountBytes, &account)
-		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
-			return err
+		if len(accountBytes) > 0 {
+			err = json.Unmarshal(accountBytes, &account)
+			if err != nil {
+				level.Error(logger).Log("err", err) // #nosec G104
+			}
 		}
 
 		privateKeyBytes, err := os.ReadFile(fmt.Sprintf("%s/%s/private_key.pem", cfg.Common.RootPathAccount, issuer))
@@ -137,6 +142,7 @@ func Setup(logger log.Logger, cfg config.Config) error {
 				level.Error(logger).Log("err", err) // #nosec G104
 				return err
 			}
+			level.Info(logger).Log("msg", fmt.Sprintf("Account file %s saved", accountFilePath)) // #nosec G104
 		}
 
 		conf := lego.NewConfig(&account)
@@ -163,7 +169,38 @@ func Setup(logger log.Logger, cfg config.Config) error {
 				return err
 			}
 		}
+
+		if issuerConf.HTTPChallenge != "" {
+			httpProvider, err := NewHTTPChallengeProviderByName(issuerConf.HTTPChallenge, issuerConf.HTTPChallengeCfg)
+			if err != nil {
+				level.Error(logger).Log("err", err) // #nosec G104
+				return err
+			}
+
+			err = client.Challenge.SetHTTP01Provider(httpProvider)
+			if err != nil {
+				level.Error(logger).Log("err", err) // #nosec G104
+				return err
+			}
+		}
+
 		AcmeClient[issuer] = client
 	}
 	return nil
+}
+
+// NewHTTPChallengeProviderByName Factory for HTTP providers.
+func NewHTTPChallengeProviderByName(name, config string) (challenge.Provider, error) {
+	switch name {
+	case "memcached":
+		return memcached.NewMemcachedProvider(strings.Split(config, ","))
+	case "s3":
+		return s3.NewHTTPProvider(config)
+	case "webroot":
+		return webroot.NewHTTPProvider(config)
+	case "kvring":
+		return NewKVRingProvider()
+	default:
+		return nil, fmt.Errorf("unrecognized HTTP provider: %s", name)
+	}
 }

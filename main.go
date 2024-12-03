@@ -23,11 +23,8 @@ import (
 	"github.com/prometheus/exporter-toolkit/web"
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 
-	vaultApi "github.com/hashicorp/vault/api"
-
-	"github.com/fgouteroux/acme_manager/account"
+	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/config"
-	"github.com/fgouteroux/acme_manager/memcache"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -42,9 +39,6 @@ var (
 	configPath            = kingpin.Flag("config-path", "Config path").Default("config.yml").String()
 	certificateConfigPath = kingpin.Flag("certificate-config-path", "Certificate config path").Default("certificate.yml").String()
 
-	certDays        = kingpin.Flag("cert-days", "Number of days before certificate expired.").Default("90").Int()
-	certDaysRenewal = kingpin.Flag("cert-days-renewal", "Number of days before certificate should be renewed.").Default("30").Int()
-
 	ringInstanceID             = kingpin.Flag("ring.instance-id", "Instance ID to register in the ring.").String()
 	ringInstanceAddr           = kingpin.Flag("ring.instance-addr", "IP address to advertise in the ring. Default is auto-detected.").String()
 	ringInstancePort           = kingpin.Flag("ring.instance-port", "Port to advertise in the ring.").Default("7946").Int()
@@ -55,10 +49,6 @@ var (
 	checkConfigInterval            = kingpin.Flag("check-config-interval", "Time interval to check if config file changes").Default("30s").Duration()
 	checkCertificateConfigInterval = kingpin.Flag("check-certificate-config-interval", "Time interval to check if certificate config file changes").Default("30s").Duration()
 	checkLocalCertificateInterval  = kingpin.Flag("check-local-certificate-interval", "Time interval to check if local certificate changes").Default("5m").Duration()
-
-	localCache   = memcache.NewLocalCache()
-	vaultClient  *vaultApi.Client
-	globalConfig config.Config
 )
 
 func main() {
@@ -105,13 +95,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = account.Setup(logger, cfg)
-	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
-		os.Exit(1)
-	}
-
-	globalConfig = cfg
+	config.GlobalConfig = cfg
 
 	err = prometheus.Register(version.NewCollector("acme_manager"))
 	if err != nil {
@@ -155,45 +139,55 @@ func main() {
 	http.Handle("/ring", ringConfig.Lifecycler)
 	http.Handle("/memberlist", memberlistStatusHandler("", ringConfig.Memberlistsvc))
 
-	amStore := &CertStore{
+	certstore.AmStore = &certstore.CertStore{
 		RingConfig: ringConfig,
 		Logger:     logger,
 	}
 
-	vaultClient, err = vault.InitVaultClient(cfg.Storage.Vault)
+	err = certstore.Setup(logger, cfg)
+	if err != nil {
+		level.Error(logger).Log("err", err) // #nosec G104
+		os.Exit(1)
+	}
+
+	vault.VaultClient, err = vault.InitVaultClient(cfg.Storage.Vault)
 	if err != nil {
 		level.Error(logger).Log("err", err) // #nosec G104
 		os.Exit(1)
 	}
 
 	// build the kv store ring or join it then process certificate check-up
-	err = onStartup(amStore, logger, *certificateConfigPath)
+	err = certstore.OnStartup(logger, *certificateConfigPath)
 	if err != nil {
 		level.Error(logger).Log("err", err) // #nosec G104
 		os.Exit(1)
 	}
 
 	// check config file changes
-	go WatchConfigFileChanges(logger, *checkConfigInterval, *configPath)
+	go certstore.WatchConfigFileChanges(logger, *checkConfigInterval, *configPath)
 
 	// check certificate file changes
-	go WatchCertificateFileChanges(amStore, logger, *checkCertificateConfigInterval, *certificateConfigPath)
+	go certstore.WatchCertificateFileChanges(logger, *checkCertificateConfigInterval, *certificateConfigPath)
 
 	// check kv store changes
-	go WatchRingKvStoreChanges(amStore.RingConfig, logger)
+	go certstore.WatchRingKvStoreChanges(logger)
 
 	// renewal certificate
-	go WatchCertExpiration(amStore, logger, *checkRenewalInterval)
+	go certstore.WatchCertExpiration(logger, *checkRenewalInterval)
 
 	// check local certificate
-	go WatchLocalCertificate(amStore, logger, *checkLocalCertificateInterval)
+	go certstore.WatchLocalCertificate(logger, *checkLocalCertificateInterval)
 
 	http.Handle("/", indexHandler("", indexPage))
 	http.HandleFunc("/ring/leader", func(w http.ResponseWriter, req *http.Request) {
-		leaderHandler(w, req, ringConfig)
+		leaderHandler(w, req)
 	})
 	http.HandleFunc("/certificates", func(w http.ResponseWriter, req *http.Request) {
-		certificateHandler(w, req, amStore)
+		certificateHandler(w, req)
+	})
+
+	http.HandleFunc("/.well-known/acme-challenge/", func(w http.ResponseWriter, req *http.Request) {
+		httpChallengeHandler(w, req)
 	})
 
 	server := &http.Server{

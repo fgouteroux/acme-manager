@@ -11,6 +11,10 @@ import (
 	"github.com/fgouteroux/acme_manager/config"
 )
 
+var (
+	VaultClient *vaultApi.Client
+)
+
 func InitVaultClient(cfg config.Vault) (*vaultApi.Client, error) {
 	config := vaultApi.DefaultConfig()
 	config.Address = cfg.URL

@@ -82,10 +82,10 @@ Private keys must exists for each given issuer in `rootpath_account`, here:
 
 ```
 common:
-  certificate_deploy: true
-  certificate_dir: /etc/haproxy/ssl/vault/
   rootpath_account: /tmp/accounts
   rootpath_certificate: /tmp/certificates
+  certificate_deploy: true
+  certificate_dir: /etc/haproxy/ssl/vault/
   cmd_enabled: true
   cmd_run: /usr/bin/systemctl reload haproxy
   cmd_timeout: 30
@@ -109,6 +109,23 @@ storage:
     mount_path: "login/approle"
 ```
 
+Optional Common parameters:
+- **cert_days** (int): Number of days before certificate expired (default: 90).
+- **cert_days_renewal** (int): Number of days before certificate should be renewed (default: 30).
+- **certificate_deploy** (bool): If set to true, deploy certificate and private key in given `certificate_dir`
+- **certificate_dir** (string): Directory in which to deploy issuers certificates and private keys
+- **cmd_enabled** (bool): If set to true, run a custom command after deploying certificates.
+- **cmd_run** (string):  Command to run.
+- **cmd_timeout** (int): Command timeout.
+- **prune_certificate** (bool): If set to true, revoke certificate found in vault storage and not decalred in certificate file.
+
+Optional Issuer parameters:
+- **eab** (bool): Use External Account Binding for account registration. Requires `kid` and `hmac`.
+- **kid** (string): Key identifier from External CA. Used for External Account Binding
+- **hmac** (string): MAC key from External CA. Should be in Base64 URL Encoding without padding format. Used for External Account Binding.
+- **http_challenge** (string): http challenge name to use for domain validation
+- **dns_challenge** (string): dns challenge name to use for domain validation
+
 ### Certificate config file
 
 Optional parameters:
@@ -116,6 +133,8 @@ Optional parameters:
 - **renewal_days** (int): number of days before automatic certificate renewal
 - **days** (int): number of days before certificate expiration
 - **san** (string, comma separated): DNS domain names to add to certificate
+- **http_challenge** (string): http challenge name to use for domain validation
+- **dns_challenge** (string): dns challenge name to use for domain validation
 
 ```
 certificate:
@@ -125,6 +144,19 @@ certificate:
   - domain: testfgx02.example.com
     issuer: sectigo
 ```
+
+### DNS and HTTP Challenge
+
+acme-manager support DNS and HTTP challenge (thanks to lego lib).
+
+There is a custom HTTP Challenge based on kvring, that allow http domain validation with the embedded http endpoint in acme manager.
+
+Setting the `http_challenge: kvring`, will store the challenge token in kvring and it could be retrieved with a call like:
+```
+curl http://testfgx01.example.com/.well-known/acme-challenge/NClsmGOVJqV9jx8xBLO6kabcxBufpLGcu5oUjjhhu1o
+```
+
+Once the domain is validated, the challenge token value is removed from kvring.
 
 
 ### Managed certificate web UI
@@ -146,7 +178,7 @@ acme_manager_build_info{branch="",goarch="amd64",goos="linux",goversion="go1.22.
 
 ### Limitations
 
-Currently only DNS challenge is supported and vault storage with app role login.
+Currently only vault storage with app role login is supported.
 
 ### TLS and basic authentication
 

@@ -1,4 +1,4 @@
-package main
+package certstore
 
 import (
 	"encoding/base64"
@@ -13,6 +13,7 @@ import (
 
 	cert "github.com/fgouteroux/acme_manager/certificate"
 	"github.com/fgouteroux/acme_manager/cmd"
+	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -20,14 +21,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func onStartup(amStore *CertStore, logger log.Logger, configPath string) error {
-	isLeaderNow, err := ring.IsLeader(amStore.RingConfig)
+func OnStartup(logger log.Logger, configPath string) error {
+	isLeaderNow, err := ring.IsLeader(AmStore.RingConfig)
 	if err != nil {
 		level.Warn(logger).Log("msg", "Failed to determine the ring leader", "err", err) // #nosec G104
 		return err
 	}
 
-	data, err := amStore.GetKVRing()
+	data, err := AmStore.GetKVRing(AmRingKey)
 	if err != nil {
 		level.Error(logger).Log("err", err) // #nosec G104
 		return err
@@ -55,9 +56,9 @@ func onStartup(amStore *CertStore, logger log.Logger, configPath string) error {
 		level.Info(logger).Log("msg", "Retrieving certificates from vault") // #nosec G104
 
 		vaultSecrets, err := vault.ListSecretWithAppRole(
-			vaultClient,
-			globalConfig.Storage.Vault,
-			globalConfig.Storage.Vault.SecretPrefix+"/",
+			vault.VaultClient,
+			config.GlobalConfig.Storage.Vault,
+			config.GlobalConfig.Storage.Vault.SecretPrefix+"/",
 		)
 		if err != nil {
 			level.Error(logger).Log("err", err) // #nosec G104
@@ -69,7 +70,7 @@ func onStartup(amStore *CertStore, logger log.Logger, configPath string) error {
 
 			var vaultCertCount int
 			for _, secretKey := range vaultSecrets {
-				secretKeyPath := globalConfig.Storage.Vault.SecretPrefix + "/" + secretKey
+				secretKeyPath := config.GlobalConfig.Storage.Vault.SecretPrefix + "/" + secretKey
 
 				secretKeyPathArr := strings.Split(secretKeyPath, "/")
 				issuer := secretKeyPathArr[1]
@@ -80,7 +81,7 @@ func onStartup(amStore *CertStore, logger log.Logger, configPath string) error {
 					Issuer: issuer,
 				}
 
-				secret, err := vault.GetSecretWithAppRole(vaultClient, globalConfig.Storage.Vault, secretKeyPath)
+				secret, err := vault.GetSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, secretKeyPath)
 				if err != nil {
 					level.Error(logger).Log("err", err) // #nosec G104
 					continue
@@ -107,7 +108,7 @@ func onStartup(amStore *CertStore, logger log.Logger, configPath string) error {
 				}
 
 				var certBytes, keyBytes []byte
-				certFilePath := globalConfig.Common.CertDir + secretKey + ".crt"
+				certFilePath := config.GlobalConfig.Common.CertDir + secretKey + ".crt"
 
 				if utils.FileExists(certFilePath) {
 					certBytes, err = os.ReadFile(filepath.Clean(certFilePath))
@@ -116,7 +117,7 @@ func onStartup(amStore *CertStore, logger log.Logger, configPath string) error {
 					}
 				}
 
-				keyFilePath := globalConfig.Common.CertDir + secretKey + ".key"
+				keyFilePath := config.GlobalConfig.Common.CertDir + secretKey + ".key"
 				err = utils.CreateNonExistingFolder(filepath.Dir(keyFilePath))
 				if err != nil {
 					level.Error(logger).Log("err", err) // #nosec G104
@@ -129,7 +130,7 @@ func onStartup(amStore *CertStore, logger log.Logger, configPath string) error {
 					}
 				}
 
-				if globalConfig.Common.CertDeploy {
+				if config.GlobalConfig.Common.CertDeploy {
 					currentCert, err := kvStore(tmp, certBytes, keyBytes)
 					if err != nil {
 						level.Error(logger).Log("err", err) // #nosec G104
@@ -172,7 +173,7 @@ func onStartup(amStore *CertStore, logger log.Logger, configPath string) error {
 				c.SAN = certData.SAN
 
 				if certData.Days == 0 {
-					c.Days = *certDays
+					c.Days = config.GlobalConfig.Common.CertDays
 				} else {
 					c.Days = certData.Days
 				}
@@ -185,7 +186,7 @@ func onStartup(amStore *CertStore, logger log.Logger, configPath string) error {
 					os.Exit(1)
 				}
 
-				if globalConfig.Common.CertDeploy {
+				if config.GlobalConfig.Common.CertDeploy {
 					createlocalCertificateResource(certData.Domain, certData.Issuer, logger)
 				}
 				content = append(content, newCert)
@@ -199,7 +200,7 @@ func onStartup(amStore *CertStore, logger log.Logger, configPath string) error {
 			})
 
 			if idx == -1 {
-				if globalConfig.Common.PruneCertificate {
+				if config.GlobalConfig.Common.PruneCertificate {
 					level.Info(logger).Log("msg", fmt.Sprintf("Removing certificate '%s' present in vault but not in config file", certData.Domain)) // #nosec G104
 					// Clean certificate in vault but not in config file
 					err := deleteRemoteCertificateResource(certData.Domain, certData.Issuer, logger)
@@ -207,7 +208,7 @@ func onStartup(amStore *CertStore, logger log.Logger, configPath string) error {
 						level.Error(logger).Log("err", err) // #nosec G104
 						os.Exit(1)
 					}
-					if globalConfig.Common.CertDeploy {
+					if config.GlobalConfig.Common.CertDeploy {
 						deletelocalCertificateResource(certData.Domain, certData.Issuer, logger)
 					}
 				} else {
@@ -217,21 +218,21 @@ func onStartup(amStore *CertStore, logger log.Logger, configPath string) error {
 		}
 
 		// udpate kv store
-		amStore.PutKVRing(content)
+		AmStore.PutKVRing(AmRingKey, content)
 
 		// update local cache with kv store value
-		localCache.Set(amRingKey, content)
+		localCache.Set(AmRingKey, content)
 
-		if globalConfig.Common.CmdEnabled {
-			cmd.Execute(logger, globalConfig)
+		if config.GlobalConfig.Common.CmdEnabled {
+			cmd.Execute(logger, config.GlobalConfig)
 		}
 	} else {
 		level.Info(logger).Log("msg", "Processing certificates as simple peer") // #nosec G104
 
 		// update local cache with kv store value
-		localCache.Set(amRingKey, data)
+		localCache.Set(AmRingKey, data)
 
-		err := CheckAndDeployLocalCertificate(amStore, logger)
+		err := CheckAndDeployLocalCertificate(AmStore, logger)
 		if err != nil {
 			level.Error(logger).Log("err", err) // #nosec G104
 		}
