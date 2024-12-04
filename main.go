@@ -38,6 +38,7 @@ var (
 	webConfig             = webflag.AddFlags(kingpin.CommandLine, ":8989")
 	configPath            = kingpin.Flag("config-path", "Config path").Default("config.yml").String()
 	certificateConfigPath = kingpin.Flag("certificate-config-path", "Certificate config path").Default("certificate.yml").String()
+	envConfigPath         = kingpin.Flag("env-config-path", "Environment vars config path").Default(".env").String()
 
 	ringInstanceID             = kingpin.Flag("ring.instance-id", "Instance ID to register in the ring.").String()
 	ringInstanceAddr           = kingpin.Flag("ring.instance-addr", "IP address to advertise in the ring. Default is auto-detected.").String()
@@ -76,7 +77,7 @@ func main() {
 
 	logger := promlog.New(promlogConfig)
 
-	err := godotenv.Load()
+	err := godotenv.Load(*envConfigPath)
 	if err != nil {
 		level.Error(logger).Log("err", err) // #nosec G104
 		os.Exit(1)
