@@ -1,26 +1,24 @@
 # acme_manager
 
-Manages acme certificates and deploy them on servers.
+ACME Manager is a tool designed to create, manage, and deploy ACME certificates on servers. It handles automatic renewal, monitors expiration dates, and ensures seamless deployment for applications or proxies.
 
 ![Acme Manager](img/home.png)
 
-## Overview
+## Features
 
-Acme Manager is an application which create certificate using [ACME](https://datatracker.ietf.org/doc/html/rfc8555), store them in vault  and deploy them on servers to be use by another application/proxy...
+- **Certificate Management**: Automatically renew certificates 30 days before expiration.
+- **Cluster Mode**: Operates in a cluster using the Memberlist protocol with automatic leader election.
+- **Vault Storage**: Stores certificates securely in Vault.
+- **DNS/HTTP Challenges**: Supports both challenge methods for domain validation.
+- **Metrics and Monitoring**: Provides application metrics and a web UI for certificate management.
 
-Acme Manager solves the certificate expiration issue with automatic renewal. It monitor the expiration date of each certificate and renew it before expiration (by default 30d before), update them in vault and deploy them on servers.
+## How It Works
 
-## How it works
+1. ACME Manager creates certificates using [ACME](https://datatracker.ietf.org/doc/html/rfc8555).
+2. Certificates are stored securely in Vault and deployed to specified servers.
+3. The application monitors expiration dates and renews certificates as needed. (by default 30d before expiration)
+4. Deployments include optional custom command execution (e.g., reloading services like HAProxy).
 
-Acme Manager run in cluster mode with the memberlist protocol.
-
-![Memberlist](img/memberlist.png)
-
-One instance of the ring is elected to be the leader and this is the only one which will make request to acme servers, store certificate in vault and store non-sensitive data in the key value store of the ring.
-
-If the leader instance goes down, another one will be elected and will start to manage certificates.
-
-Peers are watching the kv store key for changes and deploy/remove local certificates.
 
 ### Usage
 
@@ -63,6 +61,18 @@ Flags:
       --log.format=logfmt        Output format of log messages. One of: [logfmt, json]
       --[no-]version             Show application version.
 ```
+
+### Cluster Mode
+
+Acme Manager run in cluster mode with the memberlist protocol.
+
+![Memberlist](img/memberlist.png)
+
+One instance of the ring is elected to be the leader and this is the only one which will make request to acme servers, store certificate in vault and store non-sensitive data in the key value store of the ring.
+
+If the leader instance goes down, another one will be elected and will start to manage certificates.
+
+Peers are watching the kv store key for changes and deploy/remove local certificates.
 
 ### Env File
 
