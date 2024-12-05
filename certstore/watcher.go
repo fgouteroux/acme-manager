@@ -16,6 +16,7 @@ import (
 	"github.com/fgouteroux/acme_manager/cmd"
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/ring"
+	"github.com/fgouteroux/acme_manager/storage/vault"
 
 	"gopkg.in/yaml.v3"
 )
@@ -53,6 +54,12 @@ func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPat
 			err = Setup(logger, cfg)
 			if err != nil {
 				level.Error(logger).Log("msg", fmt.Sprintf("Ignoring issuer changes in file %s because of error", configPath), "err", err) // #nosec G104
+				continue
+			}
+
+			vault.VaultClient, err = vault.InitVaultClient(cfg.Storage.Vault)
+			if err != nil {
+				level.Error(logger).Log("msg", fmt.Sprintf("Ignoring vault changes in file %s because of error", configPath),"err", err) // #nosec G104
 				continue
 			}
 			config.GlobalConfig = cfg
