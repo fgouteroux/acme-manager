@@ -10,7 +10,10 @@ ACME Manager is a tool designed to create, manage, and deploy ACME certificates 
 - **Cluster Mode**: Operates in a cluster using the Memberlist protocol with automatic leader election.
 - **Vault Storage**: Stores certificates securely in Vault.
 - **DNS/HTTP Challenges**: Supports both challenge methods for domain validation.
-- **Metrics and Monitoring**: Provides application metrics and a web UI for certificate management.
+- **Metrics and Monitoring**: Provides application prometheus metrics and a web UI for certificate management.
+- **Automatic refresh**: Configuration and Certificate file are periodically refreshed without any service restart.
+- **Local Certificate**: Ensure that local certificate deployed are always up-to-date.
+- **Local Cmd Run**: Run a custom command once certificate have been created/updated/renewed/deployed.
 
 ## How It Works
 
