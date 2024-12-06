@@ -21,4 +21,11 @@ security:
 	gosec -exclude-dir _local -quiet ./...
 
 build:
-	go build
+	goreleaser build --snapshot --rm-dist
+
+test:
+	go test -v -timeout 30s -coverprofile=cover.out -cover $(TEST)
+	go tool cover -func=cover.out
+
+release:
+	goreleaser release --skip-publish --rm-dist
