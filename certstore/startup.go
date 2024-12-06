@@ -14,6 +14,7 @@ import (
 	cert "github.com/fgouteroux/acme_manager/certificate"
 	"github.com/fgouteroux/acme_manager/cmd"
 	"github.com/fgouteroux/acme_manager/config"
+	"github.com/fgouteroux/acme_manager/metrics"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -193,6 +194,7 @@ func OnStartup(logger log.Logger, configPath string) error {
 			}
 		}
 
+		certStat := make(map[string]float64)
 		for _, certData := range vaultCertList {
 
 			idx := slices.IndexFunc(content, func(c cert.Certificate) bool {
@@ -214,7 +216,13 @@ func OnStartup(logger log.Logger, configPath string) error {
 				} else {
 					level.Info(logger).Log("msg", fmt.Sprintf("(noop) - removing certificate '%s' present in vault but not in config file", certData.Domain)) // #nosec G104
 				}
+			} else {
+				certStat[certData.Issuer] += 1.0
 			}
+		}
+
+		for issuer, count := range certStat {
+			metrics.SetManagedCertificate(issuer, count)
 		}
 
 		// udpate kv store

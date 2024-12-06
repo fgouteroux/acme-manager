@@ -25,6 +25,7 @@ import (
 	"github.com/fgouteroux/acme_manager/cmd"
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/memcache"
+	"github.com/fgouteroux/acme_manager/metrics"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -231,6 +232,7 @@ func applyCertFileChanges(diff mapDiff, logger log.Logger) ([]cert.Certificate, 
 		if err != nil {
 			return certInfo, err
 		}
+		metrics.IncManagedCertificate(certData.Issuer)
 		certInfo = append(certInfo, newCert)
 
 		if config.GlobalConfig.Common.CertDeploy {
@@ -263,6 +265,7 @@ func applyCertFileChanges(diff mapDiff, logger log.Logger) ([]cert.Certificate, 
 		if err != nil {
 			return certInfo, err
 		}
+		metrics.DecManagedCertificate(certData.Issuer)
 		if config.GlobalConfig.Common.CertDeploy {
 			deletelocalCertificateResource(certData.Domain, certData.Issuer, logger)
 		}
@@ -313,6 +316,7 @@ func createlocalCertificateResource(certName, issuer string, logger log.Logger) 
 				level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err) // #nosec G104
 			} else {
 				level.Info(logger).Log("msg", fmt.Sprintf("Deployed certificate %s", certFilePath)) // #nosec G104
+				metrics.IncCreatedLocalCertificate(issuer)
 			}
 		} else {
 			level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath), "err", err) // #nosec G104
@@ -342,6 +346,7 @@ func deletelocalCertificateResource(certName, issuer string, logger log.Logger) 
 		level.Error(logger).Log("msg", fmt.Sprintf("Unable to delete certificate file %s", certFilePath), "err", err) // #nosec G104
 	} else {
 		level.Info(logger).Log("msg", fmt.Sprintf("Removed certificate %s", certFilePath)) // #nosec G104
+		metrics.IncDeletedLocalCertificate(issuer)
 	}
 
 	err = os.Remove(keyFilePath)
@@ -420,6 +425,8 @@ func createRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 		return newCert, err
 	}
 
+	metrics.IncCreatedCertificate(certData.Issuer)
+
 	// save in local in case of vault failure
 	SaveResource(logger, baseCertificateFilePath, resource)
 
@@ -464,6 +471,8 @@ func deleteRemoteCertificateResource(name, issuer string, logger log.Logger) err
 			return err
 		}
 
+		metrics.IncRevokedCertificate(issuer)
+
 		level.Info(logger).Log("msg", fmt.Sprintf("Certificate domain %s for %s issuer revoked", domain, issuer)) // #nosec G104
 		err = vault.DeleteSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, vaultSecretPath)
 		if err != nil {
@@ -488,7 +497,9 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 	}
 
 	var hasChange bool
+	certStat := make(map[string]float64)
 	for _, certData := range data {
+		certStat[certData.Issuer] += 1.0
 		certFilePath := config.GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".crt"
 		keyFilePath := config.GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".key"
 
@@ -577,6 +588,10 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 			}
 		}
 	}
+
+	for issuer, count := range certStat {
+		metrics.SetManagedCertificate(issuer, count)
+	}
 	if hasChange && config.GlobalConfig.Common.CmdEnabled {
 		cmd.Execute(logger, config.GlobalConfig)
 	}
@@ -624,6 +639,7 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 				if err != nil {
 					return err
 				}
+				metrics.IncRenewedCertificate(certData.Issuer)
 				if config.GlobalConfig.Common.CertDeploy {
 					deletelocalCertificateResource(certData.Domain, certData.Issuer, logger)
 

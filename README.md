@@ -185,6 +185,33 @@ This endpoint return metrics about app itself.
 # HELP acme_manager_build_info A metric with a constant '1' value labeled by version, revision, branch, goversion from which acme_manager was built, and the goos and goarch for the build.
 # TYPE acme_manager_build_info gauge
 acme_manager_build_info{branch="",goarch="amd64",goos="linux",goversion="go1.22.5",revision="66881e952813a0b191d632ff2d63d74508c0e3c7-modified",tags="unknown",version=""} 1
+# HELP acme_manager_certificates_total Number of managed certificates by issuer
+# TYPE acme_manager_certificates_total gauge
+acme_manager_certificates_total(issuer="letsencrypt") 2
+# HELP acme_manager_certificates_created_total Number of created certificates by issuer
+# TYPE acme_manager_certificates_created_total counter
+acme_manager_certificates_created_total(issuer="letsencrypt") 4
+# HELP acme_manager_certificates_revoked_total Number of revoked certificates by issuer
+# TYPE acme_manager_certificates_revoked_total counter
+acme_manager_certificates_revoked_total(issuer="letsencrypt") 2
+# HELP acme_manager_certificates_renewed_total Number of renewed certificates by issuer
+# TYPE acme_manager_certificates_renewed_total counter
+acme_manager_certificates_renewed_total(issuer="letsencrypt") 1
+# HELP acme_manager_local_certificates_created_total Number of created local certificates by issuer
+# TYPE acme_manager_local_certificates_created_total counter
+acme_manager_local_certificates_created_total(issuer="letsencrypt") 4
+# HELP acme_manager_local_certificates_deleted_total Number of deleted local certificates by issuer
+# TYPE acme_manager_local_certificates_deleted_total counter
+acme_manager_local_certificates_deleted_total(issuer="letsencrypt") 2
+# HELP acme_manager_local_cmd_run_success_total Number of success local cmd run
+# TYPE acme_manager_local_cmd_run_success_total counter
+acme_manager_local_cmd_run_success_total 3
+# HELP acme_manager_local_cmd_run_failed_total Number of failed local cmd run
+# TYPE acme_manager_local_cmd_run_failed_total counter
+acme_manager_local_cmd_run_failed_total 1
+# HELP acme_manager_vault_get_secret_success_total Number of retrieved vault secrets
+# TYPE acme_manager_vault_get_secret_success_total counter
+acme_manager_vault_get_secret_success_total 1
 ```
 
 ### Limitations

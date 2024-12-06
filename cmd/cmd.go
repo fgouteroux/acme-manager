@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/log/level"
 
 	"github.com/fgouteroux/acme_manager/config"
+	"github.com/fgouteroux/acme_manager/metrics"
 )
 
 func Execute(logger log.Logger, globalConfig config.Config) {
@@ -23,8 +24,10 @@ func Execute(logger log.Logger, globalConfig config.Config) {
 		out, err := run(cmdPath, cmdArgs, globalConfig.Common.CmdTimeout)
 		if err != nil {
 			level.Error(logger).Log("msg", out, "err", err) // #nosec G104
+			metrics.IncRunFailedLocalCmd()
 		} else {
 			level.Info(logger).Log("msg", fmt.Sprintf("Command '%s %s' successfully executed", cmdPath, strings.Join(cmdArgs, " "))) // #nosec G104
+			metrics.IncRunSuccessLocalCmd()
 		}
 	}
 }

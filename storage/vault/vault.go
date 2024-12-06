@@ -9,6 +9,7 @@ import (
 	auth "github.com/hashicorp/vault/api/auth/approle"
 
 	"github.com/fgouteroux/acme_manager/config"
+	"github.com/fgouteroux/acme_manager/metrics"
 )
 
 var (
@@ -57,8 +58,11 @@ func GetSecretWithAppRole(client *vaultApi.Client, cfg config.Vault, secretPath 
 
 	secret, err := client.KVv2(cfg.SecretEngine).Get(context.Background(), secretPath)
 	if err != nil {
+		metrics.IncGetFailedVaultSecret()
 		return data, err
 	}
+
+	metrics.IncGetSuccessVaultSecret()
 
 	return secret.Data, nil
 }
@@ -72,8 +76,10 @@ func PutSecretWithAppRole(client *vaultApi.Client, cfg config.Vault, secretPath 
 
 	_, err = client.KVv2(cfg.SecretEngine).Put(context.Background(), secretPath, data)
 	if err != nil {
+		metrics.IncPutFailedVaultSecret()
 		return err
 	}
+	metrics.IncPutSuccessVaultSecret()
 
 	return nil
 }
@@ -87,8 +93,10 @@ func DeleteSecretWithAppRole(client *vaultApi.Client, cfg config.Vault, secretPa
 
 	err = client.KVv2(cfg.SecretEngine).Delete(context.Background(), secretPath)
 	if err != nil {
+		metrics.IncDeleteFailedVaultSecret()
 		return err
 	}
+	metrics.IncDeleteSuccessVaultSecret()
 
 	return nil
 }
