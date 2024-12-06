@@ -50,13 +50,13 @@ func (c *CertStore) GetKVRingCert(key string) ([]cert.Certificate, error) {
 
 	content, err := c.GetKVRing(key)
 	if err != nil {
-		level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to get kv store key '%s'", key), "err", err) // #nosec G104
+		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to get kv store key '%s'", key), "err", err)
 		return data, err
 	}
 
 	err = json.Unmarshal([]byte(content), &data)
 	if err != nil {
-		level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", key), "err", err) // #nosec G104
+		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", key), "err", err)
 		return data, err
 	}
 	return data, nil
@@ -66,14 +66,14 @@ func (c *CertStore) GetKVRingTokenChallenge(key string) (map[string]string, erro
 	var data map[string]string
 	content, err := c.GetKVRing(key)
 	if err != nil {
-		level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to get kv store key '%s'", key), "err", err) // #nosec G104
+		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to get kv store key '%s'", key), "err", err)
 		return data, err
 	}
 
 	if content != "" {
 		err = json.Unmarshal([]byte(content), &data)
 		if err != nil {
-			level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", key), "err", err) // #nosec G104
+			_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", key), "err", err)
 			return data, err
 		}
 	}
@@ -101,7 +101,7 @@ func (c *CertStore) PutKVRing(key string, data interface{}) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	level.Info(c.Logger).Log("msg", fmt.Sprintf("Updating kv store key '%s'", key)) // #nosec G104
+	_ = level.Info(c.Logger).Log("msg", fmt.Sprintf("Updating kv store key '%s'", key))
 
 	content, _ := json.Marshal(data)
 	c.updateKV(key, string(content))
@@ -115,7 +115,7 @@ func (c *CertStore) updateKV(key, content string) {
 
 	val, err := ring.JSONCodec.Encode(data)
 	if err != nil {
-		level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to encode data with '%s'", ring.JSONCodec.CodecID()), "err", err) // #nosec G104
+		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to encode data with '%s'", ring.JSONCodec.CodecID()), "err", err)
 		return
 	}
 
@@ -133,20 +133,20 @@ func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resou
 	domain := utils.SanitizedDomain(logger, certRes.Domain)
 	err := os.WriteFile(filepath+domain+".crt", certRes.Certificate, 0600)
 	if err != nil {
-		level.Error(logger).Log("err", "Unable to save Certificate for domain %s\n\t%v", err) // #nosec G104
+		_ = level.Error(logger).Log("err", "Unable to save Certificate for domain %s\n\t%v", err)
 	}
 
 	if certRes.IssuerCertificate != nil {
 		err = os.WriteFile(filepath+domain+".issuer.crt", certRes.IssuerCertificate, 0600)
 		if err != nil {
-			level.Error(logger).Log("err", "Unable to save IssuerCertificate for domain %s\n\t%v", err) // #nosec G104
+			_ = level.Error(logger).Log("err", "Unable to save IssuerCertificate for domain %s\n\t%v", err)
 		}
 	}
 
 	if certRes.PrivateKey != nil {
 		err = os.WriteFile(filepath+domain+".key", certRes.PrivateKey, 0600)
 		if err != nil {
-			level.Error(logger).Log("err", "Unable to save PrivateKey for domain %s\n\t%v", err) // #nosec G104
+			_ = level.Error(logger).Log("err", "Unable to save PrivateKey for domain %s\n\t%v", err)
 		}
 	}
 }
@@ -216,7 +216,7 @@ func checkCertDiff(old, newCertList []cert.Certificate, logger log.Logger) (mapD
 	}
 	diffStr, _ := json.Marshal(diff)
 
-	level.Debug(logger).Log("msg", diffStr) // #nosec G104
+	_ = level.Debug(logger).Log("msg", diffStr)
 
 	return diff, hasChange
 }
@@ -295,7 +295,7 @@ func applyRingKvStoreChanges(diff mapDiff, logger log.Logger) {
 func createlocalCertificateResource(certName, issuer string, logger log.Logger) {
 	err := utils.CreateNonExistingFolder(config.GlobalConfig.Common.CertDir + issuer)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		return
 	}
 	certFilePath := config.GlobalConfig.Common.CertDir + issuer + "/" + certName + ".crt"
@@ -304,22 +304,22 @@ func createlocalCertificateResource(certName, issuer string, logger log.Logger) 
 	secretKeyPath := config.GlobalConfig.Storage.Vault.SecretPrefix + "/" + issuer + "/" + certName
 	secret, err := vault.GetSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, secretKeyPath)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 	} else if secret == nil {
-		level.Error(logger).Log("msg", fmt.Sprintf("No data found in vault secret key %s", secretKeyPath)) // #nosec G104
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("No data found in vault secret key %s", secretKeyPath))
 	} else {
 		if cert64, ok := secret["cert"]; ok {
 			certBytes, _ := base64.StdEncoding.DecodeString(cert64.(string))
 
 			err := os.WriteFile(certFilePath, certBytes, 0600)
 			if err != nil {
-				level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err) // #nosec G104
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err)
 			} else {
-				level.Info(logger).Log("msg", fmt.Sprintf("Deployed certificate %s", certFilePath)) // #nosec G104
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("Deployed certificate %s", certFilePath))
 				metrics.IncCreatedLocalCertificate(issuer)
 			}
 		} else {
-			level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath), "err", err) // #nosec G104
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath), "err", err)
 		}
 
 		if key64, ok := secret["key"]; ok {
@@ -327,12 +327,12 @@ func createlocalCertificateResource(certName, issuer string, logger log.Logger) 
 
 			err := os.WriteFile(keyFilePath, keyBytes, 0600)
 			if err != nil {
-				level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err) // #nosec G104
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
 			} else {
-				level.Info(logger).Log("msg", fmt.Sprintf("Deployed private key %s", keyFilePath)) // #nosec G104
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("Deployed private key %s", keyFilePath))
 			}
 		} else {
-			level.Error(logger).Log("msg", fmt.Sprintf("No private key found in vault secret key %s", secretKeyPath), "err", err) // #nosec G104
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("No private key found in vault secret key %s", secretKeyPath), "err", err)
 		}
 	}
 }
@@ -343,17 +343,17 @@ func deletelocalCertificateResource(certName, issuer string, logger log.Logger) 
 
 	err := os.Remove(certFilePath)
 	if err != nil {
-		level.Error(logger).Log("msg", fmt.Sprintf("Unable to delete certificate file %s", certFilePath), "err", err) // #nosec G104
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to delete certificate file %s", certFilePath), "err", err)
 	} else {
-		level.Info(logger).Log("msg", fmt.Sprintf("Removed certificate %s", certFilePath)) // #nosec G104
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("Removed certificate %s", certFilePath))
 		metrics.IncDeletedLocalCertificate(issuer)
 	}
 
 	err = os.Remove(keyFilePath)
 	if err != nil {
-		level.Error(logger).Log("msg", fmt.Sprintf("Unable to delete private key file %s", keyFilePath), "err", err) // #nosec G104
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to delete private key file %s", keyFilePath), "err", err)
 	} else {
-		level.Info(logger).Log("msg", fmt.Sprintf("Removed private key %s", keyFilePath)) // #nosec G104
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("Removed private key %s", keyFilePath))
 	}
 }
 
@@ -394,13 +394,13 @@ func createRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 	if certData.DNSChallenge != "" {
 		dnsProvider, err := dns.NewDNSChallengeProviderByName(certData.DNSChallenge)
 		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
+			_ = level.Error(logger).Log("err", err)
 			return newCert, err
 		}
 
 		err = issuerAcmeClient.Challenge.SetDNS01Provider(dnsProvider)
 		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
+			_ = level.Error(logger).Log("err", err)
 			return newCert, err
 		}
 	}
@@ -408,20 +408,20 @@ func createRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 	if certData.HTTPChallenge != "" {
 		httpProvider, err := NewHTTPChallengeProviderByName(certData.HTTPChallenge, "")
 		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
+			_ = level.Error(logger).Log("err", err)
 			return newCert, err
 		}
 
 		err = issuerAcmeClient.Challenge.SetHTTP01Provider(httpProvider)
 		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
+			_ = level.Error(logger).Log("err", err)
 			return newCert, err
 		}
 	}
 
 	resource, err := issuerAcmeClient.Certificate.Obtain(request)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		return newCert, err
 	}
 
@@ -437,13 +437,13 @@ func createRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 	}
 	err = vault.PutSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, vaultSecretPath, data)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		return newCert, err
 	}
 	// remove local cert once stored in vault
 	err = os.RemoveAll(baseCertificateFilePath)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 	}
 
 	newCert, err = kvStore(certData, resource.Certificate, resource.PrivateKey)
@@ -459,7 +459,7 @@ func deleteRemoteCertificateResource(name, issuer string, logger log.Logger) err
 	domain := utils.SanitizedDomain(logger, name)
 	data, err := vault.GetSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, vaultSecretPath)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		return err
 	}
 
@@ -467,20 +467,20 @@ func deleteRemoteCertificateResource(name, issuer string, logger log.Logger) err
 		certBytes, _ := base64.StdEncoding.DecodeString(cert64.(string))
 		err = AcmeClient[issuer].Certificate.Revoke(certBytes)
 		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
+			_ = level.Error(logger).Log("err", err)
 			return err
 		}
 
 		metrics.IncRevokedCertificate(issuer)
 
-		level.Info(logger).Log("msg", fmt.Sprintf("Certificate domain %s for %s issuer revoked", domain, issuer)) // #nosec G104
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate domain %s for %s issuer revoked", domain, issuer))
 		err = vault.DeleteSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, vaultSecretPath)
 		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
+			_ = level.Error(logger).Log("err", err)
 			return err
 		}
 	} else {
-		level.Error(logger).Log("err", fmt.Errorf("No cert found in vault secret key: %s", vaultSecretPath)) // #nosec G104
+		_ = level.Error(logger).Log("err", fmt.Errorf("No cert found in vault secret key: %s", vaultSecretPath))
 	}
 	return nil
 }
@@ -514,13 +514,13 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 			if certFileExists {
 				certBytes, err = os.ReadFile(filepath.Clean(certFilePath))
 				if err != nil {
-					level.Error(logger).Log("err", err) // #nosec G104
+					_ = level.Error(logger).Log("err", err)
 				}
 			} else {
-				level.Error(logger).Log("msg", fmt.Sprintf("Certificate file %s doesn't exists", certFilePath)) // #nosec G104
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Certificate file %s doesn't exists", certFilePath))
 				err := utils.CreateNonExistingFolder(config.GlobalConfig.Common.CertDir + certData.Issuer)
 				if err != nil {
-					level.Error(logger).Log("err", err) // #nosec G104
+					_ = level.Error(logger).Log("err", err)
 					continue
 				}
 			}
@@ -528,13 +528,13 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 			if keyFileExists {
 				keyBytes, err = os.ReadFile(filepath.Clean(keyFilePath))
 				if err != nil {
-					level.Error(logger).Log("err", err) // #nosec G104
+					_ = level.Error(logger).Log("err", err)
 				}
 			} else {
-				level.Error(logger).Log("msg", fmt.Sprintf("Private key file %s doesn't exists", keyFilePath)) // #nosec G104
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Private key file %s doesn't exists", keyFilePath))
 				err := utils.CreateNonExistingFolder(config.GlobalConfig.Common.CertDir + certData.Issuer)
 				if err != nil {
-					level.Error(logger).Log("err", err) // #nosec G104
+					_ = level.Error(logger).Log("err", err)
 					continue
 				}
 			}
@@ -545,7 +545,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 				secretKeyPath := config.GlobalConfig.Storage.Vault.SecretPrefix + "/" + certData.Issuer + "/" + certData.Domain
 				secret, err = vault.GetSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, secretKeyPath)
 				if err != nil {
-					level.Error(logger).Log("err", err) // #nosec G104
+					_ = level.Error(logger).Log("err", err)
 					continue
 				}
 
@@ -554,12 +554,12 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 
 					err := os.WriteFile(certFilePath, certBytes, 0600)
 					if err != nil {
-						level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err) // #nosec G104
+						_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err)
 					} else {
-						level.Info(logger).Log("msg", fmt.Sprintf("Deployed certificate %s", certFilePath)) // #nosec G104
+						_ = level.Info(logger).Log("msg", fmt.Sprintf("Deployed certificate %s", certFilePath))
 					}
 				} else {
-					level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath), "err", err) // #nosec G104
+					_ = level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath), "err", err)
 				}
 			}
 
@@ -569,7 +569,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 				if secret == nil {
 					secret, err = vault.GetSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, secretKeyPath)
 					if err != nil {
-						level.Error(logger).Log("err", err) // #nosec G104
+						_ = level.Error(logger).Log("err", err)
 						continue
 					}
 				}
@@ -578,12 +578,12 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 
 					err := os.WriteFile(keyFilePath, keyBytes, 0600)
 					if err != nil {
-						level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err) // #nosec G104
+						_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
 					} else {
-						level.Info(logger).Log("msg", fmt.Sprintf("Deployed private key %s", keyFilePath)) // #nosec G104
+						_ = level.Info(logger).Log("msg", fmt.Sprintf("Deployed private key %s", keyFilePath))
 					}
 				} else {
-					level.Error(logger).Log("msg", fmt.Sprintf("No private key found in vault secret key %s", secretKeyPath), "err", err) // #nosec G104
+					_ = level.Error(logger).Log("msg", fmt.Sprintf("No private key found in vault secret key %s", secretKeyPath), "err", err)
 				}
 			}
 		}
@@ -601,7 +601,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 	data, err := amStore.GetKVRingCert(AmRingKey)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		return err
 	}
 
@@ -631,10 +631,10 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 			}
 
 			daysLeft := int(timeLeft.Hours()) / 24
-			level.Info(logger).Log("msg", fmt.Sprintf("[%s] acme: %d days remaining", certData.Domain, daysLeft)) // #nosec G104
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("[%s] acme: %d days remaining", certData.Domain, daysLeft))
 			if daysLeft < c.RenewalDays {
 				hasChange = true
-				level.Info(logger).Log("msg", fmt.Sprintf("[%s] acme: Trying renewal with %d days remaining", certData.Domain, daysLeft)) // #nosec G104
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("[%s] acme: Trying renewal with %d days remaining", certData.Domain, daysLeft))
 				cert, err := createRemoteCertificateResource(certData, logger)
 				if err != nil {
 					return err
@@ -650,7 +650,7 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 				}
 			}
 		} else {
-			level.Error(logger).Log("msg", fmt.Sprintf("Cannot check certificate renewal because the certificate '%s' is not in config file", certData.Domain)) // #nosec G104
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Cannot check certificate renewal because the certificate '%s' is not in config file", certData.Domain))
 		}
 	}
 	if hasChange {
@@ -675,7 +675,7 @@ func WatchCertExpiration(logger log.Logger, interval time.Duration) {
 		if isLeaderNow {
 			err := CheckCertExpiration(AmStore, logger)
 			if err != nil {
-				level.Error(logger).Log("msg", "Certificate check renewal failed", "err", err) // #nosec G104
+				_ = level.Error(logger).Log("msg", "Certificate check renewal failed", "err", err)
 			}
 		}
 	}

@@ -34,7 +34,6 @@ import (
 
 var (
 	metricsPath           = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default("/metrics").String()
-	prefixPath            = kingpin.Flag("web.prefix-path", "Prefix path for all http requests.").Default("").String()
 	webConfig             = webflag.AddFlags(kingpin.CommandLine, ":8989")
 	configPath            = kingpin.Flag("config-path", "Config path").Default("config.yml").String()
 	certificateConfigPath = kingpin.Flag("certificate-config-path", "Certificate config path").Default("certificate.yml").String()
@@ -79,20 +78,20 @@ func main() {
 
 	err := godotenv.Load(*envConfigPath)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 
 	configBytes, err := os.ReadFile(*configPath)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 
 	var cfg config.Config
 	err = yaml.Unmarshal(configBytes, &cfg)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 
@@ -100,11 +99,11 @@ func main() {
 
 	err = prometheus.Register(version.NewCollector("acme_manager"))
 	if err != nil {
-		level.Error(logger).Log("msg", "Error registering version collector", "err", err) // #nosec G104
+		_ = level.Error(logger).Log("msg", "Error registering version collector", "err", err)
 	}
 
-	level.Info(logger).Log("msg", "Starting acme-manager", "version", version.Info())       // #nosec G104
-	level.Info(logger).Log("msg", "Build context", "build_context", version.BuildContext()) // #nosec G104
+	_ = level.Info(logger).Log("msg", "Starting acme-manager", "version", version.Info())      
+	_ = level.Info(logger).Log("msg", "Build context", "build_context", version.BuildContext())
 
 	http.Handle(*metricsPath, promhttp.Handler())
 	http.Handle("/static/", http.FileServer(http.FS(staticFiles)))
@@ -126,7 +125,7 @@ func main() {
 	defer services.StopAndAwaitTerminated(ctx, ringConfig.Client)        //nolint:errcheck
 
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 
@@ -147,20 +146,20 @@ func main() {
 
 	err = certstore.Setup(logger, cfg)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 
 	vault.VaultClient, err = vault.InitVaultClient(cfg.Storage.Vault)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 
 	// build the kv store ring or join it then process certificate check-up
 	err = certstore.OnStartup(logger, *certificateConfigPath)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 
@@ -197,7 +196,7 @@ func main() {
 	}
 
 	if err := web.ListenAndServe(server, webConfig, logger); err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 }

@@ -18,7 +18,7 @@ import (
 func SanitizedDomain(logger log.Logger, domain string) string {
 	safe, err := idna.ToASCII(strings.NewReplacer(":", "-", "*", "_").Replace(domain))
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 	}
 	return safe
 }

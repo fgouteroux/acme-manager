@@ -179,20 +179,24 @@ func IncDeleteFailedVaultSecret() {
 }
 
 func init() {
-	prometheus.Register(managedCertificate)
-	prometheus.Register(createdCertificate)
-	prometheus.Register(revokedCertificate)
-	prometheus.Register(renewedCertificate)
-	prometheus.Register(createdLocalCertificate)
-	prometheus.Register(deletedLocalCertificate)
-	prometheus.Register(runSuccessLocalCmd)
-	prometheus.Register(runFailedLocalCmd)
+	collectors := []prometheus.Collector{
+		managedCertificate,
+		createdCertificate,
+		revokedCertificate,
+		renewedCertificate,
+		createdLocalCertificate,
+		deletedLocalCertificate,
+		runSuccessLocalCmd,
+		runFailedLocalCmd,
+		getSuccessVaultSecret,
+		putSuccessVaultSecret,
+		deleteSuccessVaultSecret,
+		getFailedVaultSecret,
+		putFailedVaultSecret,
+		deleteFailedVaultSecret,
+	}
 
-	// vault metrics
-	prometheus.Register(getSuccessVaultSecret)
-	prometheus.Register(putSuccessVaultSecret)
-	prometheus.Register(deleteSuccessVaultSecret)
-	prometheus.Register(getFailedVaultSecret)
-	prometheus.Register(putFailedVaultSecret)
-	prometheus.Register(deleteFailedVaultSecret)
+	for _, collector := range collectors {
+		_ = prometheus.Register(collector)
+	}
 }

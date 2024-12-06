@@ -89,24 +89,24 @@ func Setup(logger log.Logger, cfg config.Config) error {
 		accountFilePath := fmt.Sprintf("%s/%s/account.json", cfg.Common.RootPathAccount, issuer)
 		accountBytes, err := os.ReadFile(filepath.Clean(accountFilePath))
 		if err != nil {
-			level.Warn(logger).Log("err", err) // #nosec G104
+			_ = level.Warn(logger).Log("err", err)
 		}
 		var account Account
 		if len(accountBytes) > 0 {
 			err = json.Unmarshal(accountBytes, &account)
 			if err != nil {
-				level.Error(logger).Log("err", err) // #nosec G104
+				_ = level.Error(logger).Log("err", err)
 			}
 		}
 
 		privateKeyBytes, err := os.ReadFile(fmt.Sprintf("%s/%s/private_key.pem", cfg.Common.RootPathAccount, issuer))
 		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
+			_ = level.Error(logger).Log("err", err)
 			return err
 		}
 		privateKey, err := certcrypto.ParsePEMPrivateKey(privateKeyBytes)
 		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
+			_ = level.Error(logger).Log("err", err)
 			return err
 		}
 		account.key = privateKey
@@ -124,13 +124,13 @@ func Setup(logger log.Logger, cfg config.Config) error {
 						HmacEncoded:          issuerConf.HMAC,
 					})
 					if err != nil {
-						level.Error(logger).Log("err", err) // #nosec G104
+						_ = level.Error(logger).Log("err", err)
 						return err
 					}
 				} else {
 					reg, err = client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
 					if err != nil {
-						level.Error(logger).Log("err", err) // #nosec G104
+						_ = level.Error(logger).Log("err", err)
 						return err
 					}
 				}
@@ -139,10 +139,10 @@ func Setup(logger log.Logger, cfg config.Config) error {
 			account.Registration = reg
 			err = accountSave(&account, accountFilePath)
 			if err != nil {
-				level.Error(logger).Log("err", err) // #nosec G104
+				_ = level.Error(logger).Log("err", err)
 				return err
 			}
-			level.Info(logger).Log("msg", fmt.Sprintf("Account file %s saved", accountFilePath)) // #nosec G104
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Account file %s saved", accountFilePath))
 		}
 
 		conf := lego.NewConfig(&account)
@@ -152,20 +152,20 @@ func Setup(logger log.Logger, cfg config.Config) error {
 
 		client, err := lego.NewClient(conf)
 		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
+			_ = level.Error(logger).Log("err", err)
 			return err
 		}
 
 		if issuerConf.DNSChallenge != "" {
 			dnsProvider, err := dns.NewDNSChallengeProviderByName(issuerConf.DNSChallenge)
 			if err != nil {
-				level.Error(logger).Log("err", err) // #nosec G104
+				_ = level.Error(logger).Log("err", err)
 				return err
 			}
 
 			err = client.Challenge.SetDNS01Provider(dnsProvider)
 			if err != nil {
-				level.Error(logger).Log("err", err) // #nosec G104
+				_ = level.Error(logger).Log("err", err)
 				return err
 			}
 		}
@@ -173,13 +173,13 @@ func Setup(logger log.Logger, cfg config.Config) error {
 		if issuerConf.HTTPChallenge != "" {
 			httpProvider, err := NewHTTPChallengeProviderByName(issuerConf.HTTPChallenge, issuerConf.HTTPChallengeCfg)
 			if err != nil {
-				level.Error(logger).Log("err", err) // #nosec G104
+				_ = level.Error(logger).Log("err", err)
 				return err
 			}
 
 			err = client.Challenge.SetHTTP01Provider(httpProvider)
 			if err != nil {
-				level.Error(logger).Log("err", err) // #nosec G104
+				_ = level.Error(logger).Log("err", err)
 				return err
 			}
 		}

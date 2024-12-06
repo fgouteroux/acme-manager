@@ -23,10 +23,10 @@ func Execute(logger log.Logger, globalConfig config.Config) {
 
 		out, err := run(cmdPath, cmdArgs, globalConfig.Common.CmdTimeout)
 		if err != nil {
-			level.Error(logger).Log("msg", out, "err", err) // #nosec G104
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Command '%s %s' failed: %s", cmdPath, strings.Join(cmdArgs, " "), out), "err", err)
 			metrics.IncRunFailedLocalCmd()
 		} else {
-			level.Info(logger).Log("msg", fmt.Sprintf("Command '%s %s' successfully executed", cmdPath, strings.Join(cmdArgs, " "))) // #nosec G104
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Command '%s %s' successfully executed", cmdPath, strings.Join(cmdArgs, " ")))
 			metrics.IncRunSuccessLocalCmd()
 		}
 	}

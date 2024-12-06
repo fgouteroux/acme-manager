@@ -29,19 +29,19 @@ func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPat
 	for range tk.C {
 		newConfigBytes, err := os.ReadFile(filepath.Clean(configPath))
 		if err != nil {
-			level.Error(logger).Log("msg", fmt.Sprintf("Unable to read file %s", configPath), "err", err) // #nosec G104
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to read file %s", configPath), "err", err)
 			continue
 		}
 		var cfg config.Config
 		err = yaml.Unmarshal(newConfigBytes, &cfg)
 		if err != nil {
-			level.Error(logger).Log("msg", fmt.Sprintf("Ignoring file changes %s because of error", configPath), "err", err) // #nosec G104
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring file changes %s because of error", configPath), "err", err)
 			continue
 		}
 
 		oldConfigBytes, err := yaml.Marshal(config.GlobalConfig)
 		if err != nil {
-			level.Error(logger).Log("msg", "Unable to yaml marshal the globalconfig", "err", err) // #nosec G104
+			_ = level.Error(logger).Log("msg", "Unable to yaml marshal the globalconfig", "err", err)
 			continue
 		}
 
@@ -49,17 +49,17 @@ func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPat
 		newConfigBytes, _ = yaml.Marshal(cfg)
 
 		if string(oldConfigBytes) != string(newConfigBytes) {
-			level.Info(logger).Log("msg", "modified file", "name", configPath) // #nosec G104
+			_ = level.Info(logger).Log("msg", "modified file", "name", configPath)
 
 			err = Setup(logger, cfg)
 			if err != nil {
-				level.Error(logger).Log("msg", fmt.Sprintf("Ignoring issuer changes in file %s because of error", configPath), "err", err) // #nosec G104
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring issuer changes in file %s because of error", configPath), "err", err)
 				continue
 			}
 
 			vault.VaultClient, err = vault.InitVaultClient(cfg.Storage.Vault)
 			if err != nil {
-				level.Error(logger).Log("msg", fmt.Sprintf("Ignoring vault changes in file %s because of error", configPath), "err", err) // #nosec G104
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring vault changes in file %s because of error", configPath), "err", err)
 				continue
 			}
 			config.GlobalConfig = cfg
@@ -78,19 +78,19 @@ func WatchCertificateFileChanges(logger log.Logger, interval time.Duration, conf
 
 			newConfigBytes, err := os.ReadFile(filepath.Clean(configPath))
 			if err != nil {
-				level.Error(logger).Log("msg", fmt.Sprintf("Unable to read file %s", configPath), "err", err) // #nosec G104
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to read file %s", configPath), "err", err)
 				continue
 			}
 			var cfg cert.Config
 			err = yaml.Unmarshal(newConfigBytes, &cfg)
 			if err != nil {
-				level.Error(logger).Log("msg", fmt.Sprintf("Ignoring file changes %s because of error", configPath), "err", err) // #nosec G104
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring file changes %s because of error", configPath), "err", err)
 				continue
 			}
 
 			oldConfigBytes, err := yaml.Marshal(certConfig)
 			if err != nil {
-				level.Error(logger).Log("msg", "Unable to yaml marshal the certConfig", "err", err) // #nosec G104
+				_ = level.Error(logger).Log("msg", "Unable to yaml marshal the certConfig", "err", err)
 				continue
 			}
 
@@ -98,7 +98,7 @@ func WatchCertificateFileChanges(logger log.Logger, interval time.Duration, conf
 			newConfigBytes, _ = yaml.Marshal(cfg)
 
 			if string(oldConfigBytes) != string(newConfigBytes) {
-				level.Info(logger).Log("msg", "modified file", "name", configPath) // #nosec G104
+				_ = level.Info(logger).Log("msg", "modified file", "name", configPath)
 
 				old, _ := AmStore.GetKVRingCert(AmRingKey)
 
@@ -123,30 +123,30 @@ func WatchCertificateFileChanges(logger log.Logger, interval time.Duration, conf
 						var toUpdate bool
 						if certData.SAN != old[idx].SAN {
 							toUpdate = true
-							level.Info(logger).Log("msg", fmt.Sprintf(
+							_ = level.Info(logger).Log("msg", fmt.Sprintf(
 								"Certificate '%s' SAN changed from '%s' to '%s'.",
 								certData.Domain,
 								old[idx].SAN,
 								certData.SAN,
-							)) // #nosec G104
+							))
 						}
 						if certData.Days != old[idx].Days {
 							toUpdate = true
-							level.Info(logger).Log("msg", fmt.Sprintf(
+							_ = level.Info(logger).Log("msg", fmt.Sprintf(
 								"Certificate '%s' days changed from '%d' to '%d'.",
 								certData.Domain,
 								old[idx].Days,
 								certData.Days,
-							)) // #nosec G104
+							))
 						}
 						if certData.Bundle != old[idx].Bundle {
 							toUpdate = true
-							level.Info(logger).Log("msg", fmt.Sprintf(
+							_ = level.Info(logger).Log("msg", fmt.Sprintf(
 								"Certificate '%s' bundle changed from '%v' to '%v'.",
 								certData.Domain,
 								old[idx].Bundle,
 								certData.Bundle,
-							)) // #nosec G104
+							))
 						}
 
 						if toUpdate {
@@ -166,7 +166,7 @@ func WatchCertificateFileChanges(logger log.Logger, interval time.Duration, conf
 						AmStore.PutKVRing(AmRingKey, certInfo)
 						certConfig = cfg
 					} else {
-						level.Error(logger).Log("err", err) // #nosec G104
+						_ = level.Error(logger).Log("err", err)
 					}
 				}
 			}
@@ -182,7 +182,7 @@ func WatchLocalCertificate(logger log.Logger, interval time.Duration) {
 	for range tk.C {
 		err := CheckAndDeployLocalCertificate(AmStore, logger)
 		if err != nil {
-			level.Error(logger).Log("msg", "Check local certificate failed", "err", err) // #nosec G104
+			_ = level.Error(logger).Log("msg", "Check local certificate failed", "err", err)
 		}
 	}
 }
@@ -197,12 +197,12 @@ func WatchRingKvStoreChanges(logger log.Logger) {
 
 			old, found := localCache.Get(AmRingKey)
 			if !found {
-				level.Error(logger).Log("msg", "Empty local cache store") // #nosec G104
+				_ = level.Error(logger).Log("msg", "Empty local cache store")
 			} else {
 				diff, hasChanged := checkCertDiff(old.Value.([]cert.Certificate), newCertList, logger)
 
 				if hasChanged {
-					level.Info(logger).Log("msg", "kv store key changes") // #nosec G104
+					_ = level.Info(logger).Log("msg", "kv store key changes")
 
 					if config.GlobalConfig.Common.CertDeploy {
 						applyRingKvStoreChanges(diff, logger)
@@ -213,7 +213,7 @@ func WatchRingKvStoreChanges(logger log.Logger) {
 						cmd.Execute(logger, config.GlobalConfig)
 					}
 				} else {
-					level.Info(logger).Log("msg", "kv store key no changes") // #nosec G104
+					_ = level.Info(logger).Log("msg", "kv store key no changes")
 				}
 			}
 		}

@@ -73,7 +73,7 @@ func New(instanceID, instanceAddr, joinMembers, instanceInterfaceNames string, i
 		var err error
 		instanceID, err = os.Hostname()
 		if err != nil {
-			level.Error(logger).Log("msg", "failed to get hostname", "err", err) // #nosec G104
+			_ = level.Error(logger).Log("msg", "failed to get hostname", "err", err)
 			os.Exit(1)
 		}
 	}

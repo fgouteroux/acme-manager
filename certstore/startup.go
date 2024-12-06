@@ -25,13 +25,13 @@ import (
 func OnStartup(logger log.Logger, configPath string) error {
 	isLeaderNow, err := ring.IsLeader(AmStore.RingConfig)
 	if err != nil {
-		level.Warn(logger).Log("msg", "Failed to determine the ring leader", "err", err) // #nosec G104
+		_ = level.Warn(logger).Log("msg", "Failed to determine the ring leader", "err", err)
 		return err
 	}
 
 	data, err := AmStore.GetKVRing(AmRingKey)
 	if err != nil {
-		level.Error(logger).Log("err", err) // #nosec G104
+		_ = level.Error(logger).Log("err", err)
 		return err
 	}
 
@@ -50,11 +50,11 @@ func OnStartup(logger log.Logger, configPath string) error {
 
 	if len(data) == 0 {
 		if !isLeaderNow {
-			level.Debug(logger).Log("msg", "Skipping because this node is not the ring leader") // #nosec G104
+			_ = level.Debug(logger).Log("msg", "Skipping because this node is not the ring leader")
 			return nil
 		}
 
-		level.Info(logger).Log("msg", "Retrieving certificates from vault") // #nosec G104
+		_ = level.Info(logger).Log("msg", "Retrieving certificates from vault")
 
 		vaultSecrets, err := vault.ListSecretWithAppRole(
 			vault.VaultClient,
@@ -62,7 +62,7 @@ func OnStartup(logger log.Logger, configPath string) error {
 			config.GlobalConfig.Storage.Vault.SecretPrefix+"/",
 		)
 		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
+			_ = level.Error(logger).Log("err", err)
 			os.Exit(1)
 		}
 
@@ -84,7 +84,7 @@ func OnStartup(logger log.Logger, configPath string) error {
 
 				secret, err := vault.GetSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, secretKeyPath)
 				if err != nil {
-					level.Error(logger).Log("err", err) // #nosec G104
+					_ = level.Error(logger).Log("err", err)
 					continue
 				}
 
@@ -92,20 +92,20 @@ func OnStartup(logger log.Logger, configPath string) error {
 				if cert64, ok := secret["cert"]; ok {
 					vaultCertBytes, _ = base64.StdEncoding.DecodeString(cert64.(string))
 				} else {
-					level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath)) // #nosec G104
+					_ = level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath))
 					continue
 				}
 
 				if key64, ok := secret["key"]; ok {
 					vaultKeyBytes, _ = base64.StdEncoding.DecodeString(key64.(string))
 				} else {
-					level.Error(logger).Log("msg", fmt.Sprintf("No private key found in vault secret key %s", secretKeyPath)) // #nosec G104
+					_ = level.Error(logger).Log("msg", fmt.Sprintf("No private key found in vault secret key %s", secretKeyPath))
 					continue
 				}
 
 				vaultCert, err := kvStore(tmp, vaultCertBytes, vaultKeyBytes)
 				if err != nil {
-					level.Error(logger).Log("err", err) // #nosec G104
+					_ = level.Error(logger).Log("err", err)
 				}
 
 				var certBytes, keyBytes []byte
@@ -114,40 +114,40 @@ func OnStartup(logger log.Logger, configPath string) error {
 				if utils.FileExists(certFilePath) {
 					certBytes, err = os.ReadFile(filepath.Clean(certFilePath))
 					if err != nil {
-						level.Error(logger).Log("err", err) // #nosec G104
+						_ = level.Error(logger).Log("err", err)
 					}
 				}
 
 				keyFilePath := config.GlobalConfig.Common.CertDir + secretKey + ".key"
 				err = utils.CreateNonExistingFolder(filepath.Dir(keyFilePath))
 				if err != nil {
-					level.Error(logger).Log("err", err) // #nosec G104
+					_ = level.Error(logger).Log("err", err)
 					continue
 				}
 				if utils.FileExists(keyFilePath) {
 					keyBytes, err = os.ReadFile(filepath.Clean(keyFilePath))
 					if err != nil {
-						level.Error(logger).Log("err", err) // #nosec G104
+						_ = level.Error(logger).Log("err", err)
 					}
 				}
 
 				if config.GlobalConfig.Common.CertDeploy {
 					currentCert, err := kvStore(tmp, certBytes, keyBytes)
 					if err != nil {
-						level.Error(logger).Log("err", err) // #nosec G104
+						_ = level.Error(logger).Log("err", err)
 					}
 
 					if currentCert.Fingerprint != vaultCert.Fingerprint {
 						err := os.WriteFile(certFilePath, vaultCertBytes, 0600)
 						if err != nil {
-							level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err) // #nosec G104
+							_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err)
 						}
 					}
 
 					if currentCert.KeyFingerprint != vaultCert.KeyFingerprint {
 						err := os.WriteFile(keyFilePath, vaultKeyBytes, 0600)
 						if err != nil {
-							level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err) // #nosec G104
+							_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
 						}
 					}
 				}
@@ -156,10 +156,10 @@ func OnStartup(logger log.Logger, configPath string) error {
 				vaultCertCount++
 
 			}
-			level.Info(logger).Log("msg", fmt.Sprintf("Found %d certificates from vault", vaultCertCount)) // #nosec G104
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d certificates from vault", vaultCertCount))
 		}
 
-		level.Info(logger).Log("msg", "Checking certificates from config file") // #nosec G104
+		_ = level.Info(logger).Log("msg", "Checking certificates from config file")
 
 		var content []cert.Certificate
 		for _, certData := range cfg.Certificate {
@@ -183,7 +183,7 @@ func OnStartup(logger log.Logger, configPath string) error {
 			} else {
 				newCert, err := createRemoteCertificateResource(certData, logger)
 				if err != nil {
-					level.Error(logger).Log("err", err) // #nosec G104
+					_ = level.Error(logger).Log("err", err)
 					os.Exit(1)
 				}
 
@@ -203,18 +203,18 @@ func OnStartup(logger log.Logger, configPath string) error {
 
 			if idx == -1 {
 				if config.GlobalConfig.Common.PruneCertificate {
-					level.Info(logger).Log("msg", fmt.Sprintf("Removing certificate '%s' present in vault but not in config file", certData.Domain)) // #nosec G104
+					_ = level.Info(logger).Log("msg", fmt.Sprintf("Removing certificate '%s' present in vault but not in config file", certData.Domain))
 					// Clean certificate in vault but not in config file
 					err := deleteRemoteCertificateResource(certData.Domain, certData.Issuer, logger)
 					if err != nil {
-						level.Error(logger).Log("err", err) // #nosec G104
+						_ = level.Error(logger).Log("err", err)
 						os.Exit(1)
 					}
 					if config.GlobalConfig.Common.CertDeploy {
 						deletelocalCertificateResource(certData.Domain, certData.Issuer, logger)
 					}
 				} else {
-					level.Info(logger).Log("msg", fmt.Sprintf("(noop) - removing certificate '%s' present in vault but not in config file", certData.Domain)) // #nosec G104
+					_ = level.Info(logger).Log("msg", fmt.Sprintf("(noop) - removing certificate '%s' present in vault but not in config file", certData.Domain))
 				}
 			} else {
 				certStat[certData.Issuer] += 1.0
@@ -235,14 +235,14 @@ func OnStartup(logger log.Logger, configPath string) error {
 			cmd.Execute(logger, config.GlobalConfig)
 		}
 	} else {
-		level.Info(logger).Log("msg", "Processing certificates as simple peer") // #nosec G104
+		_ = level.Info(logger).Log("msg", "Processing certificates as simple peer")
 
 		// update local cache with kv store value
 		localCache.Set(AmRingKey, data)
 
 		err := CheckAndDeployLocalCertificate(AmStore, logger)
 		if err != nil {
-			level.Error(logger).Log("err", err) // #nosec G104
+			_ = level.Error(logger).Log("err", err)
 		}
 	}
 	return nil
