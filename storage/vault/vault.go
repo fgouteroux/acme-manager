@@ -13,31 +13,39 @@ import (
 )
 
 var (
-	VaultClient *vaultApi.Client
+	Client *VaultClient
 )
 
-func InitVaultClient(cfg config.Vault) (*vaultApi.Client, error) {
+type VaultClient struct {
+    APIClient *vaultApi.Client
+    config config.Vault
+}
+
+func InitVaultClient(cfg config.Vault) (*VaultClient, error) {
+	client := &VaultClient{}
 	config := vaultApi.DefaultConfig()
 	config.Address = cfg.URL
-
-	client, err := vaultApi.NewClient(config)
+	c, err := vaultApi.NewClient(config)
 	if err != nil {
 		return client, fmt.Errorf("unable to initialize Vault client: %w", err)
 	}
+	client.APIClient = c
+	client.config = cfg
+
 	return client, nil
 }
 
-func vaultAppRoleLogin(client *vaultApi.Client, cfg config.Vault) error {
+func vaultAppRoleLogin(client *VaultClient) error {
 	appRoleAuth, err := auth.NewAppRoleAuth(
-		cfg.RoleID,
-		&auth.SecretID{FromString: cfg.SecretID},
-		auth.WithMountPath(cfg.MountPath),
+		client.config.RoleID,
+		&auth.SecretID{FromString: client.config.SecretID},
+		auth.WithMountPath(client.config.MountPath),
 	)
 	if err != nil {
 		return fmt.Errorf("unable to initialize AppRole auth method: %w", err)
 	}
 
-	authInfo, err := client.Auth().Login(context.Background(), appRoleAuth)
+	authInfo, err := client.APIClient.Auth().Login(context.Background(), appRoleAuth)
 	if err != nil {
 		return fmt.Errorf("unable to login to AppRole auth method: %w", err)
 	}
@@ -47,16 +55,32 @@ func vaultAppRoleLogin(client *vaultApi.Client, cfg config.Vault) error {
 	return nil
 }
 
+// List a key-value secret (kv-v2) after authenticating via AppRole.
+func (client *VaultClient) ListSecretWithAppRole(secretPath string) ([]string, error) {
+
+	err := vaultAppRoleLogin(client)
+	if err != nil {
+		return []string{}, err
+	}
+	path := client.config.SecretEngine + "/metadata/" + secretPath
+	secrets, err := recursiveListSecret(client, path, "")
+	if err != nil {
+		return secrets, fmt.Errorf("unable to list secrets: %w", err)
+	}
+	return secrets, nil
+}
+
+
 // Fetches a key-value secret (kv-v2) after authenticating via AppRole.
-func GetSecretWithAppRole(client *vaultApi.Client, cfg config.Vault, secretPath string) (map[string]interface{}, error) {
+func (client *VaultClient) GetSecretWithAppRole(secretPath string) (map[string]interface{}, error) {
 	var data map[string]interface{}
 
-	err := vaultAppRoleLogin(client, cfg)
+	err := vaultAppRoleLogin(client)
 	if err != nil {
 		return data, err
 	}
 
-	secret, err := client.KVv2(cfg.SecretEngine).Get(context.Background(), secretPath)
+	secret, err := client.APIClient.KVv2(client.config.SecretEngine).Get(context.Background(), secretPath)
 	if err != nil {
 		metrics.IncGetFailedVaultSecret()
 		return data, err
@@ -68,13 +92,13 @@ func GetSecretWithAppRole(client *vaultApi.Client, cfg config.Vault, secretPath 
 }
 
 // Put a key-value secret (kv-v2) after authenticating via AppRole.
-func PutSecretWithAppRole(client *vaultApi.Client, cfg config.Vault, secretPath string, data map[string]interface{}) error {
-	err := vaultAppRoleLogin(client, cfg)
+func (client *VaultClient) PutSecretWithAppRole(secretPath string, data map[string]interface{}) error {
+	err := vaultAppRoleLogin(client)
 	if err != nil {
 		return err
 	}
 
-	_, err = client.KVv2(cfg.SecretEngine).Put(context.Background(), secretPath, data)
+	_, err = client.APIClient.KVv2(client.config.SecretEngine).Put(context.Background(), secretPath, data)
 	if err != nil {
 		metrics.IncPutFailedVaultSecret()
 		return err
@@ -85,13 +109,13 @@ func PutSecretWithAppRole(client *vaultApi.Client, cfg config.Vault, secretPath 
 }
 
 // Delete a key-value secret (kv-v2) after authenticating via AppRole.
-func DeleteSecretWithAppRole(client *vaultApi.Client, cfg config.Vault, secretPath string) error {
-	err := vaultAppRoleLogin(client, cfg)
+func (client *VaultClient) DeleteSecretWithAppRole(secretPath string) error {
+	err := vaultAppRoleLogin(client)
 	if err != nil {
 		return err
 	}
 
-	err = client.KVv2(cfg.SecretEngine).Delete(context.Background(), secretPath)
+	err = client.APIClient.KVv2(client.config.SecretEngine).Delete(context.Background(), secretPath)
 	if err != nil {
 		metrics.IncDeleteFailedVaultSecret()
 		return err
@@ -102,8 +126,8 @@ func DeleteSecretWithAppRole(client *vaultApi.Client, cfg config.Vault, secretPa
 }
 
 // listSecret returns a list of secrets from Vault
-func listSecret(vaultCli *vaultApi.Client, path string) (*vaultApi.Secret, error) {
-	secret, err := vaultCli.Logical().List(path)
+func listSecret(client *VaultClient, path string) (*vaultApi.Secret, error) {
+	secret, err := client.APIClient.Logical().List(path)
 	if err != nil {
 		return secret, err
 	}
@@ -117,15 +141,15 @@ func listSecret(vaultCli *vaultApi.Client, path string) (*vaultApi.Secret, error
 var secretListPath []string
 
 // recursiveListSecret returns a list of secrets paths from Vault
-func recursiveListSecret(vaultCli *vaultApi.Client, path, prefix string) ([]string, error) {
-	secretList, err := listSecret(vaultCli, path)
+func recursiveListSecret(client *VaultClient, path, prefix string) ([]string, error) {
+	secretList, err := listSecret(client, path)
 	if err != nil {
 		return []string{}, err
 	}
 	if secretList != nil {
 		for _, secret := range secretList.Data["keys"].([]interface{}) {
 			if strings.HasSuffix(secret.(string), "/") {
-				_, err := recursiveListSecret(vaultCli, path+secret.(string), secret.(string))
+				_, err := recursiveListSecret(client, path+secret.(string), secret.(string))
 				if err != nil {
 					return []string{}, err
 				}
@@ -137,19 +161,4 @@ func recursiveListSecret(vaultCli *vaultApi.Client, path, prefix string) ([]stri
 		}
 	}
 	return secretListPath, nil
-}
-
-// List a key-value secret (kv-v2) after authenticating via AppRole.
-func ListSecretWithAppRole(client *vaultApi.Client, cfg config.Vault, secretPath string) ([]string, error) {
-
-	err := vaultAppRoleLogin(client, cfg)
-	if err != nil {
-		return []string{}, err
-	}
-	path := cfg.SecretEngine + "/metadata/" + secretPath
-	secrets, err := recursiveListSecret(client, path, "")
-	if err != nil {
-		return secrets, fmt.Errorf("unable to list secrets: %w", err)
-	}
-	return secrets, nil
 }

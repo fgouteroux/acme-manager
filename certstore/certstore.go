@@ -302,7 +302,7 @@ func createlocalCertificateResource(certName, issuer string, logger log.Logger) 
 	keyFilePath := config.GlobalConfig.Common.CertDir + issuer + "/" + certName + ".key"
 
 	secretKeyPath := config.GlobalConfig.Storage.Vault.SecretPrefix + "/" + issuer + "/" + certName
-	secret, err := vault.GetSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, secretKeyPath)
+	secret, err := vault.Client.GetSecretWithAppRole(secretKeyPath)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 	} else if secret == nil {
@@ -435,7 +435,7 @@ func createRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 		"key":    resource.PrivateKey,
 		"issuer": resource.IssuerCertificate,
 	}
-	err = vault.PutSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, vaultSecretPath, data)
+	err = vault.Client.PutSecretWithAppRole(vaultSecretPath, data)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return newCert, err
@@ -457,7 +457,7 @@ func createRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 func deleteRemoteCertificateResource(name, issuer string, logger log.Logger) error {
 	vaultSecretPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.SecretPrefix, issuer, name)
 	domain := utils.SanitizedDomain(logger, name)
-	data, err := vault.GetSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, vaultSecretPath)
+	data, err := vault.Client.GetSecretWithAppRole(vaultSecretPath)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return err
@@ -474,7 +474,7 @@ func deleteRemoteCertificateResource(name, issuer string, logger log.Logger) err
 		metrics.IncRevokedCertificate(issuer)
 
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate domain %s for %s issuer revoked", domain, issuer))
-		err = vault.DeleteSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, vaultSecretPath)
+		err = vault.Client.DeleteSecretWithAppRole(vaultSecretPath)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			return err
@@ -543,7 +543,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 			if utils.GenerateFingerprint(certBytes) != certData.Fingerprint {
 				hasChange = true
 				secretKeyPath := config.GlobalConfig.Storage.Vault.SecretPrefix + "/" + certData.Issuer + "/" + certData.Domain
-				secret, err = vault.GetSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, secretKeyPath)
+				secret, err = vault.Client.GetSecretWithAppRole(secretKeyPath)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
 					continue
@@ -567,7 +567,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 				hasChange = true
 				secretKeyPath := config.GlobalConfig.Storage.Vault.SecretPrefix + "/" + certData.Issuer + "/" + certData.Domain
 				if secret == nil {
-					secret, err = vault.GetSecretWithAppRole(vault.VaultClient, config.GlobalConfig.Storage.Vault, secretKeyPath)
+					secret, err = vault.Client.GetSecretWithAppRole(secretKeyPath)
 					if err != nil {
 						_ = level.Error(logger).Log("err", err)
 						continue

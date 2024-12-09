@@ -150,7 +150,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	vault.VaultClient, err = vault.InitVaultClient(cfg.Storage.Vault)
+	vault.Client, err = vault.InitVaultClient(cfg.Storage.Vault)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
