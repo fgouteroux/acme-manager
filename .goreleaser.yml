@@ -10,10 +10,8 @@ builds:
       - windows
       - darwin
     ldflags: |
-      -X 'main.Version={{.Version}}'
-      -X 'main.BuildTime={{.Date}}'
-    goarch:
-      - amd64
+      -X github.com/prometheus/common/version.Version={{.Version}}
+      -X github.com/prometheus/common/version.Branch={{.Branch}}
 
 archives:
   - name_template: >-
