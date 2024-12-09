@@ -102,7 +102,7 @@ func main() {
 		_ = level.Error(logger).Log("msg", "Error registering version collector", "err", err)
 	}
 
-	_ = level.Info(logger).Log("msg", "Starting acme-manager", "version", version.Info())      
+	_ = level.Info(logger).Log("msg", "Starting acme-manager", "version", version.Info())
 	_ = level.Info(logger).Log("msg", "Build context", "build_context", version.BuildContext())
 
 	http.Handle(*metricsPath, promhttp.Handler())

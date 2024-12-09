@@ -17,8 +17,8 @@ var (
 )
 
 type Client struct {
-    APIClient *vaultApi.Client
-    config config.Vault
+	APIClient *vaultApi.Client
+	config    config.Vault
 }
 
 func InitClient(cfg config.Vault) (*Client, error) {
@@ -69,7 +69,6 @@ func (client *Client) ListSecretWithAppRole(secretPath string) ([]string, error)
 	}
 	return secrets, nil
 }
-
 
 // Fetches a key-value secret (kv-v2) after authenticating via AppRole.
 func (client *Client) GetSecretWithAppRole(secretPath string) (map[string]interface{}, error) {
