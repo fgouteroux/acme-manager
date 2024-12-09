@@ -56,7 +56,7 @@ func OnStartup(logger log.Logger, configPath string) error {
 
 		_ = level.Info(logger).Log("msg", "Retrieving certificates from vault")
 
-		vaultSecrets, err := vault.Client.ListSecretWithAppRole(
+		vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(
 			config.GlobalConfig.Storage.Vault.SecretPrefix+"/",
 		)
 		if err != nil {
@@ -80,7 +80,7 @@ func OnStartup(logger log.Logger, configPath string) error {
 					Issuer: issuer,
 				}
 
-				secret, err := vault.Client.GetSecretWithAppRole(secretKeyPath)
+				secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
 					continue

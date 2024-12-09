@@ -57,7 +57,7 @@ func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPat
 				continue
 			}
 
-			vault.Client, err = vault.InitVaultClient(cfg.Storage.Vault)
+			vault.GlobalClient, err = vault.InitClient(cfg.Storage.Vault)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring vault changes in file %s because of error", configPath), "err", err)
 				continue

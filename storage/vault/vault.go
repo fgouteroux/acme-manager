@@ -13,16 +13,16 @@ import (
 )
 
 var (
-	Client *VaultClient
+	GlobalClient *Client
 )
 
-type VaultClient struct {
+type Client struct {
     APIClient *vaultApi.Client
     config config.Vault
 }
 
-func InitVaultClient(cfg config.Vault) (*VaultClient, error) {
-	client := &VaultClient{}
+func InitClient(cfg config.Vault) (*Client, error) {
+	client := &Client{}
 	config := vaultApi.DefaultConfig()
 	config.Address = cfg.URL
 	c, err := vaultApi.NewClient(config)
@@ -35,7 +35,7 @@ func InitVaultClient(cfg config.Vault) (*VaultClient, error) {
 	return client, nil
 }
 
-func vaultAppRoleLogin(client *VaultClient) error {
+func vaultAppRoleLogin(client *Client) error {
 	appRoleAuth, err := auth.NewAppRoleAuth(
 		client.config.RoleID,
 		&auth.SecretID{FromString: client.config.SecretID},
@@ -56,7 +56,7 @@ func vaultAppRoleLogin(client *VaultClient) error {
 }
 
 // List a key-value secret (kv-v2) after authenticating via AppRole.
-func (client *VaultClient) ListSecretWithAppRole(secretPath string) ([]string, error) {
+func (client *Client) ListSecretWithAppRole(secretPath string) ([]string, error) {
 
 	err := vaultAppRoleLogin(client)
 	if err != nil {
@@ -72,7 +72,7 @@ func (client *VaultClient) ListSecretWithAppRole(secretPath string) ([]string, e
 
 
 // Fetches a key-value secret (kv-v2) after authenticating via AppRole.
-func (client *VaultClient) GetSecretWithAppRole(secretPath string) (map[string]interface{}, error) {
+func (client *Client) GetSecretWithAppRole(secretPath string) (map[string]interface{}, error) {
 	var data map[string]interface{}
 
 	err := vaultAppRoleLogin(client)
@@ -92,7 +92,7 @@ func (client *VaultClient) GetSecretWithAppRole(secretPath string) (map[string]i
 }
 
 // Put a key-value secret (kv-v2) after authenticating via AppRole.
-func (client *VaultClient) PutSecretWithAppRole(secretPath string, data map[string]interface{}) error {
+func (client *Client) PutSecretWithAppRole(secretPath string, data map[string]interface{}) error {
 	err := vaultAppRoleLogin(client)
 	if err != nil {
 		return err
@@ -109,7 +109,7 @@ func (client *VaultClient) PutSecretWithAppRole(secretPath string, data map[stri
 }
 
 // Delete a key-value secret (kv-v2) after authenticating via AppRole.
-func (client *VaultClient) DeleteSecretWithAppRole(secretPath string) error {
+func (client *Client) DeleteSecretWithAppRole(secretPath string) error {
 	err := vaultAppRoleLogin(client)
 	if err != nil {
 		return err
@@ -126,7 +126,7 @@ func (client *VaultClient) DeleteSecretWithAppRole(secretPath string) error {
 }
 
 // listSecret returns a list of secrets from Vault
-func listSecret(client *VaultClient, path string) (*vaultApi.Secret, error) {
+func listSecret(client *Client, path string) (*vaultApi.Secret, error) {
 	secret, err := client.APIClient.Logical().List(path)
 	if err != nil {
 		return secret, err
@@ -141,7 +141,7 @@ func listSecret(client *VaultClient, path string) (*vaultApi.Secret, error) {
 var secretListPath []string
 
 // recursiveListSecret returns a list of secrets paths from Vault
-func recursiveListSecret(client *VaultClient, path, prefix string) ([]string, error) {
+func recursiveListSecret(client *Client, path, prefix string) ([]string, error) {
 	secretList, err := listSecret(client, path)
 	if err != nil {
 		return []string{}, err
