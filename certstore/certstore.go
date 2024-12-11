@@ -131,20 +131,20 @@ func (c *CertStore) updateKV(key, content string) {
 
 func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resource) {
 	domain := utils.SanitizedDomain(logger, certRes.Domain)
-	err := os.WriteFile(filepath+domain+".crt", certRes.Certificate, 0600)
+	err := os.WriteFile(filepath+domain+".crt", certRes.Certificate, config.GlobalConfig.Common.CertKeyFilePerm)
 	if err != nil {
 		_ = level.Error(logger).Log("err", "Unable to save Certificate for domain %s\n\t%v", err)
 	}
 
 	if certRes.IssuerCertificate != nil {
-		err = os.WriteFile(filepath+domain+".issuer.crt", certRes.IssuerCertificate, 0600)
+		err = os.WriteFile(filepath+domain+".issuer.crt", certRes.IssuerCertificate, config.GlobalConfig.Common.CertKeyFilePerm)
 		if err != nil {
 			_ = level.Error(logger).Log("err", "Unable to save IssuerCertificate for domain %s\n\t%v", err)
 		}
 	}
 
 	if certRes.PrivateKey != nil {
-		err = os.WriteFile(filepath+domain+".key", certRes.PrivateKey, 0600)
+		err = os.WriteFile(filepath+domain+".key", certRes.PrivateKey, config.GlobalConfig.Common.CertKeyFilePerm)
 		if err != nil {
 			_ = level.Error(logger).Log("err", "Unable to save PrivateKey for domain %s\n\t%v", err)
 		}
@@ -293,7 +293,7 @@ func applyRingKvStoreChanges(diff mapDiff, logger log.Logger) {
 }
 
 func createlocalCertificateResource(certName, issuer string, logger log.Logger) {
-	err := utils.CreateNonExistingFolder(config.GlobalConfig.Common.CertDir + issuer)
+	err := utils.CreateNonExistingFolder(config.GlobalConfig.Common.CertDir+issuer, config.GlobalConfig.Common.CertDirPerm)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return
@@ -311,7 +311,7 @@ func createlocalCertificateResource(certName, issuer string, logger log.Logger) 
 		if cert64, ok := secret["cert"]; ok {
 			certBytes, _ := base64.StdEncoding.DecodeString(cert64.(string))
 
-			err := os.WriteFile(certFilePath, certBytes, 0600)
+			err := os.WriteFile(certFilePath, certBytes, config.GlobalConfig.Common.CertFilePerm)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err)
 			} else {
@@ -325,7 +325,7 @@ func createlocalCertificateResource(certName, issuer string, logger log.Logger) 
 		if key64, ok := secret["key"]; ok {
 			keyBytes, _ := base64.StdEncoding.DecodeString(key64.(string))
 
-			err := os.WriteFile(keyFilePath, keyBytes, 0600)
+			err := os.WriteFile(keyFilePath, keyBytes, config.GlobalConfig.Common.CertKeyFilePerm)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
 			} else {
@@ -363,7 +363,7 @@ func createRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 	domain := utils.SanitizedDomain(logger, certData.Domain)
 
 	baseCertificateFilePath := fmt.Sprintf("%s/%s/%s/", config.GlobalConfig.Common.RootPathCertificate, certData.Issuer, domain)
-	err := utils.CreateNonExistingFolder(baseCertificateFilePath)
+	err := utils.CreateNonExistingFolder(baseCertificateFilePath, config.GlobalConfig.Common.CertDirPerm)
 	if err != nil {
 		return newCert, err
 	}
@@ -518,7 +518,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 				}
 			} else {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Certificate file %s doesn't exists", certFilePath))
-				err := utils.CreateNonExistingFolder(config.GlobalConfig.Common.CertDir + certData.Issuer)
+				err := utils.CreateNonExistingFolder(config.GlobalConfig.Common.CertDir+certData.Issuer, config.GlobalConfig.Common.CertDirPerm)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
 					continue
@@ -532,7 +532,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 				}
 			} else {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Private key file %s doesn't exists", keyFilePath))
-				err := utils.CreateNonExistingFolder(config.GlobalConfig.Common.CertDir + certData.Issuer)
+				err := utils.CreateNonExistingFolder(config.GlobalConfig.Common.CertDir+certData.Issuer, config.GlobalConfig.Common.CertDirPerm)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
 					continue
@@ -552,7 +552,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 				if cert64, ok := secret["cert"]; ok {
 					certBytes, _ := base64.StdEncoding.DecodeString(cert64.(string))
 
-					err := os.WriteFile(certFilePath, certBytes, 0600)
+					err := os.WriteFile(certFilePath, certBytes, config.GlobalConfig.Common.CertFilePerm)
 					if err != nil {
 						_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err)
 					} else {
@@ -576,7 +576,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 				if key64, ok := secret["key"]; ok {
 					keyBytes, _ := base64.StdEncoding.DecodeString(key64.(string))
 
-					err := os.WriteFile(keyFilePath, keyBytes, 0600)
+					err := os.WriteFile(keyFilePath, keyBytes, config.GlobalConfig.Common.CertKeyFilePerm)
 					if err != nil {
 						_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
 					} else {

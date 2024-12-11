@@ -117,7 +117,7 @@ func OnStartup(logger log.Logger, configPath string) error {
 				}
 
 				keyFilePath := config.GlobalConfig.Common.CertDir + secretKey + ".key"
-				err = utils.CreateNonExistingFolder(filepath.Dir(keyFilePath))
+				err = utils.CreateNonExistingFolder(filepath.Dir(keyFilePath), config.GlobalConfig.Common.CertDirPerm)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
 					continue
@@ -136,14 +136,14 @@ func OnStartup(logger log.Logger, configPath string) error {
 					}
 
 					if currentCert.Fingerprint != vaultCert.Fingerprint {
-						err := os.WriteFile(certFilePath, vaultCertBytes, 0600)
+						err := os.WriteFile(certFilePath, vaultCertBytes, config.GlobalConfig.Common.CertFilePerm)
 						if err != nil {
 							_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err)
 						}
 					}
 
 					if currentCert.KeyFingerprint != vaultCert.KeyFingerprint {
-						err := os.WriteFile(keyFilePath, vaultKeyBytes, 0600)
+						err := os.WriteFile(keyFilePath, vaultKeyBytes, config.GlobalConfig.Common.CertKeyFilePerm)
 						if err != nil {
 							_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
 						}

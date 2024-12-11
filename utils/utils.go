@@ -3,6 +3,7 @@ package utils
 import (
 	"crypto/sha256"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -23,14 +24,15 @@ func SanitizedDomain(logger log.Logger, domain string) string {
 	return safe
 }
 
-func CreateNonExistingFolder(path string) error {
+func CreateNonExistingFolder(path string, mode fs.FileMode) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return os.MkdirAll(path, 0o700)
+		return os.MkdirAll(path, mode)
 	} else if err != nil {
 		return err
 	}
 	return nil
 }
+
 func GenerateFingerprint(content []byte) string {
 	return fmt.Sprintf("%x", sha256.Sum256(content))
 }

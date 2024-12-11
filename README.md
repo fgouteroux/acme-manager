@@ -128,6 +128,9 @@ Optional Common parameters:
 - **cert_days_renewal** (int): Number of days before certificate should be renewed (default: 30).
 - **certificate_deploy** (bool): If set to true, deploy certificate and private key in given `certificate_dir`
 - **certificate_dir** (string): Directory in which to deploy issuers certificates and private keys
+- **certificate_dir_perm** (uint32): Unix permission for certificate directory in octal format (default: 0700)
+- **certificate_file_perm** (uint32): Unix permission for certificate file in octal format (default: 0600)
+- **certificate_keyfile_perm** (uint32): Unix permission for certificate key file in octal format (default: 0600)
 - **cmd_enabled** (bool): If set to true, run a custom command after deploying certificates.
 - **cmd_run** (string):  Command to run.
 - **cmd_timeout** (int): Command timeout.

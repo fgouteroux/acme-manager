@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"golang.org/x/exp/maps"
+	"io/fs"
 )
 
 var (
@@ -19,16 +20,19 @@ type Config struct {
 
 // Common represents common config.
 type Common struct {
-	CertDays            int    `yaml:"cert_days"`
-	CertDaysRenewal     int    `yaml:"cert_days_renewal"`
-	CertDeploy          bool   `yaml:"certificate_deploy"`
-	CertDir             string `yaml:"certificate_dir"`
-	RootPathAccount     string `yaml:"rootpath_account"`
-	RootPathCertificate string `yaml:"rootpath_certificate"`
-	CmdEnabled          bool   `yaml:"cmd_enabled"`
-	CmdRun              string `yaml:"cmd_run"`
-	CmdTimeout          int    `yaml:"cmd_timeout"`
-	PruneCertificate    bool   `yaml:"prune_certificate"`
+	CertDays            int         `yaml:"cert_days"`
+	CertDaysRenewal     int         `yaml:"cert_days_renewal"`
+	CertDeploy          bool        `yaml:"certificate_deploy"`
+	CertDir             string      `yaml:"certificate_dir"`
+	CertDirPerm         fs.FileMode `yaml:"certificate_dir_perm"`
+	CertFilePerm        fs.FileMode `yaml:"certificate_file_perm"`
+	CertKeyFilePerm     fs.FileMode `yaml:"certificate_keyfile_perm"`
+	RootPathAccount     string      `yaml:"rootpath_account"`
+	RootPathCertificate string      `yaml:"rootpath_certificate"`
+	CmdEnabled          bool        `yaml:"cmd_enabled"`
+	CmdRun              string      `yaml:"cmd_run"`
+	CmdTimeout          int         `yaml:"cmd_timeout"`
+	PruneCertificate    bool        `yaml:"prune_certificate"`
 }
 
 type Issuer struct {
@@ -69,6 +73,18 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	if s.Common.CertDaysRenewal == 0 {
 		s.Common.CertDaysRenewal = 30
+	}
+
+	if s.Common.CertDirPerm == 0 {
+		s.Common.CertDirPerm = 0700
+	}
+
+	if s.Common.CertFilePerm == 0 {
+		s.Common.CertFilePerm = 0600
+	}
+
+	if s.Common.CertKeyFilePerm == 0 {
+		s.Common.CertKeyFilePerm = 0600
 	}
 
 	for issuer, issuerConf := range s.Issuer {
