@@ -114,6 +114,38 @@ var deleteFailedVaultSecret = prometheus.NewCounterVec(
 	[]string{},
 )
 
+var certificateConfigReload = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "acme_manager_certificate_config_reload",
+		Help: "Number of certificate config file reload",
+	},
+	[]string{},
+)
+
+var certificateConfigError = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "acme_manager_certificate_config_error",
+		Help: "1 if there was an error opening or reading the certificate config file, 0 otherwise",
+	},
+	[]string{},
+)
+
+var configReload = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "acme_manager_config_reload",
+		Help: "Number of config file reload",
+	},
+	[]string{},
+)
+
+var configError = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "acme_manager_config_error",
+		Help: "1 if there was an error opening or reading the config file, 0 otherwise",
+	},
+	[]string{},
+)
+
 func SetManagedCertificate(issuer string, value float64) {
 	managedCertificate.WithLabelValues(issuer).Set(value)
 }
@@ -178,6 +210,22 @@ func IncDeleteFailedVaultSecret() {
 	deleteFailedVaultSecret.WithLabelValues().Inc()
 }
 
+func IncCertificateConfigReload() {
+	certificateConfigReload.WithLabelValues().Inc()
+}
+
+func SetCertificateConfigError(value float64) {
+	certificateConfigError.WithLabelValues().Set(value)
+}
+
+func IncConfigReload() {
+	configReload.WithLabelValues().Inc()
+}
+
+func SetConfigError(value float64) {
+	configError.WithLabelValues().Set(value)
+}
+
 func init() {
 	collectors := []prometheus.Collector{
 		managedCertificate,
@@ -194,6 +242,10 @@ func init() {
 		getFailedVaultSecret,
 		putFailedVaultSecret,
 		deleteFailedVaultSecret,
+		certificateConfigReload,
+		certificateConfigError,
+		configReload,
+		configError,
 	}
 
 	for _, collector := range collectors {

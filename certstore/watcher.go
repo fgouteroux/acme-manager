@@ -15,6 +15,7 @@ import (
 	cert "github.com/fgouteroux/acme_manager/certificate"
 	"github.com/fgouteroux/acme_manager/cmd"
 	"github.com/fgouteroux/acme_manager/config"
+	"github.com/fgouteroux/acme_manager/metrics"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 
@@ -54,6 +55,7 @@ func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPat
 			err = Setup(logger, cfg)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring issuer changes in file %s because of error", configPath), "err", err)
+				metrics.SetConfigError(1)
 				continue
 			}
 
@@ -63,6 +65,7 @@ func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPat
 				continue
 			}
 			config.GlobalConfig = cfg
+			metrics.IncConfigReload()
 		}
 	}
 }
@@ -79,12 +82,14 @@ func WatchCertificateFileChanges(logger log.Logger, interval time.Duration, conf
 			newConfigBytes, err := os.ReadFile(filepath.Clean(configPath))
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to read file %s", configPath), "err", err)
+				metrics.SetCertificateConfigError(1)
 				continue
 			}
 			var cfg cert.Config
 			err = yaml.Unmarshal(newConfigBytes, &cfg)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring file changes %s because of error", configPath), "err", err)
+				metrics.SetCertificateConfigError(1)
 				continue
 			}
 
@@ -165,6 +170,7 @@ func WatchCertificateFileChanges(logger log.Logger, interval time.Duration, conf
 						localCache.Set(AmRingKey, certInfo)
 						AmStore.PutKVRing(AmRingKey, certInfo)
 						certConfig = cfg
+						metrics.IncCertificateConfigReload()
 					} else {
 						_ = level.Error(logger).Log("err", err)
 					}
