@@ -39,12 +39,14 @@ func OnStartup(logger log.Logger, configPath string) error {
 	if err != nil {
 		return err
 	}
+	metrics.SetConfigError(0)
 
 	var cfg cert.Config
 	err = yaml.Unmarshal(configBytes, &cfg)
 	if err != nil {
 		return err
 	}
+	metrics.SetCertificateConfigError(0)
 
 	certConfig = cfg
 

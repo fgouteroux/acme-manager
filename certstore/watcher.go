@@ -66,6 +66,7 @@ func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPat
 			}
 			config.GlobalConfig = cfg
 			metrics.IncConfigReload()
+			metrics.SetConfigError(0)
 		}
 	}
 }
@@ -98,6 +99,8 @@ func WatchCertificateFileChanges(logger log.Logger, interval time.Duration, conf
 				_ = level.Error(logger).Log("msg", "Unable to yaml marshal the certConfig", "err", err)
 				continue
 			}
+
+			metrics.SetCertificateConfigError(0)
 
 			// no need to check err as umarshall before
 			newConfigBytes, _ = yaml.Marshal(cfg)
