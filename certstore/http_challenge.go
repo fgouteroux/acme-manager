@@ -1,4 +1,4 @@
-// Package memcache implements an HTTP provider for solving the HTTP-01 challenge using kvring in combination with a webserver.
+// Package certstore implements an HTTP provider for solving the HTTP-01 challenge using kvring in combination with a webserver.
 package certstore
 
 import (
