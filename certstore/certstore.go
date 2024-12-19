@@ -434,6 +434,8 @@ func createRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 		"cert":   resource.Certificate,
 		"key":    resource.PrivateKey,
 		"issuer": resource.IssuerCertificate,
+		"url":    resource.CertStableURL,
+		"domain": resource.Domain,
 	}
 	err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, data)
 	if err != nil {
