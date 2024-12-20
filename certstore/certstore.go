@@ -228,7 +228,7 @@ func applyCertFileChanges(diff mapDiff, logger log.Logger) ([]cert.Certificate, 
 
 	for _, certData := range diff.Create {
 		hasChange = true
-		newCert, err := createRemoteCertificateResource(certData, logger)
+		newCert, err := CreateRemoteCertificateResource(certData, logger)
 		if err != nil {
 			return certInfo, err
 		}
@@ -242,14 +242,14 @@ func applyCertFileChanges(diff mapDiff, logger log.Logger) ([]cert.Certificate, 
 
 	for _, certData := range diff.Update {
 		hasChange = true
-		err := deleteRemoteCertificateResource(certData.Domain, certData.Issuer, logger)
+		err := DeleteRemoteCertificateResource(certData.Domain, certData.Issuer, logger)
 		if err != nil {
 			return certInfo, err
 		}
 		if config.GlobalConfig.Common.CertDeploy {
 			deletelocalCertificateResource(certData.Domain, certData.Issuer, logger)
 		}
-		newCert, err := createRemoteCertificateResource(certData, logger)
+		newCert, err := CreateRemoteCertificateResource(certData, logger)
 		if err != nil {
 			return certInfo, err
 		}
@@ -261,7 +261,7 @@ func applyCertFileChanges(diff mapDiff, logger log.Logger) ([]cert.Certificate, 
 
 	for _, certData := range diff.Delete {
 		hasChange = true
-		err := deleteRemoteCertificateResource(certData.Domain, certData.Issuer, logger)
+		err := DeleteRemoteCertificateResource(certData.Domain, certData.Issuer, logger)
 		if err != nil {
 			return certInfo, err
 		}
@@ -357,7 +357,7 @@ func deletelocalCertificateResource(certName, issuer string, logger log.Logger) 
 	}
 }
 
-func createRemoteCertificateResource(certData cert.Certificate, logger log.Logger) (cert.Certificate, error) {
+func CreateRemoteCertificateResource(certData cert.Certificate, logger log.Logger) (cert.Certificate, error) {
 	var newCert cert.Certificate
 	vaultSecretPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.SecretPrefix, certData.Issuer, certData.Domain)
 	domain := utils.SanitizedDomain(logger, certData.Domain)
@@ -456,7 +456,7 @@ func createRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 	return newCert, nil
 }
 
-func deleteRemoteCertificateResource(name, issuer string, logger log.Logger) error {
+func DeleteRemoteCertificateResource(name, issuer string, logger log.Logger) error {
 	vaultSecretPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.SecretPrefix, issuer, name)
 	domain := utils.SanitizedDomain(logger, name)
 	data, err := vault.GlobalClient.GetSecretWithAppRole(vaultSecretPath)
@@ -637,7 +637,7 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 			if daysLeft < c.RenewalDays {
 				hasChange = true
 				_ = level.Info(logger).Log("msg", fmt.Sprintf("[%s] acme: Trying renewal with %d days remaining", certData.Domain, daysLeft))
-				cert, err := createRemoteCertificateResource(certData, logger)
+				cert, err := CreateRemoteCertificateResource(certData, logger)
 				if err != nil {
 					return err
 				}

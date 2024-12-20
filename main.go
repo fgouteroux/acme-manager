@@ -39,6 +39,8 @@ var (
 	certificateConfigPath = kingpin.Flag("certificate-config-path", "Certificate config path").Default("certificate.yml").String()
 	envConfigPath         = kingpin.Flag("env-config-path", "Environment vars config path").Default(".env").String()
 
+	enableAPI = kingpin.Flag("enable-api", "Enables API mode and disable --certificate-config-path parameter.").Bool()
+
 	ringInstanceID             = kingpin.Flag("ring.instance-id", "Instance ID to register in the ring.").String()
 	ringInstanceAddr           = kingpin.Flag("ring.instance-addr", "IP address to advertise in the ring. Default is auto-detected.").String()
 	ringInstancePort           = kingpin.Flag("ring.instance-port", "Port to advertise in the ring.").Default("7946").Int()
@@ -157,33 +159,39 @@ func main() {
 	}
 
 	// build the kv store ring or join it then process certificate check-up
-	err = certstore.OnStartup(logger, *certificateConfigPath)
+	err = certstore.OnStartup(logger, *certificateConfigPath, *enableAPI)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 
+	if *enableAPI {
+		http.HandleFunc("/api/v1/certificate", func(w http.ResponseWriter, req *http.Request) {
+			certificateHandler(w, req)
+		})
+	} else {
+		// check certificate file changes
+		go certstore.WatchCertificateFileChanges(logger, *checkCertificateConfigInterval, *certificateConfigPath)
+
+		// check kv store changes
+		go certstore.WatchRingKvStoreChanges(logger)
+
+		// check local certificate
+		go certstore.WatchLocalCertificate(logger, *checkLocalCertificateInterval)
+	}
+
 	// check config file changes
 	go certstore.WatchConfigFileChanges(logger, *checkConfigInterval, *configPath)
 
-	// check certificate file changes
-	go certstore.WatchCertificateFileChanges(logger, *checkCertificateConfigInterval, *certificateConfigPath)
-
-	// check kv store changes
-	go certstore.WatchRingKvStoreChanges(logger)
-
 	// renewal certificate
 	go certstore.WatchCertExpiration(logger, *checkRenewalInterval)
-
-	// check local certificate
-	go certstore.WatchLocalCertificate(logger, *checkLocalCertificateInterval)
 
 	http.Handle("/", indexHandler("", indexPage))
 	http.HandleFunc("/ring/leader", func(w http.ResponseWriter, req *http.Request) {
 		leaderHandler(w, req)
 	})
 	http.HandleFunc("/certificates", func(w http.ResponseWriter, req *http.Request) {
-		certificateHandler(w, req)
+		certificateListHandler(w, req)
 	})
 
 	http.HandleFunc("/.well-known/acme-challenge/", func(w http.ResponseWriter, req *http.Request) {

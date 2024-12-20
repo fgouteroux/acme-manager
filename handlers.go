@@ -130,7 +130,7 @@ type certificateHandlerData struct {
 	Certificates []cert.Certificate
 }
 
-func certificateHandler(w http.ResponseWriter, r *http.Request) {
+func certificateListHandler(w http.ResponseWriter, r *http.Request) {
 	data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
