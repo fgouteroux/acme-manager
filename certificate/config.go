@@ -58,4 +58,5 @@ type Certificate struct {
 	Expires        string `json:"expires"`
 	Fingerprint    string `json:"fingerprint"`
 	KeyFingerprint string `json:"key_fingerprint"`
+	Owner          string `json:"owner"`
 }

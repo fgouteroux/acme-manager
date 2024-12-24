@@ -131,9 +131,11 @@ func listSecret(client *Client, path string) (*vaultApi.Secret, error) {
 		return secret, err
 	}
 
-	if secret == nil {
-		return secret, fmt.Errorf("couldn't list %s from the Vault", path)
-	}
+	/*
+		if secret == nil {
+			return secret, fmt.Errorf("couldn't list %s from the Vault", path)
+		}
+	*/
 	return secret, err
 }
 

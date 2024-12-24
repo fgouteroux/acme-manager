@@ -33,7 +33,6 @@ Flags:
   -h, --[no-]help                Show context-sensitive help (also try --help-long and --help-man).
       --web.telemetry-path="/metrics"  
                                  Path under which to expose metrics.
-      --web.prefix-path=""       Prefix path for all http requests.
       --[no-]web.systemd-socket  Use systemd socket activation listeners instead of port listeners (Linux only).
       --web.listen-address=:8989 ...  
                                  Addresses on which to expose metrics and web interface. Repeatable for multiple addresses.
@@ -43,6 +42,7 @@ Flags:
       --certificate-config-path="certificate.yml"  
                                  Certificate config path
       --env-config-path=".env"   Environment vars config path
+      --[no-]enable-api          Enables API mode and disable --certificate-config-path parameter.
       --ring.instance-id=RING.INSTANCE-ID  
                                  Instance ID to register in the ring.
       --ring.instance-addr=RING.INSTANCE-ADDR  
@@ -142,6 +142,42 @@ Optional Issuer parameters:
 - **hmac** (string): MAC key from External CA. Should be in Base64 URL Encoding without padding format. Used for External Account Binding.
 - **http_challenge** (string): http challenge name to use for domain validation
 - **dns_challenge** (string): dns challenge name to use for domain validation
+
+### API mode
+
+Manage certificate with API endpoints in a secured way.
+
+| HTTP Method            | Endpoint                 |  Auth Type Supported       |
+|------------------------|--------------------------|----------------------------|
+| GET, POST, PUT, DELETE | /api/v1/certificate      | Bearer Token               |
+| GET, POST, PUT, DELETE | /api/v1/token            | API key Header             |
+
+
+** /api/v1/certificate**: 
+
+Required parameters:  
+- **domain** (string): domain certificate
+- **issuer** (string): issuer certificate
+
+Optional parameters:
+- **bundle** (bool): if true, add the issuers certificate to the new certificate
+- **renewal_days** (int): number of days before automatic certificate renewal
+- **days** (int): number of days before certificate expiration
+- **san** (string, comma separated): DNS domain names to add to certificate
+- **http_challenge** (string): http challenge name to use for domain validation
+- **dns_challenge** (string): dns challenge name to use for domain validation
+
+** /api/v1/token**: 
+
+Required parameters:  
+- **username** (string): token username
+
+Optional parameters:
+- **scope** (string): token scope 
+
+
+If `--enable-api` parameter is defined, it disable the certificate config file. 
+
 
 ### Certificate config file
 

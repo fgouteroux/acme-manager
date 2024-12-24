@@ -170,7 +170,7 @@ func certificateListHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := certstore.AmStore.GetKVRingTokenChallenge(certstore.AmRingChallengeKey)
+	data, err := certstore.AmStore.GetKVRingMapString(certstore.AmRingChallengeKey)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -179,5 +179,53 @@ func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, val)
 	} else {
 		http.Error(w, fmt.Sprintf("key %s not found", r.RequestURI), http.StatusNotFound)
+	}
+}
+
+//go:embed templates/token.gohtml
+var tokenPageHTML string
+
+type tokenHandlerData struct {
+	Now         time.Time
+	DefaultDays int
+	Tokens      map[string]certstore.Token
+}
+
+func tokenListHandler(w http.ResponseWriter, r *http.Request) {
+	data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	v := &tokenHandlerData{
+		Now:         time.Now(),
+		Tokens:      data,
+		DefaultDays: config.GlobalConfig.Common.CertDays,
+	}
+
+	accept := r.Header.Get("Accept")
+	if strings.Contains(accept, "application/json") {
+		w.Header().Set("Content-Type", "application/json")
+
+		if err := json.NewEncoder(w).Encode(v.Tokens); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	templ := template.New("main")
+	templ.Funcs(map[string]interface{}{
+		"AddPathPrefix": func(link string) string {
+			return path.Join("", link)
+		},
+		"Join": func(s []string, d string) string {
+			return strings.Join(s, d)
+		},
+	})
+	template.Must(templ.Parse(tokenPageHTML))
+
+	err = templ.Execute(w, v)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

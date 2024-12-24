@@ -34,6 +34,7 @@ import (
 var (
 	AmRingKey          = "collectors/cert"
 	AmRingChallengeKey = "collectors/challenge"
+	TokenRingKey       = "collectors/token"
 	certConfig         cert.Config
 	localCache         = memcache.NewLocalCache()
 	AmStore            *CertStore
@@ -62,8 +63,33 @@ func (c *CertStore) GetKVRingCert(key string) ([]cert.Certificate, error) {
 	return data, nil
 }
 
-func (c *CertStore) GetKVRingTokenChallenge(key string) (map[string]string, error) {
+func (c *CertStore) GetKVRingMapString(key string) (map[string]string, error) {
 	var data map[string]string
+	content, err := c.GetKVRing(key)
+	if err != nil {
+		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to get kv store key '%s'", key), "err", err)
+		return data, err
+	}
+
+	if content != "" {
+		err = json.Unmarshal([]byte(content), &data)
+		if err != nil {
+			_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", key), "err", err)
+			return data, err
+		}
+	}
+	return data, nil
+}
+
+type Token struct {
+	Hash     string   `json:"hash"`
+	Scope    []string `json:"scope"`
+	Username string   `json:"username"`
+	Expires  string   `json:"expires"`
+}
+
+func (c *CertStore) GetKVRingToken(key string) (map[string]Token, error) {
+	var data map[string]Token
 	content, err := c.GetKVRing(key)
 	if err != nil {
 		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to get kv store key '%s'", key), "err", err)
@@ -301,7 +327,7 @@ func createlocalCertificateResource(certName, issuer string, logger log.Logger) 
 	certFilePath := config.GlobalConfig.Common.CertDir + issuer + "/" + certName + ".crt"
 	keyFilePath := config.GlobalConfig.Common.CertDir + issuer + "/" + certName + ".key"
 
-	secretKeyPath := config.GlobalConfig.Storage.Vault.SecretPrefix + "/" + issuer + "/" + certName
+	secretKeyPath := config.GlobalConfig.Storage.Vault.CertPrefix + "/" + issuer + "/" + certName
 	secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
@@ -359,7 +385,7 @@ func deletelocalCertificateResource(certName, issuer string, logger log.Logger) 
 
 func CreateRemoteCertificateResource(certData cert.Certificate, logger log.Logger) (cert.Certificate, error) {
 	var newCert cert.Certificate
-	vaultSecretPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.SecretPrefix, certData.Issuer, certData.Domain)
+	vaultSecretPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Issuer, certData.Domain)
 	domain := utils.SanitizedDomain(logger, certData.Domain)
 
 	baseCertificateFilePath := fmt.Sprintf("%s/%s/%s/", config.GlobalConfig.Common.RootPathCertificate, certData.Issuer, domain)
@@ -436,6 +462,7 @@ func CreateRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 		"issuer": resource.IssuerCertificate,
 		"url":    resource.CertStableURL,
 		"domain": resource.Domain,
+		"owner":  certData.Owner,
 	}
 	err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, data)
 	if err != nil {
@@ -457,7 +484,7 @@ func CreateRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 }
 
 func DeleteRemoteCertificateResource(name, issuer string, logger log.Logger) error {
-	vaultSecretPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.SecretPrefix, issuer, name)
+	vaultSecretPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, issuer, name)
 	domain := utils.SanitizedDomain(logger, name)
 	data, err := vault.GlobalClient.GetSecretWithAppRole(vaultSecretPath)
 	if err != nil {
@@ -544,7 +571,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 			var secret map[string]interface{}
 			if utils.GenerateFingerprint(certBytes) != certData.Fingerprint {
 				hasChange = true
-				secretKeyPath := config.GlobalConfig.Storage.Vault.SecretPrefix + "/" + certData.Issuer + "/" + certData.Domain
+				secretKeyPath := config.GlobalConfig.Storage.Vault.CertPrefix + "/" + certData.Issuer + "/" + certData.Domain
 				secret, err = vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
@@ -567,7 +594,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 
 			if utils.GenerateFingerprint(keyBytes) != certData.KeyFingerprint {
 				hasChange = true
-				secretKeyPath := config.GlobalConfig.Storage.Vault.SecretPrefix + "/" + certData.Issuer + "/" + certData.Domain
+				secretKeyPath := config.GlobalConfig.Storage.Vault.CertPrefix + "/" + certData.Issuer + "/" + certData.Domain
 				if secret == nil {
 					secret, err = vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 					if err != nil {
@@ -665,20 +692,4 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 
 	}
 	return nil
-}
-
-func WatchCertExpiration(logger log.Logger, interval time.Duration) {
-	// create a new Ticker
-	tk := time.NewTicker(interval)
-
-	// start the ticker
-	for range tk.C {
-		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
-		if isLeaderNow {
-			err := CheckCertExpiration(AmStore, logger)
-			if err != nil {
-				_ = level.Error(logger).Log("msg", "Certificate check renewal failed", "err", err)
-			}
-		}
-	}
 }

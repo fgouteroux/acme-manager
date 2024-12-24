@@ -51,6 +51,8 @@ var (
 	checkConfigInterval            = kingpin.Flag("check-config-interval", "Time interval to check if config file changes").Default("30s").Duration()
 	checkCertificateConfigInterval = kingpin.Flag("check-certificate-config-interval", "Time interval to check if certificate config file changes").Default("30s").Duration()
 	checkLocalCertificateInterval  = kingpin.Flag("check-local-certificate-interval", "Time interval to check if local certificate changes").Default("5m").Duration()
+
+	checkTokenInterval = kingpin.Flag("check-token-interval", "Time interval to check if tokens expired").Default("5m").Duration()
 )
 
 func main() {
@@ -169,12 +171,22 @@ func main() {
 		http.HandleFunc("/api/v1/certificate", func(w http.ResponseWriter, req *http.Request) {
 			certificateHandler(w, req)
 		})
+		http.HandleFunc("/api/v1/token", func(w http.ResponseWriter, req *http.Request) {
+			tokenHandler(w, req)
+		})
+		http.HandleFunc("/tokens", func(w http.ResponseWriter, req *http.Request) {
+			tokenListHandler(w, req)
+		})
+		indexPage.AddLinks(metricsWeight, "Tokens", []IndexPageLink{
+			{Desc: "Managed tokens", Path: "/tokens"},
+		})
+		go certstore.WatchTokenExpiration(logger, *checkTokenInterval)
 	} else {
 		// check certificate file changes
 		go certstore.WatchCertificateFileChanges(logger, *checkCertificateConfigInterval, *certificateConfigPath)
 
-		// check kv store changes
-		go certstore.WatchRingKvStoreChanges(logger)
+		// check kv store cert changes
+		go certstore.WatchRingKvStoreCertChanges(logger)
 
 		// check local certificate
 		go certstore.WatchLocalCertificate(logger, *checkLocalCertificateInterval)

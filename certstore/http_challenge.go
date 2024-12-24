@@ -15,7 +15,7 @@ func NewKVRingProvider() (*HTTPProvider, error) {
 
 // Present makes the token available at `HTTP01ChallengePath(token)` by creating the key in the kvring.
 func (w *HTTPProvider) Present(_, token, keyAuth string) error {
-	data, err := AmStore.GetKVRingTokenChallenge(AmRingChallengeKey)
+	data, err := AmStore.GetKVRingMapString(AmRingChallengeKey)
 	if err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func (w *HTTPProvider) Present(_, token, keyAuth string) error {
 
 // CleanUp removes the file created for the challenge.
 func (w *HTTPProvider) CleanUp(_, token, _ string) error {
-	data, err := AmStore.GetKVRingTokenChallenge(AmRingChallengeKey)
+	data, err := AmStore.GetKVRingMapString(AmRingChallengeKey)
 	if err != nil {
 		return err
 	}

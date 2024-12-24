@@ -35,13 +35,23 @@ func OnStartup(logger log.Logger, configPath string, enableAPI bool) error {
 		return err
 	}
 
+	if enableAPI {
+		tokenData, err := AmStore.GetKVRingToken(TokenRingKey)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			return err
+		}
+		if len(tokenData) == 0 {
+			// udpate kv store
+			AmStore.PutKVRing(TokenRingKey, getVaultAllToken(logger))
+		}
+	}
+
 	if len(data) == 0 {
 		if !isLeaderNow {
 			_ = level.Debug(logger).Log("msg", "Skipping because this node is not the ring leader")
 			return nil
 		}
-
-		_ = level.Info(logger).Log("msg", "Checking certificates from config file")
 
 		vaultCertList := getVaultAllCertificate(logger)
 
@@ -64,6 +74,8 @@ func OnStartup(logger log.Logger, configPath string, enableAPI bool) error {
 				return err
 			}
 			metrics.SetCertificateConfigError(0)
+
+			_ = level.Info(logger).Log("msg", "Checking certificates from config file")
 
 			certConfig = cfg
 
@@ -159,8 +171,9 @@ func getVaultAllCertificate(logger log.Logger) []cert.Certificate {
 	_ = level.Info(logger).Log("msg", "Retrieving certificates from vault")
 
 	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(
-		config.GlobalConfig.Storage.Vault.SecretPrefix + "/",
+		config.GlobalConfig.Storage.Vault.CertPrefix + "/",
 	)
+
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
@@ -171,11 +184,11 @@ func getVaultAllCertificate(logger log.Logger) []cert.Certificate {
 
 		var vaultCertCount int
 		for _, secretKey := range vaultSecrets {
-			secretKeyPath := config.GlobalConfig.Storage.Vault.SecretPrefix + "/" + secretKey
+			secretKeyPath := config.GlobalConfig.Storage.Vault.CertPrefix + "/" + secretKey
 
 			secretKeyPathArr := strings.Split(secretKeyPath, "/")
-			issuer := secretKeyPathArr[1]
-			name := secretKeyPathArr[2]
+			issuer := secretKeyPathArr[len(secretKeyPathArr)-2]
+			name := secretKeyPathArr[len(secretKeyPathArr)-1]
 
 			tmp := cert.Certificate{
 				Domain: name,
@@ -201,6 +214,10 @@ func getVaultAllCertificate(logger log.Logger) []cert.Certificate {
 			} else {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("No private key found in vault secret key %s", secretKeyPath))
 				continue
+			}
+
+			if owner, ok := secret["owner"]; ok {
+				tmp.Owner = owner.(string)
 			}
 
 			vaultCert, err := kvStore(tmp, vaultCertBytes, vaultKeyBytes)
@@ -257,6 +274,53 @@ func getVaultAllCertificate(logger log.Logger) []cert.Certificate {
 
 		}
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d certificates from vault", vaultCertCount))
+	} else {
+		_ = level.Warn(logger).Log("msg", "No certificates found from vault")
 	}
 	return vaultCertList
+}
+
+func getVaultAllToken(logger log.Logger) map[string]Token {
+	_ = level.Info(logger).Log("msg", "Retrieving tokens from vault")
+
+	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(
+		config.GlobalConfig.Storage.Vault.TokenPrefix + "/",
+	)
+	if err != nil {
+		_ = level.Error(logger).Log("err", err)
+		os.Exit(1)
+	}
+
+	tokenMap := make(map[string]Token)
+	if len(vaultSecrets) > 0 {
+
+		var vaultTokenCount int
+		for _, secretKey := range vaultSecrets {
+			secretKeyPath := config.GlobalConfig.Storage.Vault.TokenPrefix + "/" + secretKey
+
+			secretKeyPathArr := strings.Split(secretKeyPath, "/")
+			username := secretKeyPathArr[len(secretKeyPathArr)-2]
+			ID := secretKeyPathArr[len(secretKeyPathArr)-1]
+
+			secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+
+			var scope []string
+			if secret["scope"] != nil {
+				for _, item := range secret["scope"].([]interface{}) {
+					scope = append(scope, item.(string))
+				}
+
+				tokenMap[ID] = Token{Hash: secret["tokenHash"].(string), Scope: scope, Username: username, Expires: secret["expires"].(string)}
+				vaultTokenCount++
+			}
+		}
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d tokens from vault", vaultTokenCount))
+	} else {
+		_ = level.Warn(logger).Log("msg", "No tokens found from vault")
+	}
+	return tokenMap
 }

@@ -196,7 +196,7 @@ func WatchLocalCertificate(logger log.Logger, interval time.Duration) {
 	}
 }
 
-func WatchRingKvStoreChanges(logger log.Logger) {
+func WatchRingKvStoreCertChanges(logger log.Logger) {
 	AmStore.RingConfig.KvStore.WatchKey(context.Background(), AmRingKey, ring.JSONCodec, func(in interface{}) bool {
 		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 		if !isLeaderNow {
@@ -229,4 +229,69 @@ func WatchRingKvStoreChanges(logger log.Logger) {
 
 		return true // yes, keep watching
 	})
+}
+
+func WatchCertExpiration(logger log.Logger, interval time.Duration) {
+	// create a new Ticker
+	tk := time.NewTicker(interval)
+
+	// start the ticker
+	for range tk.C {
+		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
+		if isLeaderNow {
+			err := CheckCertExpiration(AmStore, logger)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", "Certificate check renewal failed", "err", err)
+			}
+		}
+	}
+}
+
+func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
+	// create a new Ticker
+	tk := time.NewTicker(interval)
+
+	// start the ticker
+	for range tk.C {
+		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
+		if isLeaderNow {
+			data, err := AmStore.GetKVRingToken(TokenRingKey)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+			}
+			var hasChange bool
+			for tokenID, tokenData := range data {
+
+				if tokenData.Expires == "Never" {
+					continue
+				}
+				layout := "2006-01-02 15:04:05 -0700 MST"
+				t, err := time.Parse(layout, tokenData.Expires)
+				if err != nil {
+					_ = level.Error(logger).Log("err", err)
+					continue
+				}
+
+				if time.Now().After(t) {
+					secretKeyPathPrefix := config.GlobalConfig.Storage.Vault.TokenPrefix
+					if secretKeyPathPrefix == "" {
+						secretKeyPathPrefix = "token"
+					}
+
+					secretKeyPath := fmt.Sprintf("%s/%s/%s", secretKeyPathPrefix, tokenData.Username, tokenID)
+					err = vault.GlobalClient.DeleteSecretWithAppRole(secretKeyPath)
+					if err != nil {
+						_ = level.Error(logger).Log("err", err)
+						continue
+					}
+					hasChange = true
+					delete(data, tokenID)
+				}
+			}
+			if hasChange {
+				// udpate kv store
+				AmStore.PutKVRing(TokenRingKey, data)
+			}
+		}
+	}
 }
