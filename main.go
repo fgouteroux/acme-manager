@@ -10,6 +10,7 @@ import (
 
 	"github.com/joho/godotenv"
 
+	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/services"
 	"github.com/prometheus/client_golang/prometheus"
@@ -24,7 +25,9 @@ import (
 	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 
 	"github.com/fgouteroux/acme_manager/certstore"
+	"github.com/fgouteroux/acme_manager/client"
 	"github.com/fgouteroux/acme_manager/config"
+	"github.com/fgouteroux/acme_manager/restclient"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -51,8 +54,20 @@ var (
 	checkConfigInterval            = kingpin.Flag("check-config-interval", "Time interval to check if config file changes").Default("30s").Duration()
 	checkCertificateConfigInterval = kingpin.Flag("check-certificate-config-interval", "Time interval to check if certificate config file changes").Default("30s").Duration()
 	checkLocalCertificateInterval  = kingpin.Flag("check-local-certificate-interval", "Time interval to check if local certificate changes").Default("5m").Duration()
+	checkTokenInterval             = kingpin.Flag("check-token-interval", "Time interval to check if tokens expired").Default("5m").Duration()
 
-	checkTokenInterval = kingpin.Flag("check-token-interval", "Time interval to check if tokens expired").Default("5m").Duration()
+	clientMode                     = kingpin.Flag("client", "Enables client mode.").Bool()
+	clientManagerURL               = kingpin.Flag("client.manager-url", "Client manager URL").Default("http://localhost:8989/api/v1").Envar("ACME_MANAGER_URL").String()
+	clientManagerToken             = kingpin.Flag("client.manager-token", "Client manager token").Envar("ACME_MANAGER_TOKEN").String()
+	clientManagerTLSCAFile         = kingpin.Flag("client.tls-ca-file", "Client manager tls ca certificate file").String()
+	clientManagerTLSCertFile       = kingpin.Flag("client.tls-cert-file", "Client manager tls certificate file").String()
+	clientManagerTLSKeyFile        = kingpin.Flag("client.tls-key-file", "Client manager tls key file").String()
+	clientManagerTLSSkipVerify     = kingpin.Flag("client.tls-skip-verify", "Client manager tls skip verify").Bool()
+	clientConfigPath               = kingpin.Flag("client.config-path", "Client config path").Default("client-config.yml").String()
+	clientCheckConfigInterval      = kingpin.Flag("client.check-config-interval", "Time interval to check if client config file changes").Default("30s").Duration()
+	clientCheckCertificateInterval = kingpin.Flag("client.check-certificate-interval", "Time interval to check if client certificate file changes").Default("5m").Duration()
+
+	logger log.Logger
 )
 
 func main() {
@@ -78,12 +93,52 @@ func main() {
 	lvl, _ := logrus.ParseLevel(promlogConfig.Level.String())
 	log.SetLevel(lvl)
 
-	logger := promlog.New(promlogConfig)
+	logger = promlog.New(promlogConfig)
 
 	err := godotenv.Load(*envConfigPath)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
+	}
+
+	if *clientMode {
+		if *clientManagerToken == "" {
+			_ = level.Error(logger).Log("err", "Missing client manager token, please set '--client.manager-token' or env var 'ACME_MANAGER_TOKEN'")
+			os.Exit(1)
+		}
+
+		acmeClient, err := restclient.NewClient(
+			*clientManagerURL,
+			*clientManagerToken,
+			*clientManagerTLSCAFile,
+			*clientManagerTLSCertFile,
+			*clientManagerTLSKeyFile,
+			*clientManagerTLSSkipVerify,
+		)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
+
+		err = client.CheckAndDeployLocalCertificate(logger, *clientConfigPath, acmeClient)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
+		go client.WatchConfigFileChanges(logger, *clientCheckConfigInterval, *clientConfigPath, acmeClient)
+		go client.WatchCertificateFileChanges(logger, *clientCheckCertificateInterval, *clientConfigPath, acmeClient)
+
+		http.Handle(*metricsPath, promhttp.Handler())
+
+		server := &http.Server{
+			ReadTimeout:       60 * time.Second,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+
+		if err := web.ListenAndServe(server, webConfig, logger); err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
 	}
 
 	configBytes, err := os.ReadFile(*configPath)
@@ -168,19 +223,19 @@ func main() {
 	}
 
 	if *enableAPI {
-		http.HandleFunc("/api/v1/certificate", func(w http.ResponseWriter, req *http.Request) {
-			certificateHandler(w, req)
-		})
-		http.HandleFunc("/api/v1/token", func(w http.ResponseWriter, req *http.Request) {
-			tokenHandler(w, req)
-		})
-		http.HandleFunc("/tokens", func(w http.ResponseWriter, req *http.Request) {
-			tokenListHandler(w, req)
-		})
+		http.Handle("/api/v1/certificate", LoggerHandler(certificateHandler()))
+		http.Handle("/api/v1/certificate/metadata", LoggerHandler(certificateMetadataHandler()))
+		http.Handle("/api/v1/token", LoggerHandler(tokenHandler()))
+		http.Handle("/tokens", LoggerHandler(tokenListHandler()))
+
 		indexPage.AddLinks(metricsWeight, "Tokens", []IndexPageLink{
 			{Desc: "Managed tokens", Path: "/tokens"},
 		})
 		go certstore.WatchTokenExpiration(logger, *checkTokenInterval)
+
+		// renewal certificate
+		go certstore.WatchAPICertExpiration(logger, *checkRenewalInterval)
+
 	} else {
 		// check certificate file changes
 		go certstore.WatchCertificateFileChanges(logger, *checkCertificateConfigInterval, *certificateConfigPath)
@@ -190,21 +245,19 @@ func main() {
 
 		// check local certificate
 		go certstore.WatchLocalCertificate(logger, *checkLocalCertificateInterval)
+
+		// renewal certificate
+		go certstore.WatchCertExpiration(logger, *checkRenewalInterval)
 	}
 
 	// check config file changes
 	go certstore.WatchConfigFileChanges(logger, *checkConfigInterval, *configPath)
 
-	// renewal certificate
-	go certstore.WatchCertExpiration(logger, *checkRenewalInterval)
-
 	http.Handle("/", indexHandler("", indexPage))
 	http.HandleFunc("/ring/leader", func(w http.ResponseWriter, req *http.Request) {
 		leaderHandler(w, req)
 	})
-	http.HandleFunc("/certificates", func(w http.ResponseWriter, req *http.Request) {
-		certificateListHandler(w, req)
-	})
+	http.Handle("/certificates", LoggerHandler(certificateListHandler()))
 
 	http.HandleFunc("/.well-known/acme-challenge/", func(w http.ResponseWriter, req *http.Request) {
 		httpChallengeHandler(w, req)

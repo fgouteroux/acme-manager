@@ -165,7 +165,7 @@ func WatchCertificateFileChanges(logger log.Logger, interval time.Duration, conf
 					}
 				}
 
-				diff, hasChanged := checkCertDiff(old, newCertList, logger)
+				diff, hasChanged := CheckCertDiff(old, newCertList, logger)
 
 				if hasChanged {
 					certInfo, err := applyCertFileChanges(diff, logger)
@@ -208,7 +208,7 @@ func WatchRingKvStoreCertChanges(logger log.Logger) {
 			if !found {
 				_ = level.Error(logger).Log("msg", "Empty local cache store")
 			} else {
-				diff, hasChanged := checkCertDiff(old.Value.([]cert.Certificate), newCertList, logger)
+				diff, hasChanged := CheckCertDiff(old.Value.([]cert.Certificate), newCertList, logger)
 
 				if hasChanged {
 					_ = level.Info(logger).Log("msg", "kv store key changes")
@@ -219,7 +219,7 @@ func WatchRingKvStoreCertChanges(logger log.Logger) {
 					localCache.Set(AmRingKey, newCertList)
 
 					if config.GlobalConfig.Common.CmdEnabled {
-						cmd.Execute(logger, config.GlobalConfig)
+						cmd.Execute(logger, config.GlobalConfig.Common)
 					}
 				} else {
 					_ = level.Info(logger).Log("msg", "kv store key no changes")
@@ -240,6 +240,22 @@ func WatchCertExpiration(logger log.Logger, interval time.Duration) {
 		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 		if isLeaderNow {
 			err := CheckCertExpiration(AmStore, logger)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", "Certificate check renewal failed", "err", err)
+			}
+		}
+	}
+}
+
+func WatchAPICertExpiration(logger log.Logger, interval time.Duration) {
+	// create a new Ticker
+	tk := time.NewTicker(interval)
+
+	// start the ticker
+	for range tk.C {
+		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
+		if isLeaderNow {
+			err := CheckAPICertExpiration(AmStore, logger)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "Certificate check renewal failed", "err", err)
 			}

@@ -1,0 +1,11 @@
+common:
+  certificate_deploy: true
+  certificate_dir: etc/client/vault/
+
+  cmd_enabled: true
+  cmd_run: /usr/bin/echo reload haproxy
+  cmd_timeout: 30
+
+certificate:
+  - domain: testfgx01.core.sandbox.emea.giservices.io
+    issuer: letsencrypt

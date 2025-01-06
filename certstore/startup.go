@@ -105,7 +105,7 @@ func OnStartup(logger log.Logger, configPath string, enableAPI bool) error {
 					}
 
 					if config.GlobalConfig.Common.CertDeploy {
-						createlocalCertificateResource(certData.Domain, certData.Issuer, logger)
+						CreateLocalCertificateResource(certData.Domain, certData.Issuer, logger)
 					}
 					content = append(content, newCert)
 				}
@@ -128,7 +128,7 @@ func OnStartup(logger log.Logger, configPath string, enableAPI bool) error {
 							os.Exit(1)
 						}
 						if config.GlobalConfig.Common.CertDeploy {
-							deletelocalCertificateResource(certData.Domain, certData.Issuer, logger)
+							DeleteLocalCertificateResource(certData.Domain, certData.Issuer, logger)
 						}
 					} else {
 						_ = level.Info(logger).Log("msg", fmt.Sprintf("(noop) - removing certificate '%s' present in vault but not in config file", certData.Domain))
@@ -146,7 +146,7 @@ func OnStartup(logger log.Logger, configPath string, enableAPI bool) error {
 			localCache.Set(AmRingKey, content)
 
 			if config.GlobalConfig.Common.CmdEnabled {
-				cmd.Execute(logger, config.GlobalConfig)
+				cmd.Execute(logger, config.GlobalConfig.Common)
 			}
 		}
 

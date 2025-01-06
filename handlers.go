@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/kv/memberlist"
 
 	cert "github.com/fgouteroux/acme_manager/certificate"
@@ -130,43 +131,45 @@ type certificateHandlerData struct {
 	Certificates []cert.Certificate
 }
 
-func certificateListHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-
-	v := &certificateHandlerData{
-		Now:          time.Now(),
-		Certificates: data,
-		DefaultDays:  config.GlobalConfig.Common.CertDays,
-	}
-
-	accept := r.Header.Get("Accept")
-	if strings.Contains(accept, "application/json") {
-		w.Header().Set("Content-Type", "application/json")
-
-		if err := json.NewEncoder(w).Encode(v.Certificates); err != nil {
+func certificateListHandler() http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
-	}
 
-	templ := template.New("main")
-	templ.Funcs(map[string]interface{}{
-		"AddPathPrefix": func(link string) string {
-			return path.Join("", link)
-		},
-		"Split": func(s string, d string) []string {
-			return strings.Split(s, d)
-		},
+		v := &certificateHandlerData{
+			Now:          time.Now(),
+			Certificates: data,
+			DefaultDays:  config.GlobalConfig.Common.CertDays,
+		}
+
+		accept := r.Header.Get("Accept")
+		if strings.Contains(accept, "application/json") {
+			w.Header().Set("Content-Type", "application/json")
+
+			if err := json.NewEncoder(w).Encode(v.Certificates); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+
+		templ := template.New("main")
+		templ.Funcs(map[string]interface{}{
+			"AddPathPrefix": func(link string) string {
+				return path.Join("", link)
+			},
+			"Split": func(s string, d string) []string {
+				return strings.Split(s, d)
+			},
+		})
+		template.Must(templ.Parse(certificatePageHTML))
+
+		err = templ.Execute(w, v)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
-	template.Must(templ.Parse(certificatePageHTML))
-
-	err = templ.Execute(w, v)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
 }
 
 func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
@@ -191,41 +194,101 @@ type tokenHandlerData struct {
 	Tokens      map[string]certstore.Token
 }
 
-func tokenListHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-
-	v := &tokenHandlerData{
-		Now:         time.Now(),
-		Tokens:      data,
-		DefaultDays: config.GlobalConfig.Common.CertDays,
-	}
-
-	accept := r.Header.Get("Accept")
-	if strings.Contains(accept, "application/json") {
-		w.Header().Set("Content-Type", "application/json")
-
-		if err := json.NewEncoder(w).Encode(v.Tokens); err != nil {
+func tokenListHandler() http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
-	}
 
-	templ := template.New("main")
-	templ.Funcs(map[string]interface{}{
-		"AddPathPrefix": func(link string) string {
-			return path.Join("", link)
-		},
-		"Join": func(s []string, d string) string {
-			return strings.Join(s, d)
-		},
+		v := &tokenHandlerData{
+			Now:         time.Now(),
+			Tokens:      data,
+			DefaultDays: config.GlobalConfig.Common.CertDays,
+		}
+
+		accept := r.Header.Get("Accept")
+		if strings.Contains(accept, "application/json") {
+			w.Header().Set("Content-Type", "application/json")
+
+			if err := json.NewEncoder(w).Encode(v.Tokens); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+
+		templ := template.New("main")
+		templ.Funcs(map[string]interface{}{
+			"AddPathPrefix": func(link string) string {
+				return path.Join("", link)
+			},
+			"Join": func(s []string, d string) string {
+				return strings.Join(s, d)
+			},
+		})
+		template.Must(templ.Parse(tokenPageHTML))
+
+		err = templ.Execute(w, v)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
-	template.Must(templ.Parse(tokenPageHTML))
+}
 
-	err = templ.Execute(w, v)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+func LoggerHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+
+		start := time.Now()
+
+		lrw := NewLoggingResponseWriter(w)
+
+		next.ServeHTTP(lrw, req)
+		_ = level.Info(logger).Log(
+			"method", req.Method,
+			"path", req.URL.Path,
+			"status_code", lrw.statusCode,
+			"username", w.Header().Get("Username"),
+			"duration", time.Since(start).String(),
+			"client_ip", GetClientIP(req),
+			"length", lrw.length,
+		)
+	})
+}
+
+func GetClientIP(r *http.Request) string {
+	IPAddress := r.Header.Get("X-Real-Ip")
+	if IPAddress == "" {
+		IPAddress = r.Header.Get("X-Forwarded-For")
 	}
+	if IPAddress == "" {
+		IPAddress = strings.Split(r.RemoteAddr, ":")[0]
+	}
+	return IPAddress
+}
+
+type LoggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	length     int
+}
+
+func NewLoggingResponseWriter(w http.ResponseWriter) *LoggingResponseWriter {
+	// WriteHeader(int) is not called if our response implicitly returns 200 OK, so
+	// we default to that status code.
+	return &LoggingResponseWriter{w, http.StatusOK, 0}
+}
+
+func (lrw *LoggingResponseWriter) WriteHeader(code int) {
+	lrw.statusCode = code
+	lrw.ResponseWriter.WriteHeader(code)
+}
+
+func (lrw *LoggingResponseWriter) Write(b []byte) (n int, err error) {
+    n, err = lrw.ResponseWriter.Write(b)
+    lrw.length += n
+    return
+}
+
+func (lrw *LoggingResponseWriter) Length() int {
+    return lrw.length
 }

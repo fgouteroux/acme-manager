@@ -200,16 +200,16 @@ func kvStore(data cert.Certificate, cert, key []byte) (cert.Certificate, error) 
 	return data, nil
 }
 
-type mapDiff struct {
+type MapDiff struct {
 	Create   []cert.Certificate `json:"create"`
 	Update   []cert.Certificate `json:"update"`
 	Delete   []cert.Certificate `json:"delete"`
 	Unchange []cert.Certificate `json:"unchange"`
 }
 
-func checkCertDiff(old, newCertList []cert.Certificate, logger log.Logger) (mapDiff, bool) {
+func CheckCertDiff(old, newCertList []cert.Certificate, logger log.Logger) (MapDiff, bool) {
 	var hasChange bool
-	var diff mapDiff
+	var diff MapDiff
 
 	for _, oldCert := range old {
 		idx := slices.IndexFunc(newCertList, func(c cert.Certificate) bool {
@@ -247,7 +247,7 @@ func checkCertDiff(old, newCertList []cert.Certificate, logger log.Logger) (mapD
 	return diff, hasChange
 }
 
-func applyCertFileChanges(diff mapDiff, logger log.Logger) ([]cert.Certificate, error) {
+func applyCertFileChanges(diff MapDiff, logger log.Logger) ([]cert.Certificate, error) {
 	var certInfo []cert.Certificate
 	var hasChange bool
 	certInfo = append(certInfo, diff.Unchange...)
@@ -262,7 +262,7 @@ func applyCertFileChanges(diff mapDiff, logger log.Logger) ([]cert.Certificate, 
 		certInfo = append(certInfo, newCert)
 
 		if config.GlobalConfig.Common.CertDeploy {
-			createlocalCertificateResource(certData.Domain, certData.Issuer, logger)
+			CreateLocalCertificateResource(certData.Domain, certData.Issuer, logger)
 		}
 	}
 
@@ -273,7 +273,7 @@ func applyCertFileChanges(diff mapDiff, logger log.Logger) ([]cert.Certificate, 
 			return certInfo, err
 		}
 		if config.GlobalConfig.Common.CertDeploy {
-			deletelocalCertificateResource(certData.Domain, certData.Issuer, logger)
+			DeleteLocalCertificateResource(certData.Domain, certData.Issuer, logger)
 		}
 		newCert, err := CreateRemoteCertificateResource(certData, logger)
 		if err != nil {
@@ -281,7 +281,7 @@ func applyCertFileChanges(diff mapDiff, logger log.Logger) ([]cert.Certificate, 
 		}
 		certInfo = append(certInfo, newCert)
 		if config.GlobalConfig.Common.CertDeploy {
-			createlocalCertificateResource(certData.Domain, certData.Issuer, logger)
+			CreateLocalCertificateResource(certData.Domain, certData.Issuer, logger)
 		}
 	}
 
@@ -293,32 +293,32 @@ func applyCertFileChanges(diff mapDiff, logger log.Logger) ([]cert.Certificate, 
 		}
 		metrics.DecManagedCertificate(certData.Issuer)
 		if config.GlobalConfig.Common.CertDeploy {
-			deletelocalCertificateResource(certData.Domain, certData.Issuer, logger)
+			DeleteLocalCertificateResource(certData.Domain, certData.Issuer, logger)
 		}
 	}
 
 	if hasChange && config.GlobalConfig.Common.CmdEnabled {
-		cmd.Execute(logger, config.GlobalConfig)
+		cmd.Execute(logger, config.GlobalConfig.Common)
 	}
 
 	return certInfo, nil
 }
 
-func applyRingKvStoreChanges(diff mapDiff, logger log.Logger) {
+func applyRingKvStoreChanges(diff MapDiff, logger log.Logger) {
 	for _, certData := range diff.Create {
-		createlocalCertificateResource(certData.Domain, certData.Issuer, logger)
+		CreateLocalCertificateResource(certData.Domain, certData.Issuer, logger)
 	}
 
 	for _, certData := range diff.Update {
-		createlocalCertificateResource(certData.Domain, certData.Issuer, logger)
+		CreateLocalCertificateResource(certData.Domain, certData.Issuer, logger)
 	}
 
 	for _, certData := range diff.Delete {
-		deletelocalCertificateResource(certData.Domain, certData.Issuer, logger)
+		DeleteLocalCertificateResource(certData.Domain, certData.Issuer, logger)
 	}
 }
 
-func createlocalCertificateResource(certName, issuer string, logger log.Logger) {
+func CreateLocalCertificateResource(certName, issuer string, logger log.Logger) {
 	err := utils.CreateNonExistingFolder(config.GlobalConfig.Common.CertDir+issuer, config.GlobalConfig.Common.CertDirPerm)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
@@ -363,7 +363,7 @@ func createlocalCertificateResource(certName, issuer string, logger log.Logger) 
 	}
 }
 
-func deletelocalCertificateResource(certName, issuer string, logger log.Logger) {
+func DeleteLocalCertificateResource(certName, issuer string, logger log.Logger) {
 	certFilePath := config.GlobalConfig.Common.CertDir + issuer + "/" + certName + ".crt"
 	keyFilePath := config.GlobalConfig.Common.CertDir + issuer + "/" + certName + ".key"
 
@@ -457,12 +457,13 @@ func CreateRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 	SaveResource(logger, baseCertificateFilePath, resource)
 
 	data := map[string]interface{}{
-		"cert":   resource.Certificate,
-		"key":    resource.PrivateKey,
-		"issuer": resource.IssuerCertificate,
-		"url":    resource.CertStableURL,
-		"domain": resource.Domain,
-		"owner":  certData.Owner,
+		"cert":      resource.Certificate,
+		"key":       resource.PrivateKey,
+		"ca_issuer": resource.IssuerCertificate,
+		"issuer":    certData.Issuer,
+		"url":       resource.CertStableURL,
+		"domain":    resource.Domain,
+		"owner":     certData.Owner,
 	}
 	err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, data)
 	if err != nil {
@@ -537,7 +538,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 
 		if !certFileExists && !keyFileExists {
 			hasChange = true
-			createlocalCertificateResource(certData.Domain, certData.Issuer, logger)
+			CreateLocalCertificateResource(certData.Domain, certData.Issuer, logger)
 		} else {
 			var certBytes, keyBytes []byte
 			if certFileExists {
@@ -622,7 +623,7 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 		metrics.SetManagedCertificate(issuer, count)
 	}
 	if hasChange && config.GlobalConfig.Common.CmdEnabled {
-		cmd.Execute(logger, config.GlobalConfig)
+		cmd.Execute(logger, config.GlobalConfig.Common)
 	}
 	return nil
 }
@@ -652,9 +653,8 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 			return c.Domain == certData.Domain && c.Issuer == certData.Issuer
 		})
 
-		c := certConfig.Certificate[idx]
-
 		if idx >= 0 {
+			c := certConfig.Certificate[idx]
 			if c.RenewalDays == 0 {
 				c.RenewalDays = config.GlobalConfig.Common.CertDaysRenewal
 			}
@@ -670,12 +670,12 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 				}
 				metrics.IncRenewedCertificate(certData.Issuer)
 				if config.GlobalConfig.Common.CertDeploy {
-					deletelocalCertificateResource(certData.Domain, certData.Issuer, logger)
+					DeleteLocalCertificateResource(certData.Domain, certData.Issuer, logger)
 
 				}
 				dataCopy[i] = cert
 				if config.GlobalConfig.Common.CertDeploy {
-					createlocalCertificateResource(certData.Domain, certData.Issuer, logger)
+					CreateLocalCertificateResource(certData.Domain, certData.Issuer, logger)
 				}
 			}
 		} else {
@@ -687,9 +687,50 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 		amStore.PutKVRing(AmRingKey, dataCopy)
 
 		if config.GlobalConfig.Common.CmdEnabled {
-			cmd.Execute(logger, config.GlobalConfig)
+			cmd.Execute(logger, config.GlobalConfig.Common)
 		}
 
+	}
+	return nil
+}
+
+func CheckAPICertExpiration(amStore *CertStore, logger log.Logger) error {
+	data, err := amStore.GetKVRingCert(AmRingKey)
+	if err != nil {
+		_ = level.Error(logger).Log("err", err)
+		return err
+	}
+
+	dataCopy := make([]cert.Certificate, len(data))
+	_ = copy(dataCopy, data)
+
+	var hasChange bool
+	for i, certData := range data {
+		layout := "2006-01-02 15:04:05 -0700 MST"
+		t, err := time.Parse(layout, certData.Expires)
+		if err != nil {
+			return err
+		}
+
+		// This is just meant to be informal for the user.
+		timeLeft := t.Sub(time.Now().UTC())
+
+		daysLeft := int(timeLeft.Hours()) / 24
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("[%s] acme: %d days remaining", certData.Domain, daysLeft))
+		if daysLeft < config.GlobalConfig.Common.CertDaysRenewal {
+			hasChange = true
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("[%s] acme: Trying renewal with %d days remaining", certData.Domain, daysLeft))
+			cert, err := CreateRemoteCertificateResource(certData, logger)
+			if err != nil {
+				return err
+			}
+			metrics.IncRenewedCertificate(certData.Issuer)
+			dataCopy[i] = cert
+		}
+	}
+	if hasChange {
+		localCache.Set(AmRingKey, dataCopy)
+		amStore.PutKVRing(AmRingKey, dataCopy)
 	}
 	return nil
 }
