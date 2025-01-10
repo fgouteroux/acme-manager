@@ -336,23 +336,6 @@ func tokenHandler() http.HandlerFunc {
 			return
 		}
 
-		if token.Username == "" || len(token.Scope) == 0 {
-			http.Error(w, "missing/empty 'username' parameter", http.StatusBadRequest)
-			return
-		}
-
-		if len(token.Scope) == 0 {
-			http.Error(w, "missing/empty 'scope' parameter", http.StatusBadRequest)
-			return
-		} else if len(token.Scope) > 0 {
-			for _, scope := range token.Scope {
-				if !slices.Contains(allowedScope, scope) {
-					http.Error(w, fmt.Sprintf("Invalid 'scope' must be in %v", allowedScope), http.StatusBadRequest)
-					return
-				}
-			}
-		}
-
 		data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -380,6 +363,24 @@ func tokenHandler() http.HandlerFunc {
 		}
 
 		if r.Method == "POST" || r.Method == "PUT" {
+
+			if token.Username == "" || len(token.Scope) == 0 {
+				http.Error(w, "missing/empty 'username' parameter", http.StatusBadRequest)
+				return
+			}
+
+			if len(token.Scope) == 0 {
+				http.Error(w, "missing/empty 'scope' parameter", http.StatusBadRequest)
+				return
+			}
+
+			for _, scope := range token.Scope {
+				if !slices.Contains(allowedScope, scope) {
+					http.Error(w, fmt.Sprintf("Invalid 'scope' must be in %v", allowedScope), http.StatusBadRequest)
+					return
+				}
+			}
+
 			if r.Method == "PUT" && !tokenExists {
 				http.Error(w, "Token not found", http.StatusBadRequest)
 				return
@@ -417,6 +418,7 @@ func tokenHandler() http.HandlerFunc {
 			tokenHash := utils.SHA1Hash(randomToken)
 
 			newData := map[string]interface{}{
+				"id":        ID,
 				"token":     base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", ID, randomToken))),
 				"tokenHash": tokenHash,
 				"scope":     token.Scope,
@@ -441,11 +443,8 @@ func tokenHandler() http.HandlerFunc {
 			// udpate kv store
 			certstore.AmStore.PutKVRing(certstore.TokenRingKey, data)
 
-			if r.Method == "POST" {
-				_, _ = io.WriteString(w, "Created token")
-			} else if r.Method == "PUT" {
-				_, _ = io.WriteString(w, "Renewed token")
-			}
+			output, _ := json.Marshal(newData)
+			_, _ = io.WriteString(w, string(output))
 			return
 		}
 
