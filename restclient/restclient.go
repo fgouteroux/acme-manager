@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -24,7 +25,10 @@ type Client struct {
 }
 
 func setTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Config, error) {
-	tlsConfig := &tls.Config{}
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		MaxVersion: tls.VersionTLS13,
+	}
 
 	if insecure {
 		tlsConfig.InsecureSkipVerify = insecure
@@ -43,7 +47,7 @@ func setTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Confi
 
 	if ca != "" {
 		// Load CA cert
-		caCert, err := os.ReadFile(ca)
+		caCert, err := os.ReadFile(filepath.Clean(ca))
 		if err != nil {
 			return tlsConfig, err
 		}

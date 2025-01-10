@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -21,8 +22,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/prometheus/exporter-toolkit/web"
-	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/client"
@@ -36,13 +35,16 @@ import (
 )
 
 var (
-	metricsPath           = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default("/metrics").String()
-	webConfig             = webflag.AddFlags(kingpin.CommandLine, ":8989")
+	serverListenAddress     = kingpin.Flag("server.listen-address", "server listen address").Default(":8989").String()
+	serverTLSCertFile       = kingpin.Flag("server.tls-cert-file", "server tls certificate file").String()
+	serverTLSKeyFile        = kingpin.Flag("server.tls-key-file", "server tls key file").String()
+	serverReadTimeout       = kingpin.Flag("server.http-read-timeout", "Read timeout for entire HTTP request, including headers and body").Default("300").Int()
+	serverReadHeaderTimeout = kingpin.Flag("server.http-read-header-timeout", "Read timeout for HTTP request headers").Default("10").Int()
+
 	configPath            = kingpin.Flag("config-path", "Config path").Default("config.yml").String()
 	certificateConfigPath = kingpin.Flag("certificate-config-path", "Certificate config path").Default("certificate.yml").String()
 	envConfigPath         = kingpin.Flag("env-config-path", "Environment vars config path").Default(".env").String()
-
-	enableAPI = kingpin.Flag("enable-api", "Enables API mode and disable --certificate-config-path parameter.").Bool()
+	enableAPI             = kingpin.Flag("enable-api", "Enables API mode and disable --certificate-config-path parameter.").Bool()
 
 	ringInstanceID             = kingpin.Flag("ring.instance-id", "Instance ID to register in the ring.").String()
 	ringInstanceAddr           = kingpin.Flag("ring.instance-addr", "IP address to advertise in the ring. Default is auto-detected.").String()
@@ -95,12 +97,6 @@ func main() {
 
 	logger = promlog.New(promlogConfig)
 
-	err := godotenv.Load(*envConfigPath)
-	if err != nil {
-		_ = level.Error(logger).Log("err", err)
-		os.Exit(1)
-	}
-
 	if *clientMode {
 		if *clientManagerToken == "" {
 			_ = level.Error(logger).Log("err", "Missing client manager token, please set '--client.manager-token' or env var 'ACME_MANAGER_TOKEN'")
@@ -128,17 +124,15 @@ func main() {
 		go client.WatchConfigFileChanges(logger, *clientCheckConfigInterval, *clientConfigPath, acmeClient)
 		go client.WatchCertificateFileChanges(logger, *clientCheckCertificateInterval, *clientConfigPath, acmeClient)
 
-		http.Handle(*metricsPath, promhttp.Handler())
+		http.Handle("/metrics", promhttp.Handler())
 
-		server := &http.Server{
-			ReadTimeout:       60 * time.Second,
-			ReadHeaderTimeout: 10 * time.Second,
-		}
+		runHTTPServer(*serverListenAddress, *serverTLSCertFile, *serverTLSKeyFile, *serverReadTimeout, *serverReadHeaderTimeout)
+	}
 
-		if err := web.ListenAndServe(server, webConfig, logger); err != nil {
-			_ = level.Error(logger).Log("err", err)
-			os.Exit(1)
-		}
+	err := godotenv.Load(*envConfigPath)
+	if err != nil {
+		_ = level.Error(logger).Log("err", err)
+		os.Exit(1)
 	}
 
 	configBytes, err := os.ReadFile(*configPath)
@@ -164,7 +158,7 @@ func main() {
 	_ = level.Info(logger).Log("msg", "Starting acme-manager", "version", version.Info())
 	_ = level.Info(logger).Log("msg", "Build context", "build_context", version.BuildContext())
 
-	http.Handle(*metricsPath, promhttp.Handler())
+	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/static/", http.FileServer(http.FS(staticFiles)))
 
 	indexPage := newIndexPageContent()
@@ -263,13 +257,30 @@ func main() {
 		httpChallengeHandler(w, req)
 	})
 
-	server := &http.Server{
-		ReadTimeout:       120 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+	runHTTPServer(*serverListenAddress, *serverTLSCertFile, *serverTLSKeyFile, *serverReadTimeout, *serverReadHeaderTimeout)
+}
 
-	if err := web.ListenAndServe(server, webConfig, logger); err != nil {
-		_ = level.Error(logger).Log("err", err)
-		os.Exit(1)
+func runHTTPServer(listenAddress, certFile, keyFile string, readTimeout, readHeaderTimeout int) {
+	server := &http.Server{
+		Addr:              listenAddress,
+		ReadTimeout:       time.Duration(readTimeout) * time.Second,
+		ReadHeaderTimeout: time.Duration(readHeaderTimeout) * time.Second,
+	}
+	_ = level.Info(logger).Log("msg", "Listening on", "address", listenAddress)
+	if certFile == "" && keyFile == "" {
+		_ = level.Info(logger).Log("msg", "TLS is disabled.", "address", listenAddress)
+		if err := server.ListenAndServe(); err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
+	} else {
+		server.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			MaxVersion: tls.VersionTLS13,
+		}
+		if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
 	}
 }
