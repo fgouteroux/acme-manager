@@ -181,13 +181,80 @@ Manage certificate with API endpoints in a secured way.
 | GET, POST, PUT, DELETE | /api/v1/certificate          | Bearer Token               |
 | GET, POST, PUT, DELETE | /api/v1/token                | API key Header             |
 
+
+#### Generate an API key:
+```
+# Generate a random string
+API_KEY=$(openssl rand -base64 32)
+
+# Hash the random string with SHA1 and put it in the `api_key_hash` of acme manager config
+$ echo -n $API_KEY | sha1sum
+96a0585f6d3c3f90f74cdb963e7664f2ee8a10bb  -
+
+# Your API KEY to use for curl command and others.
+$ echo $API_KEY
+GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=
+
+```
+
 ** /api/v1/token**: 
 
 Required parameters:  
 - **username** (string): token username
 - **scope** (string): token scope
 
-Obtain new token:
+##### Obtain a new token:
+```
+curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localhost:8989/api/v1/token -d '{"username":"testfgx", "scope":["read","create","update","delete"]}' -XPOST
+{
+  "expires": "Never",
+  "id": "94e0c649-de98-476a-a5cc-ff1201512605",
+  "scope": [
+    "read",
+    "create",
+    "update",
+    "delete"
+  ],
+  "token": "OTRlMGM2NDktZGU5OC00NzZhLWE1Y2MtZmYxMjAxNTEyNjA1OkczdTFUSkUtc1FCM05veEhtQXNVcW0xYXd4OXp4Z19V",
+  "tokenHash": "2fba65b7e4c953148427407cd556c9b49043e1a4",
+  "username": "testfgx"
+}
+```
+
+##### Update the token scope and add expiration time to 30days
+```
+curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localhost:8989/api/v1/token -d '{"id": "94e0c649-de98-476a-a5cc-ff1201512605","username":"testfgx", "scope":["read"], "expires":"30d"}}' -XPUT
+{
+  "expires": "2025-02-09 11:09:01 +0000 UTC",
+  "id": "94e0c649-de98-476a-a5cc-ff1201512605",
+  "scope": [
+    "read"
+  ],
+  "token": "OTRlMGM2NDktZGU5OC00NzZhLWE1Y2MtZmYxMjAxNTEyNjA1OmpTeGtoUUwzd0MwQWl4Vzk1aU9mVjM4RzdIbWwzQ0F6",
+  "tokenHash": "e7bf79d0b679fe56014cb8e87358ac459880f6dd",
+  "username": "testfgx"
+}
+```
+
+##### Read the token (no token value, contain only the hash)
+```
+curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localhost:8989/api/v1/token -d '{"id": "94e0c649-de98-476a-a5cc-ff1201512605"}' -XGET
+
+{
+  "hash": "e7bf79d0b679fe56014cb8e87358ac459880f6dd",
+  "scope": [
+    "read"
+  ],
+  "username": "testfgx",
+  "expires": "2025-02-09 11:09:01 +0000 UTC"
+}
+```
+
+##### Revoke the token
+```
+curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localhost:8989/api/v1/token -d '{"id": "94e0c649-de98-476a-a5cc-ff1201512605"}' -XDELETE
+Revoked token
+```
 
 
 ** /api/v1/certificate**: 

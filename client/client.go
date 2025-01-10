@@ -1,8 +1,6 @@
 package client
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +9,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
+	cert "github.com/fgouteroux/acme_manager/certificate"
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/cmd"
 	"github.com/fgouteroux/acme_manager/metrics"
@@ -48,23 +47,19 @@ func CheckAndDeployLocalCertificate(logger log.Logger, configPath string, acmeCl
 		certFilePath := certConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".crt"
 		keyFilePath := certConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".key"
 
-		certMap, err := acmeClient.ReadCertificate(certData)
-		if err != nil && !strings.Contains(err.Error(), "404 Not Found") {
-			_ = level.Error(logger).Log("err", err)
-			continue
-		}
-
-		var certificate Certificate
-		if certMap == nil {
-			newCertMap, err := acmeClient.CreateCertificate(certData)
-			if err != nil {
+		certificate, err := acmeClient.ReadCertificate(certData)
+		if err != nil {
+			if !strings.Contains(err.Error(), "not found") {
 				_ = level.Error(logger).Log("err", err)
 				continue
 			}
 
-			certificate = mapToCertificate(newCertMap)
-		} else {
-			certificate = mapToCertificate(certMap)
+			var err error
+			certificate, err = acmeClient.CreateCertificate(certData)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
 		}
 
 		certStat[certData.Issuer] += 1.0
@@ -105,7 +100,7 @@ func CheckAndDeployLocalCertificate(logger log.Logger, configPath string, acmeCl
 				}
 			}
 
-			certBytes, _ := base64.StdEncoding.DecodeString(certificate.Cert)
+			certBytes := []byte(certificate.Cert)
 			if utils.GenerateFingerprint(currentCertBytes) != utils.GenerateFingerprint(certBytes) {
 				hasChange = true
 				err = os.WriteFile(certFilePath, certBytes, certConfig.Common.CertFilePerm)
@@ -117,7 +112,7 @@ func CheckAndDeployLocalCertificate(logger log.Logger, configPath string, acmeCl
 				}
 			}
 
-			keyBytes, _ := base64.StdEncoding.DecodeString(certificate.Key)
+			keyBytes := []byte(certificate.Key)
 			if utils.GenerateFingerprint(currentKeyBytes) != utils.GenerateFingerprint(keyBytes) {
 				hasChange = true
 				err = os.WriteFile(keyFilePath, keyBytes, certConfig.Common.CertKeyFilePerm)
@@ -143,13 +138,12 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff certstore.MapDiff,
 	var hasChange bool
 	for _, certData := range diff.Create {
 		hasChange = true
-		newCertMap, err := acmeClient.CreateCertificate(certData)
+		newCert, err := acmeClient.CreateCertificate(certData)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			continue
 		}
 
-		newCert := mapToCertificate(newCertMap)
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' created", newCert.Domain))
 		metrics.IncManagedCertificate(certData.Issuer)
 
@@ -160,12 +154,11 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff certstore.MapDiff,
 
 	for _, certData := range diff.Update {
 		hasChange = true
-		newCertMap, err := acmeClient.UpdateCertificate(certData)
+		newCert, err := acmeClient.UpdateCertificate(certData)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			continue
 		}
-		newCert := mapToCertificate(newCertMap)
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' updated", newCert.Domain))
 		if certConfig.Common.CertDeploy {
 			deleteLocalCertificateResource(newCert, logger)
@@ -175,16 +168,15 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff certstore.MapDiff,
 
 	for _, certData := range diff.Delete {
 		hasChange = true
-		oldCertMap, err := acmeClient.UpdateCertificate(certData)
+		err := acmeClient.DeleteCertificate(certData)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			continue
 		}
-		oldCert := mapToCertificate(oldCertMap)
-		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' deleted", oldCert.Domain))
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' deleted", certData.Domain))
 		metrics.DecManagedCertificate(certData.Issuer)
 		if certConfig.Common.CertDeploy {
-			deleteLocalCertificateResource(oldCert, logger)
+			deleteLocalCertificateResource(cert.CertMap{Issuer: certData.Issuer, Domain: certData.Domain}, logger)
 		}
 	}
 
@@ -195,17 +187,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff certstore.MapDiff,
 	return nil
 }
 
-func mapToCertificate(m map[string]interface{}) Certificate {
-	// convert map to json
-	jsonString, _ := json.Marshal(m)
-
-	// convert json to struct
-	var s Certificate
-	_ = json.Unmarshal(jsonString, &s)
-	return s
-}
-
-func createLocalCertificateResource(certData Certificate, logger log.Logger) {
+func createLocalCertificateResource(certData cert.CertMap, logger log.Logger) {
 	folderPath := certConfig.Common.CertDir + certData.Issuer
 	err := utils.CreateNonExistingFolder(folderPath, certConfig.Common.CertDirPerm)
 	if err != nil {
@@ -215,8 +197,7 @@ func createLocalCertificateResource(certData Certificate, logger log.Logger) {
 	certFilePath := certConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".crt"
 	keyFilePath := certConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".key"
 
-	certBytes, _ := base64.StdEncoding.DecodeString(certData.Cert)
-
+	certBytes := []byte(certData.Cert)
 	err = os.WriteFile(certFilePath, certBytes, certConfig.Common.CertFilePerm)
 	if err != nil {
 		_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err)
@@ -225,7 +206,7 @@ func createLocalCertificateResource(certData Certificate, logger log.Logger) {
 		metrics.IncCreatedLocalCertificate(certData.Issuer)
 	}
 
-	keyBytes, _ := base64.StdEncoding.DecodeString(certData.Key)
+	keyBytes := []byte(certData.Key)
 	err = os.WriteFile(keyFilePath, keyBytes, certConfig.Common.CertKeyFilePerm)
 	if err != nil {
 		_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
@@ -234,7 +215,7 @@ func createLocalCertificateResource(certData Certificate, logger log.Logger) {
 	}
 }
 
-func deleteLocalCertificateResource(certData Certificate, logger log.Logger) {
+func deleteLocalCertificateResource(certData cert.CertMap, logger log.Logger) {
 	certFilePath := certConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".crt"
 	keyFilePath := certConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".key"
 

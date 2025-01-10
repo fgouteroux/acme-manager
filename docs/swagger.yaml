@@ -1,0 +1,542 @@
+basePath: /api/v1
+definitions:
+  certificate.Certificate:
+    properties:
+      bundle:
+        example: false
+        type: boolean
+      days:
+        example: 90
+        type: integer
+      dns_challenge:
+        example: ns1
+        type: string
+      domain:
+        example: testfgx.example.com
+        type: string
+      expires:
+        example: 2025-04-09 09:56:34 +0000 UTC
+        type: string
+      fingerprint:
+        example: 3c7bccea1992d5095e7ab8c38f247352cd75ff26cdb95972d34ad54ebcef36af
+        type: string
+      http_challenge:
+        example: ""
+        type: string
+      issuer:
+        example: letsencrypt
+        type: string
+      key_fingerprint:
+        example: 031312e2ea90eb8070c8da352c048171075f2ecfa3f300354bacc497e02247fc
+        type: string
+      owner:
+        example: testfgx
+        type: string
+      renewal_days:
+        example: 30
+        type: integer
+      san:
+        example: ""
+        type: string
+    type: object
+  certstore.CertMap:
+    properties:
+      ca_issuer:
+        example: Ci0tLS0tQkVHSU4gQ0...
+        type: string
+      cert:
+        example: LS0tLS1CRUdJTiBDR...
+        type: string
+      domain:
+        example: testfgx.example.com
+        type: string
+      issuer:
+        example: letsencrypt
+        type: string
+      key:
+        example: LS0tLS1CRUdJTiBSU...
+        type: string
+      owner:
+        example: testfgx
+        type: string
+      url:
+        example: https://acme-staging-v02.api.letsencrypt.org/acme/cert/4b63b4e8b6109
+        type: string
+    type: object
+  certstore.Token:
+    properties:
+      expires:
+        type: string
+      hash:
+        type: string
+      scope:
+        items:
+          type: string
+        type: array
+      username:
+        type: string
+    type: object
+  main.CertificateParams:
+    properties:
+      bundle:
+        example: false
+        type: boolean
+      days:
+        example: 90
+        type: integer
+      dns_challenge:
+        example: ns1
+        type: string
+      domain:
+        example: testfgx.example.com
+        type: string
+      http_challenge:
+        example: ""
+        type: string
+      issuer:
+        example: letsencrypt
+        type: string
+      renewal_days:
+        example: 30
+        type: integer
+      san:
+        example: ""
+        type: string
+    type: object
+  main.TokenParams:
+    properties:
+      expires:
+        example: 30d
+        type: string
+      id:
+        example: 021b5075-2d1e-44bd-b5e5-ffc7be7ad4c3
+        type: string
+      scope:
+        example:
+        - read
+        - create
+        - udpate
+        - delete
+        items:
+          type: string
+        type: array
+      username:
+        example: testfgx
+        type: string
+    type: object
+  main.responseErrorJSON:
+    properties:
+      error:
+        example: error
+        type: string
+    type: object
+info:
+  contact:
+    email: francois.gouteroux@gmail.com
+    name: François Gouteroux
+  description: Manages acme certificate and deploy them on servers
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  title: acme manager
+  version: "1.0"
+paths:
+  /certificate:
+    post:
+      description: Create certificate for a given issuer and domain name.
+      parameters:
+      - default: Bearer <Add access token here>
+        description: Access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Certificate body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.CertificateParams'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/certstore.CertMap'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+      summary: Create certificate
+      tags:
+      - certificate
+    put:
+      description: Update certificate will revoke the old and create a new certificate
+        with given parameters.
+      parameters:
+      - default: Bearer <Add access token here>
+        description: Access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Certificate body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.CertificateParams'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/certstore.CertMap'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+      summary: Update certificate
+      tags:
+      - certificate
+  /certificate/{issuer}/{domain}:
+    delete:
+      description: Revoke certificate for the given issuer and domain name.
+      parameters:
+      - default: Bearer <Add access token here>
+        description: Access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - default: letsencrypt
+        description: Certificate issuer
+        in: path
+        name: issuer
+        required: true
+        type: string
+      - default: testfgx.example.com
+        description: Certificate domain
+        in: path
+        name: domain
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+      summary: Revoke certificate
+      tags:
+      - certificate
+    get:
+      description: Return certificate, private key and issuer ca certificate in base64
+        format.
+      parameters:
+      - default: Bearer <Add access token here>
+        description: Access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - default: letsencrypt
+        description: Certificate issuer
+        in: path
+        name: issuer
+        required: true
+        type: string
+      - default: testfgx.example.com
+        description: Certificate domain
+        in: path
+        name: domain
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/certstore.CertMap'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+      summary: Read certificate
+      tags:
+      - certificate
+  /certificate/metadata:
+    get:
+      description: Return certificate metadata like SAN,expiration, fingerprint...
+      parameters:
+      - default: Bearer <Add access token here>
+        description: Access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - default: letsencrypt
+        description: Certificate issuer
+        in: query
+        name: issuer
+        type: string
+      - default: testfgx.example.com
+        description: Certificate domain
+        in: query
+        name: domain
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/certificate.Certificate'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+      summary: Read metadata certificate
+      tags:
+      - metadata certificate
+  /token:
+    post:
+      description: Create token for a given username, scope and expiration time.
+      parameters:
+      - description: Token ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Token Body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.TokenParams'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+      security:
+      - APIKeyAuth: []
+      summary: Create token
+      tags:
+      - token
+    put:
+      description: Update token for a given username, scope and expiration time, it
+        will generate a new token.
+      parameters:
+      - description: Token ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Token Body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.TokenParams'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+      security:
+      - APIKeyAuth: []
+      summary: Update token
+      tags:
+      - token
+  /token/{id}:
+    delete:
+      description: Revoke token for a given ID.
+      parameters:
+      - description: Token ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+      security:
+      - APIKeyAuth: []
+      summary: Revoke token
+      tags:
+      - token
+    get:
+      description: Return token infos like scope, expiration...
+      parameters:
+      - description: Token ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/certstore.Token'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+      security:
+      - APIKeyAuth: []
+      summary: Read token
+      tags:
+      - token
+securityDefinitions:
+  APIKeyAuth:
+    in: header
+    name: X-API-Key
+    type: apiKey
+swagger: "2.0"

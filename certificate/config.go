@@ -47,16 +47,26 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 // Certificate represents issuer certificate.
 type Certificate struct {
-	Domain         string `json:"domain" yaml:"domain"`
-	Issuer         string `json:"issuer" yaml:"issuer"`
-	Bundle         bool   `json:"bundle" yaml:"bundle"`
-	SAN            string `json:"san,omitempty" yaml:"san,omitempty"`
-	Days           int    `json:"days,omitempty" yaml:"days,omitempty"`
-	RenewalDays    int    `json:"renewal_days,omitempty" yaml:"renewal_days,omitempty"`
-	DNSChallenge   string `json:"dns_challenge,omitempty" yaml:"dns_challenge,omitempty"`
-	HTTPChallenge  string `json:"http_challenge,omitempty" yaml:"http_challenge,omitempty"`
-	Expires        string `json:"expires"`
-	Fingerprint    string `json:"fingerprint"`
-	KeyFingerprint string `json:"key_fingerprint"`
-	Owner          string `json:"owner"`
+	Domain         string `json:"domain" yaml:"domain" example:"testfgx.example.com"`
+	Issuer         string `json:"issuer" yaml:"issuer" example:"letsencrypt"`
+	Bundle         bool   `json:"bundle" yaml:"bundle" example:"false"`
+	SAN            string `json:"san,omitempty" yaml:"san,omitempty" example:""`
+	Days           int    `json:"days,omitempty" yaml:"days,omitempty" example:"90"`
+	RenewalDays    int    `json:"renewal_days,omitempty" yaml:"renewal_days,omitempty" example:"30"`
+	DNSChallenge   string `json:"dns_challenge,omitempty" yaml:"dns_challenge,omitempty" example:"ns1"`
+	HTTPChallenge  string `json:"http_challenge,omitempty" yaml:"http_challenge,omitempty" example:""`
+	Expires        string `json:"expires" example:"2025-04-09 09:56:34 +0000 UTC"`
+	Fingerprint    string `json:"fingerprint" example:"3c7bccea1992d5095e7ab8c38f247352cd75ff26cdb95972d34ad54ebcef36af"`
+	KeyFingerprint string `json:"key_fingerprint" example:"031312e2ea90eb8070c8da352c048171075f2ecfa3f300354bacc497e02247fc"`
+	Owner          string `json:"owner" example:"testfgx"`
+}
+
+type CertMap struct {
+	Cert     string `json:"cert" example:"LS0tLS1CRUdJTiBDR..."`
+	Key      string `json:"key"  example:"LS0tLS1CRUdJTiBSU..."`
+	CAIssuer string `json:"ca_issuer" example:"Ci0tLS0tQkVHSU4gQ0..."`
+	Issuer   string `json:"issuer" example:"letsencrypt"`
+	URL      string `json:"url" example:"https://acme-staging-v02.api.letsencrypt.org/acme/cert/4b63b4e8b6109"`
+	Domain   string `json:"domain" example:"testfgx.example.com"`
+	Owner    string `json:"owner" example:"testfgx"`
 }

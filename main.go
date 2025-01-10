@@ -11,6 +11,7 @@ import (
 
 	"github.com/joho/godotenv"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/services"
@@ -21,7 +22,7 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/sirupsen/logrus"
 
-	"github.com/alecthomas/kingpin/v2"
+	httpSwagger "github.com/swaggo/http-swagger"
 
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/client"
@@ -30,6 +31,8 @@ import (
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
+
+	_ "github.com/fgouteroux/acme_manager/docs"
 
 	"gopkg.in/yaml.v3"
 )
@@ -72,6 +75,17 @@ var (
 	logger log.Logger
 )
 
+// @title acme manager
+// @version 1.0
+// @description Manages acme certificate and deploy them on servers
+// @contact.name François Gouteroux
+// @contact.email francois.gouteroux@gmail.com
+// @license.name Apache 2.0
+// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+// @BasePath /api/v1
+// @securityDefinitions.apikey APIKeyAuth
+// @in header
+// @name X-API-Key
 func main() {
 	log := logrus.New()
 	log.SetReportCaller(true)
@@ -217,9 +231,21 @@ func main() {
 	}
 
 	if *enableAPI {
-		http.Handle("/api/v1/certificate", LoggerHandler(certificateHandler()))
-		http.Handle("/api/v1/certificate/metadata", LoggerHandler(certificateMetadataHandler()))
-		http.Handle("/api/v1/token", LoggerHandler(tokenHandler()))
+		// metadata certificate
+		http.Handle("GET /api/v1/certificate/metadata", LoggerHandler(certificateMetadataHandler()))
+
+		// certificate
+		http.Handle("PUT /api/v1/certificate", LoggerHandler(updateCertificateHandler()))
+		http.Handle("POST /api/v1/certificate", LoggerHandler(createCertificateHandler()))
+		http.Handle("GET /api/v1/certificate/{issuer}/{domain}", LoggerHandler(getCertificateHandler()))
+		http.Handle("DELETE /api/v1/certificate/{issuer}/{domain}", LoggerHandler(revokeCertificateHandler()))
+
+		// token
+		http.Handle("PUT /api/v1/token/", LoggerHandler(updateTokenHandler()))
+		http.Handle("POST /api/v1/token", LoggerHandler(createTokenHandler()))
+		http.Handle("GET /api/v1/token/{id}", LoggerHandler(getTokenHandler()))
+		http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(revokeTokenHandler()))
+
 		http.Handle("/tokens", LoggerHandler(tokenListHandler()))
 
 		indexPage.AddLinks(metricsWeight, "Tokens", []IndexPageLink{
@@ -256,6 +282,8 @@ func main() {
 	http.HandleFunc("/.well-known/acme-challenge/", func(w http.ResponseWriter, req *http.Request) {
 		httpChallengeHandler(w, req)
 	})
+
+	http.HandleFunc("/swagger/", httpSwagger.WrapHandler)
 
 	runHTTPServer(*serverListenAddress, *serverTLSCertFile, *serverTLSKeyFile, *serverReadTimeout, *serverReadHeaderTimeout)
 }

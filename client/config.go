@@ -5,16 +5,6 @@ import (
 	"github.com/fgouteroux/acme_manager/config"
 )
 
-type Certificate struct {
-	Cert     string `json:"cert"`
-	Key      string `json:"key"`
-	Issuer   string `json:"issuer"`
-	CAIssuer string `json:"ca_issuer"`
-	URL      string `json:"url"`
-	Domain   string `json:"domain"`
-	Owner    string `json:"owner"`
-}
-
 // Config represents certificate config.
 type Config struct {
 	Common      config.Common      `yaml:"common"`

@@ -157,46 +157,47 @@ func (c *Client) GetCertificateMetadata(issuer, domain string) (cert.Certificate
 	return certificate, nil
 }
 
-func (c *Client) ReadCertificate(data cert.Certificate) (map[string]interface{}, error) {
+func (c *Client) ReadCertificate(data cert.Certificate) (cert.CertMap, error) {
+	var certificate cert.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
 	reqBody, err := json.Marshal(data)
 	if err != nil {
-		return nil, err
+		return certificate, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	resp, err := c.doRequest(ctx, "GET", "/certificate", headers, bytes.NewReader(reqBody))
+	resp, err := c.doRequest(ctx, "GET", fmt.Sprintf("/certificate/%s/%s", data.Issuer, data.Domain), headers, bytes.NewReader(reqBody))
 	if err != nil {
-		return nil, err
+		return certificate, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, err
+			return certificate, err
 		}
-		return nil, fmt.Errorf("error reading certificate with issuer '%s' and domain '%s': %s - %s", data.Issuer, data.Domain, resp.Status, string(respBody))
+		return certificate, fmt.Errorf("error reading certificate with issuer '%s' and domain '%s': %s - %s", data.Issuer, data.Domain, resp.Status, string(respBody))
 	}
 
-	var certificate map[string]interface{}
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return nil, err
+		return certificate, err
 	}
 
 	return certificate, nil
 }
 
-func (c *Client) CreateCertificate(data cert.Certificate) (map[string]interface{}, error) {
+func (c *Client) CreateCertificate(data cert.Certificate) (cert.CertMap, error) {
+	var certificate cert.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
 	reqBody, err := json.Marshal(data)
 	if err != nil {
-		return nil, err
+		return certificate, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
@@ -204,32 +205,32 @@ func (c *Client) CreateCertificate(data cert.Certificate) (map[string]interface{
 
 	resp, err := c.doRequest(ctx, "POST", "/certificate", headers, bytes.NewReader(reqBody))
 	if err != nil {
-		return nil, err
+		return certificate, err
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusCreated {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, err
+			return certificate, err
 		}
-		return nil, fmt.Errorf("error creating certificate with issuer '%s' and domain '%s': %s - %s", data.Issuer, data.Domain, resp.Status, string(respBody))
+		return certificate, fmt.Errorf("error creating certificate with issuer '%s' and domain '%s': %s - %s", data.Issuer, data.Domain, resp.Status, string(respBody))
 	}
 
-	var certificate map[string]interface{}
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return nil, err
+		return certificate, err
 	}
 
 	return certificate, nil
 }
 
-func (c *Client) UpdateCertificate(data cert.Certificate) (map[string]interface{}, error) {
+func (c *Client) UpdateCertificate(data cert.Certificate) (cert.CertMap, error) {
+	var certificate cert.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
 	reqBody, err := json.Marshal(data)
 	if err != nil {
-		return nil, err
+		return certificate, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
@@ -237,55 +238,48 @@ func (c *Client) UpdateCertificate(data cert.Certificate) (map[string]interface{
 
 	resp, err := c.doRequest(ctx, "PUT", "/certificate", headers, bytes.NewReader(reqBody))
 	if err != nil {
-		return nil, err
+		return certificate, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, err
+			return certificate, err
 		}
-		return nil, fmt.Errorf("error updating certificate with issuer '%s' and domain '%s': %s - %s", data.Issuer, data.Domain, resp.Status, string(respBody))
+		return certificate, fmt.Errorf("error updating certificate with issuer '%s' and domain '%s': %s - %s", data.Issuer, data.Domain, resp.Status, string(respBody))
 	}
 
-	var certificate map[string]interface{}
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return nil, err
+		return certificate, err
 	}
 
 	return certificate, nil
 }
 
-func (c *Client) DeleteCertificate(data cert.Certificate) (string, error) {
+func (c *Client) DeleteCertificate(data cert.Certificate) error {
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
 	reqBody, err := json.Marshal(data)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	resp, err := c.doRequest(ctx, "DELETE", "/certificate", headers, bytes.NewReader(reqBody))
+	resp, err := c.doRequest(ctx, "DELETE", fmt.Sprintf("/certificate/%s/%s", data.Issuer, data.Domain), headers, bytes.NewReader(reqBody))
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusNoContent {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return "", err
+			return err
 		}
-		return "", fmt.Errorf("error deleting certificate with issuer '%s' and domain '%s': %s - %s", data.Issuer, data.Domain, resp.Status, string(respBody))
+		return fmt.Errorf("error deleting certificate with issuer '%s' and domain '%s': %s - %s", data.Issuer, data.Domain, resp.Status, string(respBody))
 	}
 
-	var result []byte
-	result, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	return string(result), nil
+	return nil
 }
