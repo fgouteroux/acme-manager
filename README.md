@@ -56,15 +56,15 @@ Flags:
                                  List of network interface names to look up when finding the instance IP address.
       --ring.join-members=RING.JOIN-MEMBERS  
                                  Other cluster members to join.
-      --check-renewal-interval=1h  
+      --check-renewal-interval=30m  
                                  Time interval to check if renewal needed
       --check-config-interval=30s  
                                  Time interval to check if config file changes
+      --check-token-interval=1m  Time interval to check if tokens expired
       --check-certificate-config-interval=30s  
                                  Time interval to check if certificate config file changes
-      --check-local-certificate-interval=5m  
+      --check-local-certificate-interval=1m  
                                  Time interval to check if local certificate changes
-      --check-token-interval=5m  Time interval to check if tokens expired
       --[no-]client              Enables client mode.
       --client.manager-url="http://localhost:8989/api/v1"  
                                  Client manager URL ($ACME_MANAGER_URL)
@@ -80,10 +80,8 @@ Flags:
                                  Client manager tls skip verify
       --client.config-path="client-config.yml"  
                                  Client config path
-      --client.check-config-interval=30s  
-                                 Time interval to check if client config file changes
-      --client.check-certificate-interval=5m  
-                                 Time interval to check if client certificate file changes
+      --client.check-config-interval=1m  
+                                 Time interval to check if client config file changes and to update local certificate file
       --log.level=info           Only log messages with the given severity or above. One of: [debug, info, warn, error]
       --log.format=logfmt        Output format of log messages. One of: [logfmt, json]
       --[no-]version             Show application version.
@@ -181,6 +179,7 @@ Manage certificate with API endpoints in a secured way.
 | GET, POST, PUT, DELETE | /api/v1/certificate          | Bearer Token               |
 | GET, POST, PUT, DELETE | /api/v1/token                | API key Header             |
 
+See swagger page: http://localhost:8989/swagger/index.html
 
 #### Generate an API key:
 ```

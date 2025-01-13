@@ -55,22 +55,22 @@ var (
 	ringInstanceInterfaceNames = kingpin.Flag("ring.instance-interface-names", "List of network interface names to look up when finding the instance IP address.").String()
 	ringJoinMembers            = kingpin.Flag("ring.join-members", "Other cluster members to join.").String()
 
-	checkRenewalInterval           = kingpin.Flag("check-renewal-interval", "Time interval to check if renewal needed").Default("1h").Duration()
+	checkRenewalInterval           = kingpin.Flag("check-renewal-interval", "Time interval to check if renewal needed").Default("30m").Duration()
 	checkConfigInterval            = kingpin.Flag("check-config-interval", "Time interval to check if config file changes").Default("30s").Duration()
+	checkTokenInterval             = kingpin.Flag("check-token-interval", "Time interval to check if tokens expired").Default("1m").Duration()
+	
 	checkCertificateConfigInterval = kingpin.Flag("check-certificate-config-interval", "Time interval to check if certificate config file changes").Default("30s").Duration()
-	checkLocalCertificateInterval  = kingpin.Flag("check-local-certificate-interval", "Time interval to check if local certificate changes").Default("5m").Duration()
-	checkTokenInterval             = kingpin.Flag("check-token-interval", "Time interval to check if tokens expired").Default("5m").Duration()
+	checkLocalCertificateInterval  = kingpin.Flag("check-local-certificate-interval", "Time interval to check if local certificate changes").Default("1m").Duration()
 
-	clientMode                     = kingpin.Flag("client", "Enables client mode.").Bool()
-	clientManagerURL               = kingpin.Flag("client.manager-url", "Client manager URL").Default("http://localhost:8989/api/v1").Envar("ACME_MANAGER_URL").String()
-	clientManagerToken             = kingpin.Flag("client.manager-token", "Client manager token").Envar("ACME_MANAGER_TOKEN").String()
-	clientManagerTLSCAFile         = kingpin.Flag("client.tls-ca-file", "Client manager tls ca certificate file").String()
-	clientManagerTLSCertFile       = kingpin.Flag("client.tls-cert-file", "Client manager tls certificate file").String()
-	clientManagerTLSKeyFile        = kingpin.Flag("client.tls-key-file", "Client manager tls key file").String()
-	clientManagerTLSSkipVerify     = kingpin.Flag("client.tls-skip-verify", "Client manager tls skip verify").Bool()
-	clientConfigPath               = kingpin.Flag("client.config-path", "Client config path").Default("client-config.yml").String()
-	clientCheckConfigInterval      = kingpin.Flag("client.check-config-interval", "Time interval to check if client config file changes").Default("30s").Duration()
-	clientCheckCertificateInterval = kingpin.Flag("client.check-certificate-interval", "Time interval to check if client certificate file changes").Default("5m").Duration()
+	clientMode                 = kingpin.Flag("client", "Enables client mode.").Bool()
+	clientManagerURL           = kingpin.Flag("client.manager-url", "Client manager URL").Default("http://localhost:8989/api/v1").Envar("ACME_MANAGER_URL").String()
+	clientManagerToken         = kingpin.Flag("client.manager-token", "Client manager token").Envar("ACME_MANAGER_TOKEN").String()
+	clientManagerTLSCAFile     = kingpin.Flag("client.tls-ca-file", "Client manager tls ca certificate file").String()
+	clientManagerTLSCertFile   = kingpin.Flag("client.tls-cert-file", "Client manager tls certificate file").String()
+	clientManagerTLSKeyFile    = kingpin.Flag("client.tls-key-file", "Client manager tls key file").String()
+	clientManagerTLSSkipVerify = kingpin.Flag("client.tls-skip-verify", "Client manager tls skip verify").Bool()
+	clientConfigPath           = kingpin.Flag("client.config-path", "Client config path").Default("client-config.yml").String()
+	clientCheckConfigInterval  = kingpin.Flag("client.check-config-interval", "Time interval to check if client config file changes and to update local certificate file").Default("1m").Duration()
 
 	logger log.Logger
 )
@@ -129,14 +129,13 @@ func main() {
 			_ = level.Error(logger).Log("err", err)
 			os.Exit(1)
 		}
+		// Compare and create/update certificate from config file to remote server
+		client.CheckCertificate(logger, *clientConfigPath, acmeClient)
 
-		err = client.CheckAndDeployLocalCertificate(logger, *clientConfigPath, acmeClient)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			os.Exit(1)
-		}
-		go client.WatchConfigFileChanges(logger, *clientCheckConfigInterval, *clientConfigPath, acmeClient)
-		go client.WatchCertificateFileChanges(logger, *clientCheckCertificateInterval, *clientConfigPath, acmeClient)
+		// check local certificate are up-to-date
+		client.CheckAndDeployLocalCertificate(logger, acmeClient)
+
+		go client.WatchCertificate(logger, *clientCheckConfigInterval, *clientConfigPath, acmeClient)
 
 		http.Handle("/metrics", promhttp.Handler())
 

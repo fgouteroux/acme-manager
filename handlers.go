@@ -127,7 +127,6 @@ var certificatePageHTML string
 
 type certificateHandlerData struct {
 	Now          time.Time
-	DefaultDays  int
 	Certificates []cert.Certificate
 }
 
@@ -141,7 +140,6 @@ func certificateListHandler() http.HandlerFunc {
 		v := &certificateHandlerData{
 			Now:          time.Now(),
 			Certificates: data,
-			DefaultDays:  config.GlobalConfig.Common.CertDays,
 		}
 
 		accept := r.Header.Get("Accept")
@@ -237,18 +235,22 @@ func tokenListHandler() http.HandlerFunc {
 
 func LoggerHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-
+		// Start timer
 		start := time.Now()
 
 		lrw := NewLoggingResponseWriter(w)
 
 		next.ServeHTTP(lrw, req)
+
+		// Stop timer
+		stop := time.Now()
+
 		_ = level.Info(logger).Log(
 			"method", req.Method,
 			"path", req.URL.Path,
 			"status_code", lrw.statusCode,
 			"username", w.Header().Get("Username"),
-			"duration", time.Since(start).String(),
+			"duration", stop.Sub(start).Milliseconds(),
 			"client_ip", GetClientIP(req),
 			"length", lrw.length,
 		)

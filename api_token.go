@@ -25,7 +25,7 @@ var (
 type TokenParams struct {
 	ID       string   `json:"id" example:"021b5075-2d1e-44bd-b5e5-ffc7be7ad4c3"`
 	Username string   `json:"username" example:"testfgx"`
-	Scope    []string `json:"scope" example:"read,create,udpate,delete"`
+	Scope    []string `json:"scope" example:"read,create,update,delete"`
 	Expires  string   `json:"expires" example:"30d"`
 }
 
@@ -84,7 +84,6 @@ func getTokenHandler() http.HandlerFunc {
 // @Description Create token for a given username, scope and expiration time.
 // @Tags token
 // @Produce  application/json
-// @Param id path string true "Token ID"
 // @Param body body TokenParams true "Token Body"
 // @Success 201 {object} map[string]interface{}
 // @Success 400 {object} responseErrorJSON
@@ -118,12 +117,6 @@ func createTokenHandler() http.HandlerFunc {
 			return
 		}
 
-		_, tokenExists := data[token.ID]
-		if tokenExists {
-			responseJSON(w, nil, fmt.Errorf("Token ID '%s' already exists", token.ID), http.StatusBadRequest)
-			return
-		}
-
 		secretKeyPathPrefix := config.GlobalConfig.Storage.Vault.TokenPrefix
 		if secretKeyPathPrefix == "" {
 			secretKeyPathPrefix = "token"
@@ -145,7 +138,7 @@ func createTokenHandler() http.HandlerFunc {
 
 		for _, scope := range token.Scope {
 			if !slices.Contains(allowedScope, scope) {
-				responseJSON(w, nil, fmt.Errorf("Invalid 'scope' must be in %v", allowedScope), http.StatusBadRequest)
+				responseJSON(w, nil, fmt.Errorf("Invalid scope value '%s', must be in %v", scope, allowedScope), http.StatusBadRequest)
 				return
 			}
 		}
@@ -210,7 +203,6 @@ func createTokenHandler() http.HandlerFunc {
 // @Description Update token for a given username, scope and expiration time, it will generate a new token.
 // @Tags token
 // @Produce  application/json
-// @Param id path string true "Token ID"
 // @Param body body TokenParams true "Token Body"
 // @Success 200 {object} map[string]interface{}
 // @Success 400 {object} responseErrorJSON

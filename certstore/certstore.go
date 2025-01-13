@@ -81,9 +81,6 @@ func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resou
 func kvStore(data cert.Certificate, cert, key []byte) (cert.Certificate, error) {
 	//Override this key to avoid kvring changes
 	data.RenewalDays = 0
-	if data.Days == 0 {
-		data.Days = config.GlobalConfig.Common.CertDays
-	}
 
 	if len(cert) > 0 {
 		x509Cert, err := certcrypto.ParsePEMCertificate(cert)
@@ -297,8 +294,6 @@ func CreateRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 
 	if certData.Days != 0 {
 		request.NotAfter = time.Now().Add(time.Duration(certData.Days) * 24 * time.Hour)
-	} else {
-		request.NotAfter = time.Now().Add(time.Duration(config.GlobalConfig.Common.CertDays) * 24 * time.Hour)
 	}
 
 	issuerAcmeClient := AcmeClient[certData.Issuer]

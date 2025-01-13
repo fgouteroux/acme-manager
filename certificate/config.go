@@ -21,11 +21,6 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	var foundIssuers []string
 	for _, cert := range s.Certificate {
-
-		if cert.Days != 0 && cert.Issuer == "letsencrypt" {
-			return fmt.Errorf("Unsupported parameter 'days' for certificate domain '%s' with '%s' issuer", cert.Domain, cert.Issuer)
-		}
-
 		if !slices.Contains(foundIssuers, cert.Issuer) {
 			foundIssuers = append(foundIssuers, cert.Issuer)
 		}

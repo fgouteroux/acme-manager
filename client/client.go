@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"slices"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -23,54 +23,31 @@ var (
 	certConfig Config
 )
 
-func CheckAndDeployLocalCertificate(logger log.Logger, configPath string, acmeClient *restclient.Client) error {
-	configBytes, err := os.ReadFile(filepath.Clean(configPath))
+func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Client) {
+	certificates, err := acmeClient.GetAllCertificateMetadata()
 	if err != nil {
-		return err
+		_ = level.Error(logger).Log("err", err)
+		return
 	}
-
-	var cfg Config
-	err = yaml.Unmarshal(configBytes, &cfg)
-	if err != nil {
-		return err
-	}
-	metrics.SetCertificateConfigError(0)
-
-	_ = level.Info(logger).Log("msg", "Checking certificates from config file")
-
-	certConfig = cfg
-
 	var hasChange bool
-	certStat := make(map[string]float64)
-	for _, certData := range cfg.Certificate {
+	for _, certData := range certConfig.Certificate {
 
 		certFilePath := certConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".crt"
 		keyFilePath := certConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".key"
-
-		certificate, err := acmeClient.ReadCertificate(certData)
-		if err != nil {
-			if !strings.Contains(err.Error(), "not found") {
-				_ = level.Error(logger).Log("err", err)
-				continue
-			}
-
-			var err error
-			certificate, err = acmeClient.CreateCertificate(certData)
-			if err != nil {
-				_ = level.Error(logger).Log("err", err)
-				continue
-			}
-		}
-
-		certStat[certData.Issuer] += 1.0
 
 		certFileExists := utils.FileExists(certFilePath)
 		keyFileExists := utils.FileExists(keyFilePath)
 
 		if !certFileExists && !keyFileExists {
 			hasChange = true
+			certificate, err := acmeClient.ReadCertificate(certData)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
 			createLocalCertificateResource(certificate, logger)
 		} else {
+
 			var currentCertBytes, currentKeyBytes []byte
 			if certFileExists {
 				currentCertBytes, err = os.ReadFile(filepath.Clean(certFilePath))
@@ -100,10 +77,27 @@ func CheckAndDeployLocalCertificate(logger log.Logger, configPath string, acmeCl
 				}
 			}
 
-			certBytes := []byte(certificate.Cert)
-			if utils.GenerateFingerprint(currentCertBytes) != utils.GenerateFingerprint(certBytes) {
+			idx := slices.IndexFunc(certificates, func(c cert.Certificate) bool {
+				return c.Domain == certData.Domain && c.Issuer == certData.Issuer
+			})
+
+			if idx == -1 {
+				_ = level.Info(logger).Log("msg", fmt.Errorf("Certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer))
+				continue
+			}
+
+			var err error
+			var certificate cert.CertMap
+
+			if utils.GenerateFingerprint(currentCertBytes) != certificates[idx].Fingerprint {
 				hasChange = true
-				err = os.WriteFile(certFilePath, certBytes, certConfig.Common.CertFilePerm)
+				certificate, err = acmeClient.ReadCertificate(certData)
+				if err != nil {
+					_ = level.Error(logger).Log("err", err)
+					continue
+				}
+
+				err = os.WriteFile(certFilePath, []byte(certificate.Cert), certConfig.Common.CertFilePerm)
 				if err != nil {
 					_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err)
 				} else {
@@ -112,10 +106,19 @@ func CheckAndDeployLocalCertificate(logger log.Logger, configPath string, acmeCl
 				}
 			}
 
-			keyBytes := []byte(certificate.Key)
-			if utils.GenerateFingerprint(currentKeyBytes) != utils.GenerateFingerprint(keyBytes) {
+			if utils.GenerateFingerprint(currentKeyBytes) != certificates[idx].KeyFingerprint {
 				hasChange = true
-				err = os.WriteFile(keyFilePath, keyBytes, certConfig.Common.CertKeyFilePerm)
+
+				// check if read certificate have not been called previously
+				if certificate.Owner == "" {
+					certificate, err = acmeClient.ReadCertificate(certData)
+					if err != nil {
+						_ = level.Error(logger).Log("err", err)
+						continue
+					}
+				}
+
+				err = os.WriteFile(keyFilePath, []byte(certificate.Key), certConfig.Common.CertKeyFilePerm)
 				if err != nil {
 					_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
 				} else {
@@ -125,13 +128,9 @@ func CheckAndDeployLocalCertificate(logger log.Logger, configPath string, acmeCl
 		}
 	}
 
-	for issuer, count := range certStat {
-		metrics.SetManagedCertificate(issuer, count)
-	}
 	if hasChange && certConfig.Common.CmdEnabled {
 		cmd.Execute(logger, certConfig.Common)
 	}
-	return nil
 }
 
 func applyCertFileChanges(acmeClient *restclient.Client, diff certstore.MapDiff, logger log.Logger) error {
@@ -232,5 +231,101 @@ func deleteLocalCertificateResource(certData cert.CertMap, logger log.Logger) {
 		_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to delete private key file %s", keyFilePath), "err", err)
 	} else {
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Removed private key %s", keyFilePath))
+	}
+}
+
+func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclient.Client) {
+	newConfigBytes, err := os.ReadFile(filepath.Clean(configPath))
+	if err != nil {
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to read file %s", configPath), "err", err)
+		metrics.SetCertificateConfigError(1)
+		return
+	}
+	var cfg Config
+	err = yaml.Unmarshal(newConfigBytes, &cfg)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring file changes %s because of error", configPath), "err", err)
+		metrics.SetCertificateConfigError(1)
+		return
+	}
+
+	metrics.SetCertificateConfigError(0)
+
+	_ = level.Info(logger).Log("msg", "Checking certificates from config file with remote server")
+
+	old, err := acmeClient.GetAllCertificateMetadata()
+	if err != nil {
+		_ = level.Error(logger).Log("err", err)
+		return
+	}
+
+	var newCertList []cert.Certificate
+	for _, certData := range cfg.Certificate {
+
+		// Setting default days
+		if certData.Days == 0 {
+			certData.Days = cfg.Common.CertDays
+		}
+
+		idx := slices.IndexFunc(old, func(c cert.Certificate) bool {
+			return c.Domain == certData.Domain && c.Issuer == certData.Issuer
+		})
+
+		if idx == -1 {
+			newCertList = append(newCertList, certData)
+		} else {
+
+			// Ignoring this field
+			certData.RenewalDays = 0
+
+			var toUpdate bool
+			if certData.SAN != old[idx].SAN {
+				toUpdate = true
+				_ = level.Info(logger).Log("msg", fmt.Sprintf(
+					"Certificate '%s' SAN changed from '%s' to '%s'.",
+					certData.Domain,
+					old[idx].SAN,
+					certData.SAN,
+				))
+			}
+			if certData.Days != old[idx].Days {
+				toUpdate = true
+				_ = level.Info(logger).Log("msg", fmt.Sprintf(
+					"Certificate '%s' days changed from '%d' to '%d'.",
+					certData.Domain,
+					old[idx].Days,
+					certData.Days,
+				))
+			}
+			if certData.Bundle != old[idx].Bundle {
+				toUpdate = true
+				_ = level.Info(logger).Log("msg", fmt.Sprintf(
+					"Certificate '%s' bundle changed from '%v' to '%v'.",
+					certData.Domain,
+					old[idx].Bundle,
+					certData.Bundle,
+				))
+			}
+
+			if toUpdate {
+				newCertList = append(newCertList, certData)
+			} else {
+				newCertList = append(newCertList, old[idx])
+			}
+		}
+	}
+
+	diff, hasChanged := certstore.CheckCertDiff(old, newCertList, logger)
+
+	if hasChanged {
+		err := applyCertFileChanges(acmeClient, diff, logger)
+		if err == nil {
+			certConfig = cfg
+			metrics.IncCertificateConfigReload()
+		} else {
+			_ = level.Error(logger).Log("err", err)
+		}
+	} else {
+		certConfig = cfg
 	}
 }

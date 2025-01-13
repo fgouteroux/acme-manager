@@ -18,10 +18,6 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 
-	if s.Common.CertDays == 0 {
-		s.Common.CertDays = 90
-	}
-
 	if s.Common.CertDaysRenewal == 0 {
 		s.Common.CertDaysRenewal = 30
 	}

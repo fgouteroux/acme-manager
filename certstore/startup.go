@@ -1,7 +1,6 @@
 package certstore
 
 import (
-	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -170,9 +169,7 @@ func OnStartup(logger log.Logger, configPath string, enableAPI bool) error {
 func getVaultAllCertificate(logger log.Logger) []cert.Certificate {
 	_ = level.Info(logger).Log("msg", "Retrieving certificates from vault")
 
-	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(
-		config.GlobalConfig.Storage.Vault.CertPrefix + "/",
-	)
+	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(config.GlobalConfig.Storage.Vault.CertPrefix + "/")
 
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
@@ -202,15 +199,15 @@ func getVaultAllCertificate(logger log.Logger) []cert.Certificate {
 			}
 
 			var vaultCertBytes, vaultKeyBytes []byte
-			if cert64, ok := secret["cert"]; ok {
-				vaultCertBytes, _ = base64.StdEncoding.DecodeString(cert64.(string))
+			if cert, ok := secret["cert"]; ok {
+				vaultCertBytes = []byte(cert.(string))
 			} else {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath))
 				continue
 			}
 
-			if key64, ok := secret["key"]; ok {
-				vaultKeyBytes, _ = base64.StdEncoding.DecodeString(key64.(string))
+			if key, ok := secret["key"]; ok {
+				vaultKeyBytes = []byte(key.(string))
 			} else {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("No private key found in vault secret key %s", secretKeyPath))
 				continue
@@ -286,6 +283,7 @@ func getVaultAllToken(logger log.Logger) map[string]Token {
 	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(
 		config.GlobalConfig.Storage.Vault.TokenPrefix + "/",
 	)
+
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)

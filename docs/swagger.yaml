@@ -1,5 +1,29 @@
 basePath: /api/v1
 definitions:
+  certificate.CertMap:
+    properties:
+      ca_issuer:
+        example: Ci0tLS0tQkVHSU4gQ0...
+        type: string
+      cert:
+        example: LS0tLS1CRUdJTiBDR...
+        type: string
+      domain:
+        example: testfgx.example.com
+        type: string
+      issuer:
+        example: letsencrypt
+        type: string
+      key:
+        example: LS0tLS1CRUdJTiBSU...
+        type: string
+      owner:
+        example: testfgx
+        type: string
+      url:
+        example: https://acme-staging-v02.api.letsencrypt.org/acme/cert/4b63b4e8b6109
+        type: string
+    type: object
   certificate.Certificate:
     properties:
       bundle:
@@ -37,30 +61,6 @@ definitions:
         type: integer
       san:
         example: ""
-        type: string
-    type: object
-  certstore.CertMap:
-    properties:
-      ca_issuer:
-        example: Ci0tLS0tQkVHSU4gQ0...
-        type: string
-      cert:
-        example: LS0tLS1CRUdJTiBDR...
-        type: string
-      domain:
-        example: testfgx.example.com
-        type: string
-      issuer:
-        example: letsencrypt
-        type: string
-      key:
-        example: LS0tLS1CRUdJTiBSU...
-        type: string
-      owner:
-        example: testfgx
-        type: string
-      url:
-        example: https://acme-staging-v02.api.letsencrypt.org/acme/cert/4b63b4e8b6109
         type: string
     type: object
   certstore.Token:
@@ -163,7 +163,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/certstore.CertMap'
+            $ref: '#/definitions/certificate.CertMap'
         "400":
           description: Bad Request
           schema:
@@ -209,7 +209,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/certstore.CertMap'
+            $ref: '#/definitions/certificate.CertMap'
         "400":
           description: Bad Request
           schema:
@@ -319,7 +319,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/certstore.CertMap'
+            $ref: '#/definitions/certificate.CertMap'
         "400":
           description: Bad Request
           schema:
@@ -387,11 +387,6 @@ paths:
     post:
       description: Create token for a given username, scope and expiration time.
       parameters:
-      - description: Token ID
-        in: path
-        name: id
-        required: true
-        type: string
       - description: Token Body
         in: body
         name: body
@@ -427,11 +422,6 @@ paths:
       description: Update token for a given username, scope and expiration time, it
         will generate a new token.
       parameters:
-      - description: Token ID
-        in: path
-        name: id
-        required: true
-        type: string
       - description: Token Body
         in: body
         name: body

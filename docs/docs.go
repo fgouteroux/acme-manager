@@ -55,7 +55,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/certstore.CertMap"
+                            "$ref": "#/definitions/certificate.CertMap"
                         }
                     },
                     "400": {
@@ -128,7 +128,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/certstore.CertMap"
+                            "$ref": "#/definitions/certificate.CertMap"
                         }
                     },
                     "400": {
@@ -263,7 +263,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/certstore.CertMap"
+                            "$ref": "#/definitions/certificate.CertMap"
                         }
                     },
                     "400": {
@@ -393,13 +393,6 @@ const docTemplate = `{
                 "summary": "Update token",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Token ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
                         "description": "Token Body",
                         "name": "body",
                         "in": "body",
@@ -458,13 +451,6 @@ const docTemplate = `{
                 ],
                 "summary": "Create token",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Token ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
                     {
                         "description": "Token Body",
                         "name": "body",
@@ -611,6 +597,39 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "certificate.CertMap": {
+            "type": "object",
+            "properties": {
+                "ca_issuer": {
+                    "type": "string",
+                    "example": "Ci0tLS0tQkVHSU4gQ0..."
+                },
+                "cert": {
+                    "type": "string",
+                    "example": "LS0tLS1CRUdJTiBDR..."
+                },
+                "domain": {
+                    "type": "string",
+                    "example": "testfgx.example.com"
+                },
+                "issuer": {
+                    "type": "string",
+                    "example": "letsencrypt"
+                },
+                "key": {
+                    "type": "string",
+                    "example": "LS0tLS1CRUdJTiBSU..."
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "testfgx"
+                },
+                "url": {
+                    "type": "string",
+                    "example": "https://acme-staging-v02.api.letsencrypt.org/acme/cert/4b63b4e8b6109"
+                }
+            }
+        },
         "certificate.Certificate": {
             "type": "object",
             "properties": {
@@ -661,39 +680,6 @@ const docTemplate = `{
                 "san": {
                     "type": "string",
                     "example": ""
-                }
-            }
-        },
-        "certstore.CertMap": {
-            "type": "object",
-            "properties": {
-                "ca_issuer": {
-                    "type": "string",
-                    "example": "Ci0tLS0tQkVHSU4gQ0..."
-                },
-                "cert": {
-                    "type": "string",
-                    "example": "LS0tLS1CRUdJTiBDR..."
-                },
-                "domain": {
-                    "type": "string",
-                    "example": "testfgx.example.com"
-                },
-                "issuer": {
-                    "type": "string",
-                    "example": "letsencrypt"
-                },
-                "key": {
-                    "type": "string",
-                    "example": "LS0tLS1CRUdJTiBSU..."
-                },
-                "owner": {
-                    "type": "string",
-                    "example": "testfgx"
-                },
-                "url": {
-                    "type": "string",
-                    "example": "https://acme-staging-v02.api.letsencrypt.org/acme/cert/4b63b4e8b6109"
                 }
             }
         },

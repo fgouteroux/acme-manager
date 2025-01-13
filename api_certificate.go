@@ -159,7 +159,7 @@ func certificateMetadataHandler() http.HandlerFunc {
 // @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
 // @Param issuer path string true "Certificate issuer" default(letsencrypt)
 // @Param domain path string true "Certificate domain" default(testfgx.example.com)
-// @Success 200 {object} certstore.CertMap
+// @Success 200 {object} cert.CertMap
 // @Success 400 {object} responseErrorJSON
 // @Success 401 {object} responseErrorJSON
 // @Success 403 {object} responseErrorJSON
@@ -230,7 +230,7 @@ func getCertificateHandler() http.HandlerFunc {
 // @Produce  application/json
 // @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
 // @Param body body CertificateParams true "Certificate body"
-// @Success 201 {object} certstore.CertMap
+// @Success 201 {object} cert.CertMap
 // @Success 400 {object} responseErrorJSON
 // @Success 401 {object} responseErrorJSON
 // @Success 403 {object} responseErrorJSON
@@ -265,7 +265,7 @@ func createCertificateHandler() http.HandlerFunc {
 			return
 		}
 
-		if certParams.RenewalDays >= certParams.Days {
+		if certParams.Days != 0 && certParams.RenewalDays >= certParams.Days {
 			responseJSON(w, nil, fmt.Errorf("'renewal_days' (%d) should be lower than 'days' (%d)", certParams.RenewalDays, certParams.Days), http.StatusBadRequest)
 			return
 		}
@@ -335,7 +335,12 @@ func createCertificateHandler() http.HandlerFunc {
 
 		newCert, err := certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
 		if err != nil {
-			responseJSON(w, nil, err, http.StatusInternalServerError)
+			statusCode := http.StatusInternalServerError
+			if strings.Contains(err.Error(), "urn:ietf:params:acme:error:malformed") {
+				statusCode = http.StatusBadRequest
+			}
+
+			responseJSON(w, nil, err, statusCode)
 			return
 		}
 		metrics.IncManagedCertificate(certData.Issuer)
@@ -364,7 +369,7 @@ func createCertificateHandler() http.HandlerFunc {
 // @Produce  application/json
 // @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
 // @Param body body CertificateParams true "Certificate body"
-// @Success 200 {object} certstore.CertMap
+// @Success 200 {object} cert.CertMap
 // @Success 400 {object} responseErrorJSON
 // @Success 401 {object} responseErrorJSON
 // @Success 403 {object} responseErrorJSON
