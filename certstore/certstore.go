@@ -460,8 +460,8 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 					continue
 				}
 
-				if certBytes, ok := secret["cert"]; ok {
-					err := os.WriteFile(certFilePath, certBytes.([]byte), config.GlobalConfig.Common.CertFilePerm)
+				if cert, ok := secret["cert"]; ok {
+					err := os.WriteFile(certFilePath, []byte(cert.(string)), config.GlobalConfig.Common.CertFilePerm)
 					if err != nil {
 						_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err)
 					} else {
@@ -482,8 +482,8 @@ func CheckAndDeployLocalCertificate(amStore *CertStore, logger log.Logger) error
 						continue
 					}
 				}
-				if keyBytes, ok := secret["key"]; ok {
-					err := os.WriteFile(keyFilePath, keyBytes.([]byte), config.GlobalConfig.Common.CertKeyFilePerm)
+				if key, ok := secret["key"]; ok {
+					err := os.WriteFile(keyFilePath, []byte(key.(string)), config.GlobalConfig.Common.CertKeyFilePerm)
 					if err != nil {
 						_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
 					} else {
