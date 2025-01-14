@@ -20,6 +20,7 @@ type Config struct {
 
 // Common represents common config.
 type Common struct {
+	APIKeyHash          string      `yaml:"api_key_hash"`
 	CertDays            int         `yaml:"cert_days"`
 	CertDaysRenewal     int         `yaml:"cert_days_renewal"`
 	CertDeploy          bool        `yaml:"certificate_deploy"`
@@ -56,7 +57,8 @@ type Vault struct {
 	SecretID     string `yaml:"secret_id"`
 	URL          string `yaml:"url"`
 	SecretEngine string `yaml:"secret_engine"`
-	SecretPrefix string `yaml:"secret_prefix"`
+	CertPrefix   string `yaml:"certificate_prefix"`
+	TokenPrefix  string `yaml:"token_prefix"`
 	MountPath    string `yaml:"mount_path"`
 }
 

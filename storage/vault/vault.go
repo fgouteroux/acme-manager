@@ -57,7 +57,6 @@ func vaultAppRoleLogin(client *Client) error {
 
 // List a key-value secret (kv-v2) after authenticating via AppRole.
 func (client *Client) ListSecretWithAppRole(secretPath string) ([]string, error) {
-
 	err := vaultAppRoleLogin(client)
 	if err != nil {
 		return []string{}, err
@@ -131,24 +130,27 @@ func listSecret(client *Client, path string) (*vaultApi.Secret, error) {
 		return secret, err
 	}
 
-	if secret == nil {
-		return secret, fmt.Errorf("couldn't list %s from the Vault", path)
-	}
+	/*
+		if secret == nil {
+			return secret, fmt.Errorf("couldn't list %s from the Vault", path)
+		}
+	*/
 	return secret, err
 }
 
-var secretListPath []string
-
 // recursiveListSecret returns a list of secrets paths from Vault
 func recursiveListSecret(client *Client, path, prefix string) ([]string, error) {
+	var secretListPath []string
 	secretList, err := listSecret(client, path)
 	if err != nil {
 		return []string{}, err
 	}
+
 	if secretList != nil {
 		for _, secret := range secretList.Data["keys"].([]interface{}) {
 			if strings.HasSuffix(secret.(string), "/") {
-				_, err := recursiveListSecret(client, path+secret.(string), secret.(string))
+				var err error
+				secretListPath, err = recursiveListSecret(client, path+secret.(string), secret.(string))
 				if err != nil {
 					return []string{}, err
 				}

@@ -25,39 +25,25 @@
             </div>
         </div>
 <br>
-<h2>Managed certificates</h2>
+<h2>Managed tokens</h2>
 <div class="table-responsive">
   <table class="table table-bordered table-hover table-striped">
     <thead>
       <tr>
+        <th>ID</th>
         <th>Owner</th>
-        <th>Domain</th>
-        <th>Issuer</th>
+        <th>Scope</th>
         <th>Expires</th>
-        <th>Bundle</th>
-        <th>SAN</th>
-        <th>Duration</th>
       </tr>
     </thead>
     <tbody>
     {{$out := .}}
-    {{ range $cert := .Certificates }}
+    {{ range $tokenID, $tokenData := .Tokens }}
       <tr>
-        <td id="owner">{{ $cert.Owner }}</td>
-        <td id="domain">{{ $cert.Domain }}</td>
-        <td id="issuer">{{ $cert.Issuer }}</td>
-        <td id="expires">{{ $cert.Expires }}</td>
-        <td id="bundle">{{ $cert.Bundle }}</td>
-        {{ if $cert.SAN }}
-        <td id="san">{{ range $item := Split $cert.SAN "," }}{{ $item }}<br>{{ end }}</td>
-        {{ else }}
-        <td id="san"></td>
-        {{ end }}
-        {{ if eq $cert.Days 0 }}
-        <td id="days">n/a</td>
-        {{ else }}
-        <td id="days">{{ $cert.Days }}d</td>
-        {{ end }}
+        <td id="id">{{ $tokenID }}</td>
+        <td id="owner">{{ $tokenData.Username }}</td>
+        <td id="scope">{{ Join $tokenData.Scope "," }}</td>
+        <td id="expires">{{ $tokenData.Expires }}</td>
       </tr>
       {{ end }}
     </tbody>

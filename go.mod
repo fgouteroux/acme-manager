@@ -6,7 +6,9 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/go-acme/lego/v4 v4.20.2
 	github.com/go-kit/log v0.2.1
+	github.com/google/uuid v1.6.0
 	github.com/grafana/dskit v0.0.0-20231204113943-3040f31404f8
+	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/hashicorp/vault/api v1.15.0
 	github.com/hashicorp/vault/api/auth/approle v0.8.0
 	github.com/joho/godotenv v1.5.1
@@ -14,8 +16,9 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.17.0
 	github.com/prometheus/common v0.45.0
-	github.com/prometheus/exporter-toolkit v0.10.1-0.20230714054209-2f4150c63f97
 	github.com/sirupsen/logrus v1.9.3
+	github.com/swaggo/http-swagger v1.3.4
+	github.com/swaggo/swag v1.16.4
 	golang.org/x/exp v0.0.0-20240213143201-ec583247a57a
 	golang.org/x/net v0.30.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -43,6 +46,7 @@ require (
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
+	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/OpenDNS/vegadns2client v0.0.0-20180418235048-a3fa4a771d87 // indirect
 	github.com/akamai/AkamaiOPEN-edgegrid-golang v1.2.2 // indirect
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
@@ -93,6 +97,10 @@ require (
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/go-openapi/jsonpointer v0.19.5 // indirect
+	github.com/go-openapi/jsonreference v0.20.0 // indirect
+	github.com/go-openapi/spec v0.20.6 // indirect
+	github.com/go-openapi/swag v0.19.15 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.16.0 // indirect
@@ -111,7 +119,6 @@ require (
 	github.com/google/btree v1.0.1 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/s2a-go v0.1.8 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.13.0 // indirect
 	github.com/gophercloud/gophercloud v1.14.1 // indirect
@@ -123,7 +130,6 @@ require (
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-msgpack v0.5.5 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
 	github.com/hashicorp/go-secure-stdlib/parseutil v0.1.6 // indirect
 	github.com/hashicorp/go-secure-stdlib/strutil v0.1.2 // indirect
@@ -137,7 +143,7 @@ require (
 	github.com/iij/doapi v0.0.0-20190504054126-0bbf12d6d7df // indirect
 	github.com/infobloxopen/infoblox-go-client v1.1.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/jpillora/backoff v1.0.0 // indirect
+	github.com/josharian/intern v1.0.0 // indirect
 	github.com/k0kubun/go-ansi v0.0.0-20180517002512-3bf9e2903213 // indirect
 	github.com/kolo/xmlrpc v0.0.0-20220921171641-a4b6fa1dd06b // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
@@ -148,6 +154,7 @@ require (
 	github.com/liquidweb/liquidweb-cli v0.6.9 // indirect
 	github.com/liquidweb/liquidweb-go v1.6.4 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
+	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
@@ -157,7 +164,6 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/namedotcom/go v0.0.0-20180403034216-08470befbe04 // indirect
 	github.com/nrdcg/auroradns v1.1.0 // indirect
 	github.com/nrdcg/bunny-go v0.0.0-20240207213615-dde5bf4577a3 // indirect
@@ -205,6 +211,7 @@ require (
 	github.com/spf13/viper v1.18.2 // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
+	github.com/swaggo/files v0.0.0-20220610200504-28940afbdbfe // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.1034 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/dnspod v1.0.1034 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect

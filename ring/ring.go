@@ -259,3 +259,12 @@ func GetLeader(amRing AcmeManagerRing) (string, error) {
 	}
 	return rl.Id, nil
 }
+
+func GetLeaderIP(amRing AcmeManagerRing) (string, error) {
+	// Get the leader from the ring and check whether it's this replica.
+	rl, err := ringLeader(amRing.Client)
+	if err != nil {
+		return "", err
+	}
+	return strings.Split(rl.Addr, ":")[0], nil
+}

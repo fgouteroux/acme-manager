@@ -15,13 +15,13 @@ import (
 	"github.com/fgouteroux/acme_manager/metrics"
 )
 
-func Execute(logger log.Logger, globalConfig config.Config) {
-	if globalConfig.Common.CmdEnabled {
-		cmdArr := strings.Split(globalConfig.Common.CmdRun, " ")
+func Execute(logger log.Logger, globalConfig config.Common) {
+	if globalConfig.CmdEnabled {
+		cmdArr := strings.Split(globalConfig.CmdRun, " ")
 		cmdPath := cmdArr[0]
 		cmdArgs := cmdArr[1:]
 
-		out, err := run(cmdPath, cmdArgs, globalConfig.Common.CmdTimeout)
+		out, err := run(cmdPath, cmdArgs, globalConfig.CmdTimeout)
 		if err != nil {
 			_ = level.Error(logger).Log("msg", fmt.Sprintf("Command '%s %s' failed: %s", cmdPath, strings.Join(cmdArgs, " "), out), "err", err)
 			metrics.IncRunFailedLocalCmd()

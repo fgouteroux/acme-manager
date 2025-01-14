@@ -31,18 +31,22 @@ usage: acme_manager [<flags>]
 
 Flags:
   -h, --[no-]help                Show context-sensitive help (also try --help-long and --help-man).
-      --web.telemetry-path="/metrics"  
-                                 Path under which to expose metrics.
-      --web.prefix-path=""       Prefix path for all http requests.
-      --[no-]web.systemd-socket  Use systemd socket activation listeners instead of port listeners (Linux only).
-      --web.listen-address=:8989 ...  
-                                 Addresses on which to expose metrics and web interface. Repeatable for multiple addresses.
-      --web.config.file=""       [EXPERIMENTAL] Path to configuration file that can enable TLS or authentication. See: https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md
+      --server.listen-address=":8989"  
+                                 server listen address
+      --server.tls-cert-file=SERVER.TLS-CERT-FILE  
+                                 server tls certificate file
+      --server.tls-key-file=SERVER.TLS-KEY-FILE  
+                                 server tls key file
+      --server.http-read-timeout=300  
+                                 Read timeout for entire HTTP request, including headers and body
+      --server.http-read-header-timeout=10  
+                                 Read timeout for HTTP request headers
       --config-path="config.yml"  
                                  Config path
       --certificate-config-path="certificate.yml"  
                                  Certificate config path
       --env-config-path=".env"   Environment vars config path
+      --[no-]enable-api          Enables API mode and disable --certificate-config-path parameter.
       --ring.instance-id=RING.INSTANCE-ID  
                                  Instance ID to register in the ring.
       --ring.instance-addr=RING.INSTANCE-ADDR  
@@ -52,14 +56,32 @@ Flags:
                                  List of network interface names to look up when finding the instance IP address.
       --ring.join-members=RING.JOIN-MEMBERS  
                                  Other cluster members to join.
-      --check-renewal-interval=1h  
+      --check-renewal-interval=30m  
                                  Time interval to check if renewal needed
       --check-config-interval=30s  
                                  Time interval to check if config file changes
+      --check-token-interval=1m  Time interval to check if tokens expired
       --check-certificate-config-interval=30s  
                                  Time interval to check if certificate config file changes
-      --check-local-certificate-interval=5m  
+      --check-local-certificate-interval=1m  
                                  Time interval to check if local certificate changes
+      --[no-]client              Enables client mode.
+      --client.manager-url="http://localhost:8989/api/v1"  
+                                 Client manager URL ($ACME_MANAGER_URL)
+      --client.manager-token=CLIENT.MANAGER-TOKEN  
+                                 Client manager token ($ACME_MANAGER_TOKEN)
+      --client.tls-ca-file=CLIENT.TLS-CA-FILE  
+                                 Client manager tls ca certificate file
+      --client.tls-cert-file=CLIENT.TLS-CERT-FILE  
+                                 Client manager tls certificate file
+      --client.tls-key-file=CLIENT.TLS-KEY-FILE  
+                                 Client manager tls key file
+      --[no-]client.tls-skip-verify  
+                                 Client manager tls skip verify
+      --client.config-path="client-config.yml"  
+                                 Client config path
+      --client.check-config-interval=1m  
+                                 Time interval to check if client config file changes and to update local certificate file
       --log.level=info           Only log messages with the given severity or above. One of: [debug, info, warn, error]
       --log.format=logfmt        Output format of log messages. One of: [logfmt, json]
       --[no-]version             Show application version.
@@ -96,6 +118,7 @@ Private keys must exists for each given issuer in `rootpath_account`, here:
 
 ```
 common:
+  api_key_hash: 123abc456def
   rootpath_account: /tmp/accounts
   rootpath_certificate: /tmp/certificates
   certificate_deploy: true
@@ -120,10 +143,13 @@ storage:
     url: " https://vault.example.com"
     secret_engine: "myengine"
     secret_prefix: "acme"
+    certificate_prefix: "certificates"
+    token_prefix: "tokens"
     mount_path: "login/approle"
 ```
 
 Optional Common parameters:
+- **api_key_hash** (string):  the api key hash used to manage tokens, required when api mode is enabled.
 - **cert_days** (int): Number of days before certificate expired (default: 90).
 - **cert_days_renewal** (int): Number of days before certificate should be renewed (default: 30).
 - **certificate_deploy** (bool): If set to true, deploy certificate and private key in given `certificate_dir`
@@ -143,7 +169,164 @@ Optional Issuer parameters:
 - **http_challenge** (string): http challenge name to use for domain validation
 - **dns_challenge** (string): dns challenge name to use for domain validation
 
-### Certificate config file
+### API mode
+
+Manage certificate with API endpoints in a secured way.
+
+| HTTP Method            | Endpoint                     |  Auth Type Supported       |
+|------------------------|------------------------------|----------------------------|
+| GET                    | /api/v1/certificate/metadata | Bearer Token               |
+| GET, POST, PUT, DELETE | /api/v1/certificate          | Bearer Token               |
+| GET, POST, PUT, DELETE | /api/v1/token                | API key Header             |
+
+See swagger page: http://localhost:8989/swagger/index.html
+
+#### Generate an API key:
+```
+# Generate a random string
+API_KEY=$(openssl rand -base64 32)
+
+# Hash the random string with SHA1 and put it in the `api_key_hash` of acme manager config
+$ echo -n $API_KEY | sha1sum
+96a0585f6d3c3f90f74cdb963e7664f2ee8a10bb  -
+
+# Your API KEY to use for curl command and others.
+$ echo $API_KEY
+GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=
+
+```
+
+** /api/v1/token**: 
+
+Required parameters:  
+- **username** (string): token username
+- **scope** (string): token scope
+
+##### Obtain a new token:
+```
+curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localhost:8989/api/v1/token -d '{"username":"testfgx", "scope":["read","create","update","delete"]}' -XPOST
+{
+  "expires": "Never",
+  "id": "94e0c649-de98-476a-a5cc-ff1201512605",
+  "scope": [
+    "read",
+    "create",
+    "update",
+    "delete"
+  ],
+  "token": "OTRlMGM2NDktZGU5OC00NzZhLWE1Y2MtZmYxMjAxNTEyNjA1OkczdTFUSkUtc1FCM05veEhtQXNVcW0xYXd4OXp4Z19V",
+  "tokenHash": "2fba65b7e4c953148427407cd556c9b49043e1a4",
+  "username": "testfgx"
+}
+```
+
+##### Update the token scope and add expiration time to 30days
+```
+curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localhost:8989/api/v1/token -d '{"id": "94e0c649-de98-476a-a5cc-ff1201512605","username":"testfgx", "scope":["read"], "expires":"30d"}}' -XPUT
+{
+  "expires": "2025-02-09 11:09:01 +0000 UTC",
+  "id": "94e0c649-de98-476a-a5cc-ff1201512605",
+  "scope": [
+    "read"
+  ],
+  "token": "OTRlMGM2NDktZGU5OC00NzZhLWE1Y2MtZmYxMjAxNTEyNjA1OmpTeGtoUUwzd0MwQWl4Vzk1aU9mVjM4RzdIbWwzQ0F6",
+  "tokenHash": "e7bf79d0b679fe56014cb8e87358ac459880f6dd",
+  "username": "testfgx"
+}
+```
+
+##### Read the token (no token value, contain only the hash)
+```
+curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localhost:8989/api/v1/token -d '{"id": "94e0c649-de98-476a-a5cc-ff1201512605"}' -XGET
+
+{
+  "hash": "e7bf79d0b679fe56014cb8e87358ac459880f6dd",
+  "scope": [
+    "read"
+  ],
+  "username": "testfgx",
+  "expires": "2025-02-09 11:09:01 +0000 UTC"
+}
+```
+
+##### Revoke the token
+```
+curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localhost:8989/api/v1/token -d '{"id": "94e0c649-de98-476a-a5cc-ff1201512605"}' -XDELETE
+Revoked token
+```
+
+
+** /api/v1/certificate**: 
+
+Required parameters:  
+- **domain** (string): domain certificate
+- **issuer** (string): issuer certificate
+
+Optional parameters:
+- **bundle** (bool): if true, add the issuers certificate to the new certificate
+- **renewal_days** (int): number of days before automatic certificate renewal
+- **days** (int): number of days before certificate expiration
+- **san** (string, comma separated): DNS domain names to add to certificate
+- **http_challenge** (string): http challenge name to use for domain validation
+- **dns_challenge** (string): dns challenge name to use for domain validation
+
+Token and certificate are retrieved form vault for each get api call.
+
+If `--enable-api` parameter is defined, it disable the certificate config file. 
+
+### Certificate config file mode
+
+Optional certificate parameters:
+- **bundle** (bool): if true, add the issuers certificate to the new certificate
+- **renewal_days** (int): number of days before automatic certificate renewal
+- **days** (int): number of days before certificate expiration
+- **san** (string, comma separated): DNS domain names to add to certificate
+- **http_challenge** (string): http challenge name to use for domain validation
+- **dns_challenge** (string): dns challenge name to use for domain validation
+
+```
+certificate:
+  - domain: testfgx01.example.com
+    issuer: letsencrypt
+
+  - domain: testfgx02.example.com
+    issuer: sectigo
+```
+
+### Client Mode
+
+Acme manager could run in client mode to obtain certificate from acme manager server.
+
+It need the acme manager server url and a token.
+
+The client start with reading the config file, check certificates from acme manager server and deploy them.
+It regulary check if certificate have been renewed/changed and redeploy them.
+
+The client start a webserver to expose some metrics.
+
+```
+$ acme_manager --client.config-path config.yml --client
+
+ts=2025-01-10T10:18:49.077Z caller=client.go:40 level=info msg="Checking certificates from config file"
+ts=2025-01-10T10:18:49.165Z caller=client.go:224 level=info msg="Deployed certificate /etc/myapp/ssl/letsencrypt/testfgx01.example.com.crt"
+ts=2025-01-10T10:18:49.165Z caller=client.go:233 level=info msg="Deployed private key /etc/myapp/ssl/letsencrypt/testfgx01.example.com.key"
+ts=2025-01-10T10:18:49.173Z caller=cmd.go:29 level=info msg="Command '/usr/bin/systemctl reload myapp' successfully executed"
+ts=2025-01-10T10:18:49.174Z caller=main.go:269 level=info msg="Listening on" address=:8989
+ts=2025-01-10T10:18:49.174Z caller=main.go:271 level=info msg="TLS is disabled." address=:8989
+
+```
+
+#### Client Certificate config file
+
+Optional Common parameters:
+- **certificate_deploy** (bool): If set to true, deploy certificate and private key in given `certificate_dir`
+- **certificate_dir** (string): Directory in which to deploy issuers certificates and private keys
+- **certificate_dir_perm** (uint32): Unix permission for certificate directory in octal format (default: 0700)
+- **certificate_file_perm** (uint32): Unix permission for certificate file in octal format (default: 0600)
+- **certificate_keyfile_perm** (uint32): Unix permission for certificate key file in octal format (default: 0600)
+- **cmd_enabled** (bool): If set to true, run a custom command after deploying certificates.
+- **cmd_run** (string):  Command to run.
+- **cmd_timeout** (int): Command timeout.
 
 Optional parameters:
 - **bundle** (bool): if true, add the issuers certificate to the new certificate
@@ -154,6 +337,15 @@ Optional parameters:
 - **dns_challenge** (string): dns challenge name to use for domain validation
 
 ```
+common:
+  certificate_deploy: true
+  certificate_dir: /etc/myapp/ssl/
+
+  cmd_enabled: true
+  cmd_run: /usr/bin/systemcl reload myapp
+  cmd_timeout: 30
+
+
 certificate:
   - domain: testfgx01.example.com
     issuer: letsencrypt
@@ -178,8 +370,11 @@ Once the domain is validated, the challenge token value is removed from kvring.
 
 ### Managed certificate web UI
 
-The endpoint http://localhost:8989/certificate return the page for all managed certificate.
+The endpoint http://localhost:8989/certificates return the page for all managed certificate.
 
+### Managed token web UI
+
+The endpoint http://localhost:8989/tokens return the page for all managed tokens.
 
 ### Metrics Exposed
 
