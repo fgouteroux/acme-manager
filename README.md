@@ -196,11 +196,14 @@ GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=
 
 ```
 
-** /api/v1/token**: 
+#### Token endpoint
 
 Required parameters:  
 - **username** (string): token username
-- **scope** (string): token scope
+- **scope** (list of string): token scope
+
+Optional parameters:
+- **expires** (string): token duration (if not set, expires never)
 
 ##### Obtain a new token:
 ```
@@ -255,8 +258,7 @@ curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localho
 Revoked token
 ```
 
-
-** /api/v1/certificate**: 
+#### Certificate endpoint
 
 Required parameters:  
 - **domain** (string): domain certificate
@@ -270,7 +272,93 @@ Optional parameters:
 - **http_challenge** (string): http challenge name to use for domain validation
 - **dns_challenge** (string): dns challenge name to use for domain validation
 
-Token and certificate are retrieved form vault for each get api call.
+
+##### Get the certificate
+```
+curl -X 'GET' \
+  'http://localhost:8989/api/v1/certificate/letsencrypt/testfgx01.example.com' \
+  -H 'accept: application/json' \
+  -H 'Authorization: Bearer MDIxYjUwNzUtMmQ....'
+
+{
+  "cert": "-----BEGIN CERTIFICATE-----\nMIIFUT...\n-----END CERTIFICATE-----\n",
+  "key": "-----BEGIN RSA PRIVATE KEY-----\nMIIEow...\n-----END RSA PRIVATE KEY-----\n",
+  "ca_issuer": "\n-----BEGIN CERTIFICATE-----\nMIIFTT...\n-----END CERTIFICATE-----\n",
+  "issuer": "letsencrypt",
+  "url": "https://acme-staging-v02.api.letsencrypt.org/acme/cert/2b8cfad6a7516ac17349...",
+  "domain": "testfgx01.example.com",
+  "owner": "testfgx"
+}
+```
+
+##### Obtain a new certificate
+
+```
+curl -X 'POST' \
+  'http://localhost:8989/api/v1/certificate' \
+  -H 'accept: application/json' \
+  -H 'Authorization: Bearer MDIxYjUwNzUtMmQ....' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "bundle": false,
+  "dns_challenge": "ns1",
+  "domain": "testfgx01.example.com",
+  "http_challenge": "",
+  "issuer": "letsencrypt",
+  "renewal_days": 30,
+  "san": ""
+}'
+
+{
+  "cert": "-----BEGIN CERTIFICATE-----\nMIIFUT...\n-----END CERTIFICATE-----\n",
+  "key": "-----BEGIN RSA PRIVATE KEY-----\nMIIEow...\n-----END RSA PRIVATE KEY-----\n",
+  "ca_issuer": "\n-----BEGIN CERTIFICATE-----\nMIIFTT...\n-----END CERTIFICATE-----\n",
+  "issuer": "letsencrypt",
+  "url": "https://acme-staging-v02.api.letsencrypt.org/acme/cert/2b8cfad6a7516ac17349...",
+  "domain": "testfgx01.example.com",
+  "owner": "testfgx"
+}
+```
+
+##### Update a certificate (will revoke the old one and create a new one)
+
+```
+curl -X 'PUT' \
+  'http://localhost:8989/api/v1/certificate' \
+  -H 'accept: application/json' \
+  -H 'Authorization: Bearer MDIxYjUwNzUtMmQ....' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "bundle": false,
+  "dns_challenge": "ns1",
+  "domain": "testfgx01.example.com",
+  "http_challenge": "",
+  "issuer": "letsencrypt",
+  "renewal_days": 30,
+  "san": "testfgx02.example.com"
+}'
+
+{
+  "cert": "-----BEGIN CERTIFICATE-----\nMIIFUT...\n-----END CERTIFICATE-----\n",
+  "key": "-----BEGIN RSA PRIVATE KEY-----\nMIIEow...\n-----END RSA PRIVATE KEY-----\n",
+  "ca_issuer": "\n-----BEGIN CERTIFICATE-----\nMIIFTT...\n-----END CERTIFICATE-----\n",
+  "issuer": "letsencrypt",
+  "url": "https://acme-staging-v02.api.letsencrypt.org/acme/cert/2b8cfad6a7516ac17349...",
+  "domain": "testfgx01.example.com",
+  "owner": "testfgx"
+}
+```
+
+##### Revoke a certificate
+
+```
+curl -X 'DELETE' \
+  'http://localhost:8989/api/v1/certificate/letsencrypt/testfgx01.example.com' \
+  -H 'accept: application/json' \
+  -H 'Authorization: Bearer MDIxYjUwNzUtMmQ....'
+```
+
+Token and certificate are retrieved from vault for each get api call.
 
 If `--enable-api` parameter is defined, it disable the certificate config file. 
 
@@ -328,7 +416,7 @@ Optional Common parameters:
 - **cmd_run** (string):  Command to run.
 - **cmd_timeout** (int): Command timeout.
 
-Optional parameters:
+Optional Certificate parameters:
 - **bundle** (bool): if true, add the issuers certificate to the new certificate
 - **renewal_days** (int): number of days before automatic certificate renewal
 - **days** (int): number of days before certificate expiration
