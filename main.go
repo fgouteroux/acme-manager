@@ -55,10 +55,10 @@ var (
 	ringInstanceInterfaceNames = kingpin.Flag("ring.instance-interface-names", "List of network interface names to look up when finding the instance IP address.").String()
 	ringJoinMembers            = kingpin.Flag("ring.join-members", "Other cluster members to join.").String()
 
-	checkRenewalInterval           = kingpin.Flag("check-renewal-interval", "Time interval to check if renewal needed").Default("30m").Duration()
-	checkConfigInterval            = kingpin.Flag("check-config-interval", "Time interval to check if config file changes").Default("30s").Duration()
-	checkTokenInterval             = kingpin.Flag("check-token-interval", "Time interval to check if tokens expired").Default("1m").Duration()
-	
+	checkRenewalInterval = kingpin.Flag("check-renewal-interval", "Time interval to check if renewal needed").Default("30m").Duration()
+	checkConfigInterval  = kingpin.Flag("check-config-interval", "Time interval to check if config file changes").Default("30s").Duration()
+	checkTokenInterval   = kingpin.Flag("check-token-interval", "Time interval to check if tokens expired").Default("1m").Duration()
+
 	checkCertificateConfigInterval = kingpin.Flag("check-certificate-config-interval", "Time interval to check if certificate config file changes").Default("30s").Duration()
 	checkLocalCertificateInterval  = kingpin.Flag("check-local-certificate-interval", "Time interval to check if local certificate changes").Default("1m").Duration()
 
