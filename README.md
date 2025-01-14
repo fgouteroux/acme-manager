@@ -207,7 +207,14 @@ Optional parameters:
 
 ##### Obtain a new token:
 ```
-curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localhost:8989/api/v1/token -d '{"username":"testfgx", "scope":["read","create","update","delete"]}' -XPOST
+curl -XPOST \
+  'http://localhost:8989/api/v1/token' \
+  -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" \
+  -d '{
+  "username":"testfgx",
+  "scope":["read","create","update","delete"]
+}'
+
 {
   "expires": "Never",
   "id": "94e0c649-de98-476a-a5cc-ff1201512605",
@@ -225,7 +232,15 @@ curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localho
 
 ##### Update the token scope and add expiration time to 30days
 ```
-curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localhost:8989/api/v1/token -d '{"id": "94e0c649-de98-476a-a5cc-ff1201512605","username":"testfgx", "scope":["read"], "expires":"30d"}}' -XPUT
+curl -XPUT \
+  'http://localhost:8989/api/v1/token' \
+  -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" \
+  -d '{
+  "id": "94e0c649-de98-476a-a5cc-ff1201512605",
+  "username":"testfgx",
+  "scope":["read"], "expires":"30d"}
+}'
+
 {
   "expires": "2025-02-09 11:09:01 +0000 UTC",
   "id": "94e0c649-de98-476a-a5cc-ff1201512605",
@@ -240,7 +255,9 @@ curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localho
 
 ##### Read the token (no token value, contain only the hash)
 ```
-curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localhost:8989/api/v1/token -d '{"id": "94e0c649-de98-476a-a5cc-ff1201512605"}' -XGET
+curl -XGET \
+  'http://localhost:8989/api/v1/token/94e0c649-de98-476a-a5cc-ff1201512605' \
+  -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8="
 
 {
   "hash": "e7bf79d0b679fe56014cb8e87358ac459880f6dd",
@@ -254,8 +271,9 @@ curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localho
 
 ##### Revoke the token
 ```
-curl -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" http://localhost:8989/api/v1/token -d '{"id": "94e0c649-de98-476a-a5cc-ff1201512605"}' -XDELETE
-Revoked token
+curl -XDELETE \
+  'http://localhost:8989/api/v1/token/94e0c649-de98-476a-a5cc-ff1201512605' \
+  -H "X-API-Key: GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=" \
 ```
 
 #### Certificate endpoint
