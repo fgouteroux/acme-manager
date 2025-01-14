@@ -606,7 +606,6 @@ func CheckAPICertExpiration(amStore *CertStore, logger log.Logger) error {
 		}
 	}
 	if hasChange {
-		localCache.Set(AmRingKey, dataCopy)
 		amStore.PutKVRing(AmRingKey, dataCopy)
 	}
 	return nil

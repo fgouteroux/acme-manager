@@ -155,12 +155,14 @@ func OnStartup(logger log.Logger, configPath string, enableAPI bool) error {
 	} else {
 		_ = level.Info(logger).Log("msg", "Processing certificates as simple peer")
 
-		// update local cache with kv store value
-		localCache.Set(AmRingKey, data)
+		if !enableAPI {
+			// update local cache with kv store value
+			localCache.Set(AmRingKey, data)
 
-		err := CheckAndDeployLocalCertificate(AmStore, logger)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
+			err := CheckAndDeployLocalCertificate(AmStore, logger)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+			}
 		}
 	}
 	return nil
