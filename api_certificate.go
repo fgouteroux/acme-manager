@@ -627,8 +627,7 @@ func forwardRequest(host string, w http.ResponseWriter, req *http.Request) {
 		proxyReq.Header[h] = val
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(proxyReq)
+	resp, err := proxyClient.Do(proxyReq)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return

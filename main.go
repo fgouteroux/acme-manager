@@ -41,6 +41,7 @@ var (
 	serverListenAddress     = kingpin.Flag("server.listen-address", "server listen address").Default(":8989").String()
 	serverTLSCertFile       = kingpin.Flag("server.tls-cert-file", "server tls certificate file").String()
 	serverTLSKeyFile        = kingpin.Flag("server.tls-key-file", "server tls key file").String()
+	serverTLSClientCAFile   = kingpin.Flag("server.tls-client-ca-file", "Root certificate authority used to verify client certificates").String()
 	serverReadTimeout       = kingpin.Flag("server.http-read-timeout", "Read timeout for entire HTTP request, including headers and body").Default("300").Int()
 	serverReadHeaderTimeout = kingpin.Flag("server.http-read-header-timeout", "Read timeout for HTTP request headers").Default("10").Int()
 
@@ -72,7 +73,8 @@ var (
 	clientConfigPath           = kingpin.Flag("client.config-path", "Client config path").Default("client-config.yml").String()
 	clientCheckConfigInterval  = kingpin.Flag("client.check-config-interval", "Time interval to check if client config file changes and to update local certificate file").Default("1m").Duration()
 
-	logger log.Logger
+	logger      log.Logger
+	proxyClient *http.Client
 )
 
 // @title acme manager
@@ -230,6 +232,14 @@ func main() {
 	}
 
 	if *enableAPI {
+		// Init proxy http client used to forward request
+		tlsConfig, err := utils.SetTLSConfig(*serverTLSCertFile, *serverTLSKeyFile, *serverTLSClientCAFile, false)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
+		proxyClient = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+
 		// metadata certificate
 		http.Handle("GET /api/v1/certificate/metadata", LoggerHandler(certificateMetadataHandler()))
 
