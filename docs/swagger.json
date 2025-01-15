@@ -86,6 +86,12 @@
                         "schema": {
                             "$ref": "#/definitions/main.responseErrorJSON"
                         }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/main.responseErrorJSON"
+                        }
                     }
                 }
             },
@@ -150,6 +156,12 @@
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.responseErrorJSON"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "$ref": "#/definitions/main.responseErrorJSON"
                         }
@@ -362,6 +374,12 @@
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.responseErrorJSON"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "$ref": "#/definitions/main.responseErrorJSON"
                         }
@@ -752,7 +770,7 @@
                     "example": [
                         "read",
                         "create",
-                        "udpate",
+                        "update",
                         "delete"
                     ]
                 },

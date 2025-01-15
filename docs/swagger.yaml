@@ -115,7 +115,7 @@ definitions:
         example:
         - read
         - create
-        - udpate
+        - update
         - delete
         items:
           type: string
@@ -184,6 +184,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/main.responseErrorJSON'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
       summary: Create certificate
       tags:
       - certificate
@@ -232,6 +236,10 @@ paths:
             $ref: '#/definitions/main.responseErrorJSON'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "502":
+          description: Bad Gateway
           schema:
             $ref: '#/definitions/main.responseErrorJSON'
       summary: Update certificate
@@ -286,6 +294,10 @@ paths:
             $ref: '#/definitions/main.responseErrorJSON'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.responseErrorJSON'
+        "502":
+          description: Bad Gateway
           schema:
             $ref: '#/definitions/main.responseErrorJSON'
       summary: Revoke certificate

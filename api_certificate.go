@@ -236,6 +236,7 @@ func getCertificateHandler() http.HandlerFunc {
 // @Success 403 {object} responseErrorJSON
 // @Success 429 {object} responseErrorJSON
 // @Success 500 {object} responseErrorJSON
+// @Success 502 {object} responseErrorJSON
 // @Router /certificate [post]
 func createCertificateHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -376,6 +377,7 @@ func createCertificateHandler() http.HandlerFunc {
 // @Success 404 {object} responseErrorJSON
 // @Success 429 {object} responseErrorJSON
 // @Success 500 {object} responseErrorJSON
+// @Success 502 {object} responseErrorJSON
 // @Router /certificate [put]
 func updateCertificateHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -521,6 +523,7 @@ func updateCertificateHandler() http.HandlerFunc {
 // @Success 404 {object} responseErrorJSON
 // @Success 429 {object} responseErrorJSON
 // @Success 500 {object} responseErrorJSON
+// @Success 502 {object} responseErrorJSON
 // @Router /certificate/{issuer}/{domain} [delete]
 func revokeCertificateHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -629,7 +632,7 @@ func forwardRequest(host string, w http.ResponseWriter, req *http.Request) {
 
 	resp, err := proxyClient.Do(proxyReq)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		responseJSON(w, nil, err, http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()

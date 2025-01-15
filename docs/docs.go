@@ -93,6 +93,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/main.responseErrorJSON"
                         }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/main.responseErrorJSON"
+                        }
                     }
                 }
             },
@@ -157,6 +163,12 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.responseErrorJSON"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "$ref": "#/definitions/main.responseErrorJSON"
                         }
@@ -369,6 +381,12 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.responseErrorJSON"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "$ref": "#/definitions/main.responseErrorJSON"
                         }
@@ -759,7 +777,7 @@ const docTemplate = `{
                     "example": [
                         "read",
                         "create",
-                        "udpate",
+                        "update",
                         "delete"
                     ]
                 },
