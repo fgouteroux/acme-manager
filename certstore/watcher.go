@@ -22,7 +22,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPath string) {
+func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPath, version string) {
 	// create a new Ticker
 	tk := time.NewTicker(interval)
 
@@ -52,7 +52,7 @@ func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPat
 		if string(oldConfigBytes) != string(newConfigBytes) {
 			_ = level.Info(logger).Log("msg", "modified file", "name", configPath)
 
-			err = Setup(logger, cfg)
+			err = Setup(logger, cfg, version)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring issuer changes in file %s because of error", configPath), "err", err)
 				metrics.SetConfigError(1)

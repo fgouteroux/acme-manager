@@ -84,7 +84,7 @@ func tryRecoverRegistration(privateKey crypto.PrivateKey, caDirURL, userAgent st
 	return client, reg, nil
 }
 
-func Setup(logger log.Logger, cfg config.Config) error {
+func Setup(logger log.Logger, cfg config.Config, version string) error {
 	for issuer, issuerConf := range cfg.Issuer {
 		accountFilePath := fmt.Sprintf("%s/%s/account.json", cfg.Common.RootPathAccount, issuer)
 		accountBytes, err := os.ReadFile(filepath.Clean(accountFilePath))
@@ -98,25 +98,30 @@ func Setup(logger log.Logger, cfg config.Config) error {
 				_ = level.Error(logger).Log("err", err)
 			}
 		}
+		privateKeyPath := fmt.Sprintf("%s/%s/private_key.pem", cfg.Common.RootPathAccount, issuer)
 
-		privateKeyBytes, err := os.ReadFile(fmt.Sprintf("%s/%s/private_key.pem", cfg.Common.RootPathAccount, issuer))
+		privateKeyBytes, err := os.ReadFile(privateKeyPath)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			return err
 		}
-		privateKey, err := certcrypto.ParsePEMPrivateKey(privateKeyBytes)
+		account.key, err = certcrypto.ParsePEMPrivateKey(privateKeyBytes)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			return err
 		}
-		account.key = privateKey
 
-		userAgent := fmt.Sprintf("acme-manager/%s", "1.0")
+		userAgent := fmt.Sprintf("acme-manager/%s", version)
 
 		if account.Registration == nil || account.Registration.Body.Status == "" {
-			client, reg, err := tryRecoverRegistration(privateKey, issuerConf.CADirURL, userAgent)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Trying to recover registration account for private key '%s'", privateKeyPath))
+			client, reg, err := tryRecoverRegistration(account.key, issuerConf.CADirURL, userAgent)
 			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				return fmt.Errorf("Unable to recover registration account for private key '%s'", privateKeyPath)
+			}
 
+			if reg == nil {
 				if issuerConf.EAB {
 					reg, err = client.Registration.RegisterWithExternalAccountBinding(registration.RegisterEABOptions{
 						TermsOfServiceAgreed: true,

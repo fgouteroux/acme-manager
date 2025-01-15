@@ -210,7 +210,7 @@ func main() {
 		Logger:     logger,
 	}
 
-	err = certstore.Setup(logger, cfg)
+	err = certstore.Setup(logger, cfg, version.Version)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
@@ -270,7 +270,7 @@ func main() {
 	}
 
 	// check config file changes
-	go certstore.WatchConfigFileChanges(logger, *checkConfigInterval, *configPath)
+	go certstore.WatchConfigFileChanges(logger, *checkConfigInterval, *configPath, version.Version)
 
 	http.Handle("/", indexHandler("", indexPage))
 	http.HandleFunc("/ring/leader", func(w http.ResponseWriter, req *http.Request) {
