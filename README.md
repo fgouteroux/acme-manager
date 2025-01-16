@@ -146,7 +146,7 @@ Optional Issuer parameters:
 - **http_challenge** (string): http challenge name to use for domain validation
 - **dns_challenge** (string): dns challenge name to use for domain validation
 
-### API
+### Server Mode
 
 Manage certificate with API endpoints in a secured way.
 
@@ -355,26 +355,6 @@ curl -X 'DELETE' \
 
 Token and certificate are retrieved from vault for each get api call.
 
-If `--enable-api` parameter is defined, it disable the certificate config file. 
-
-### Certificate config file mode
-
-Optional certificate parameters:
-- **bundle** (bool): if true, add the issuers certificate to the new certificate
-- **renewal_days** (int): number of days before automatic certificate renewal
-- **days** (int): number of days before certificate expiration
-- **san** (string, comma separated): DNS domain names to add to certificate
-- **http_challenge** (string): http challenge name to use for domain validation
-- **dns_challenge** (string): dns challenge name to use for domain validation
-
-```
-certificate:
-  - domain: testfgx01.example.com
-    issuer: letsencrypt
-
-  - domain: testfgx02.example.com
-    issuer: sectigo
-```
 
 ### Client Mode
 
