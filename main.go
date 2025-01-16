@@ -45,23 +45,18 @@ var (
 	serverReadTimeout       = kingpin.Flag("server.http-read-timeout", "Read timeout for entire HTTP request, including headers and body").Default("300").Int()
 	serverReadHeaderTimeout = kingpin.Flag("server.http-read-header-timeout", "Read timeout for HTTP request headers").Default("10").Int()
 
-	configPath            = kingpin.Flag("config-path", "Config path").Default("config.yml").String()
-	certificateConfigPath = kingpin.Flag("certificate-config-path", "Certificate config path").Default("certificate.yml").String()
-	envConfigPath         = kingpin.Flag("env-config-path", "Environment vars config path").Default(".env").String()
-	enableAPI             = kingpin.Flag("enable-api", "Enables API mode and disable --certificate-config-path parameter.").Bool()
+	configPath    = kingpin.Flag("config-path", "Config path").Default("config.yml").String()
+	envConfigPath = kingpin.Flag("env-config-path", "Environment vars config path").Default(".env").String()
+
+	checkRenewalInterval = kingpin.Flag("check-renewal-interval", "Time interval to check if certificate renewal needed").Default("30m").Duration()
+	checkConfigInterval  = kingpin.Flag("check-config-interval", "Time interval to check if config file changes").Default("30s").Duration()
+	checkTokenInterval   = kingpin.Flag("check-token-interval", "Time interval to check if tokens expired").Default("1m").Duration()
 
 	ringInstanceID             = kingpin.Flag("ring.instance-id", "Instance ID to register in the ring.").String()
 	ringInstanceAddr           = kingpin.Flag("ring.instance-addr", "IP address to advertise in the ring. Default is auto-detected.").String()
 	ringInstancePort           = kingpin.Flag("ring.instance-port", "Port to advertise in the ring.").Default("7946").Int()
 	ringInstanceInterfaceNames = kingpin.Flag("ring.instance-interface-names", "List of network interface names to look up when finding the instance IP address.").String()
 	ringJoinMembers            = kingpin.Flag("ring.join-members", "Other cluster members to join.").String()
-
-	checkRenewalInterval = kingpin.Flag("check-renewal-interval", "Time interval to check if renewal needed").Default("30m").Duration()
-	checkConfigInterval  = kingpin.Flag("check-config-interval", "Time interval to check if config file changes").Default("30s").Duration()
-	checkTokenInterval   = kingpin.Flag("check-token-interval", "Time interval to check if tokens expired").Default("1m").Duration()
-
-	checkCertificateConfigInterval = kingpin.Flag("check-certificate-config-interval", "Time interval to check if certificate config file changes").Default("30s").Duration()
-	checkLocalCertificateInterval  = kingpin.Flag("check-local-certificate-interval", "Time interval to check if local certificate changes").Default("1m").Duration()
 
 	clientMode                 = kingpin.Flag("client", "Enables client mode.").Bool()
 	clientManagerURL           = kingpin.Flag("client.manager-url", "Client manager URL").Default("http://localhost:8989/api/v1").Envar("ACME_MANAGER_URL").String()
@@ -225,59 +220,44 @@ func main() {
 	}
 
 	// build the kv store ring or join it then process certificate check-up
-	err = certstore.OnStartup(logger, *certificateConfigPath, *enableAPI)
+	err = certstore.OnStartup(logger)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 
-	if *enableAPI {
-		// Init proxy http client used to forward request
-		tlsConfig, err := utils.SetTLSConfig(*serverTLSCertFile, *serverTLSKeyFile, *serverTLSClientCAFile, false)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			os.Exit(1)
-		}
-		proxyClient = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
-
-		// metadata certificate
-		http.Handle("GET /api/v1/certificate/metadata", LoggerHandler(certificateMetadataHandler()))
-
-		// certificate
-		http.Handle("PUT /api/v1/certificate", LoggerHandler(updateCertificateHandler()))
-		http.Handle("POST /api/v1/certificate", LoggerHandler(createCertificateHandler()))
-		http.Handle("GET /api/v1/certificate/{issuer}/{domain}", LoggerHandler(getCertificateHandler()))
-		http.Handle("DELETE /api/v1/certificate/{issuer}/{domain}", LoggerHandler(revokeCertificateHandler()))
-
-		// token
-		http.Handle("PUT /api/v1/token/", LoggerHandler(updateTokenHandler()))
-		http.Handle("POST /api/v1/token", LoggerHandler(createTokenHandler()))
-		http.Handle("GET /api/v1/token/{id}", LoggerHandler(getTokenHandler()))
-		http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(revokeTokenHandler()))
-
-		http.Handle("/tokens", LoggerHandler(tokenListHandler()))
-
-		indexPage.AddLinks(metricsWeight, "Tokens", []IndexPageLink{
-			{Desc: "Managed tokens", Path: "/tokens"},
-		})
-		go certstore.WatchTokenExpiration(logger, *checkTokenInterval)
-
-		// renewal certificate
-		go certstore.WatchAPICertExpiration(logger, *checkRenewalInterval)
-
-	} else {
-		// check certificate file changes
-		go certstore.WatchCertificateFileChanges(logger, *checkCertificateConfigInterval, *certificateConfigPath)
-
-		// check kv store cert changes
-		go certstore.WatchRingKvStoreCertChanges(logger)
-
-		// check local certificate
-		go certstore.WatchLocalCertificate(logger, *checkLocalCertificateInterval)
-
-		// renewal certificate
-		go certstore.WatchCertExpiration(logger, *checkRenewalInterval)
+	// Init proxy http client used to forward request
+	tlsConfig, err := utils.SetTLSConfig(*serverTLSCertFile, *serverTLSKeyFile, *serverTLSClientCAFile, false)
+	if err != nil {
+		_ = level.Error(logger).Log("err", err)
+		os.Exit(1)
 	}
+	proxyClient = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+
+	// metadata certificate
+	http.Handle("GET /api/v1/certificate/metadata", LoggerHandler(certificateMetadataHandler()))
+
+	// certificate
+	http.Handle("PUT /api/v1/certificate", LoggerHandler(updateCertificateHandler()))
+	http.Handle("POST /api/v1/certificate", LoggerHandler(createCertificateHandler()))
+	http.Handle("GET /api/v1/certificate/{issuer}/{domain}", LoggerHandler(getCertificateHandler()))
+	http.Handle("DELETE /api/v1/certificate/{issuer}/{domain}", LoggerHandler(revokeCertificateHandler()))
+
+	// token
+	http.Handle("PUT /api/v1/token/", LoggerHandler(updateTokenHandler()))
+	http.Handle("POST /api/v1/token", LoggerHandler(createTokenHandler()))
+	http.Handle("GET /api/v1/token/{id}", LoggerHandler(getTokenHandler()))
+	http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(revokeTokenHandler()))
+
+	http.Handle("/tokens", LoggerHandler(tokenListHandler()))
+
+	indexPage.AddLinks(metricsWeight, "Tokens", []IndexPageLink{
+		{Desc: "Managed tokens", Path: "/tokens"},
+	})
+	go certstore.WatchTokenExpiration(logger, *checkTokenInterval)
+
+	// renewal certificate
+	go certstore.WatchCertExpiration(logger, *checkRenewalInterval)
 
 	// check config file changes
 	go certstore.WatchConfigFileChanges(logger, *checkConfigInterval, *configPath, version.Version)

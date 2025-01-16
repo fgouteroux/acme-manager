@@ -15,7 +15,7 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 
-	cert "github.com/fgouteroux/acme_manager/certificate"
+	"github.com/fgouteroux/acme_manager/certstore"
 )
 
 type Client struct {
@@ -103,8 +103,8 @@ func (c *Client) decodeJSON(resp *http.Response, v interface{}) error {
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
-func (c *Client) GetAllCertificateMetadata() ([]cert.Certificate, error) {
-	var certificate []cert.Certificate
+func (c *Client) GetAllCertificateMetadata() ([]certstore.Certificate, error) {
+	var certificate []certstore.Certificate
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
@@ -127,8 +127,8 @@ func (c *Client) GetAllCertificateMetadata() ([]cert.Certificate, error) {
 	return certificate, nil
 }
 
-func (c *Client) GetCertificateMetadata(issuer, domain string) (cert.Certificate, error) {
-	var certificate cert.Certificate
+func (c *Client) GetCertificateMetadata(issuer, domain string) (certstore.Certificate, error) {
+	var certificate certstore.Certificate
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
@@ -157,8 +157,8 @@ func (c *Client) GetCertificateMetadata(issuer, domain string) (cert.Certificate
 	return certificate, nil
 }
 
-func (c *Client) ReadCertificate(data cert.Certificate) (cert.CertMap, error) {
-	var certificate cert.CertMap
+func (c *Client) ReadCertificate(data certstore.Certificate) (certstore.CertMap, error) {
+	var certificate certstore.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
@@ -190,8 +190,8 @@ func (c *Client) ReadCertificate(data cert.Certificate) (cert.CertMap, error) {
 	return certificate, nil
 }
 
-func (c *Client) CreateCertificate(data cert.Certificate) (cert.CertMap, error) {
-	var certificate cert.CertMap
+func (c *Client) CreateCertificate(data certstore.Certificate) (certstore.CertMap, error) {
+	var certificate certstore.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
@@ -223,8 +223,8 @@ func (c *Client) CreateCertificate(data cert.Certificate) (cert.CertMap, error) 
 	return certificate, nil
 }
 
-func (c *Client) UpdateCertificate(data cert.Certificate) (cert.CertMap, error) {
-	var certificate cert.CertMap
+func (c *Client) UpdateCertificate(data certstore.Certificate) (certstore.CertMap, error) {
+	var certificate certstore.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
@@ -256,7 +256,7 @@ func (c *Client) UpdateCertificate(data cert.Certificate) (cert.CertMap, error) 
 	return certificate, nil
 }
 
-func (c *Client) DeleteCertificate(data cert.Certificate) error {
+func (c *Client) DeleteCertificate(data certstore.Certificate) error {
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 

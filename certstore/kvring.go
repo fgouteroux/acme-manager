@@ -10,12 +10,11 @@ import (
 
 	"github.com/grafana/dskit/kv/memberlist"
 
-	cert "github.com/fgouteroux/acme_manager/certificate"
 	"github.com/fgouteroux/acme_manager/ring"
 )
 
-func (c *CertStore) GetKVRingCert(key string) ([]cert.Certificate, error) {
-	var data []cert.Certificate
+func (c *CertStore) GetKVRingCert(key string) ([]Certificate, error) {
+	var data []Certificate
 
 	content, err := c.GetKVRing(key)
 	if err != nil {
@@ -88,7 +87,7 @@ func (c *CertStore) PutKVRing(key string, data interface{}) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	_ = level.Info(c.Logger).Log("msg", fmt.Sprintf("Updating kv store key '%s'", key))
+	_ = level.Debug(c.Logger).Log("msg", fmt.Sprintf("Updating kv store key '%s'", key))
 
 	content, _ := json.Marshal(data)
 	c.updateKV(key, string(content))

@@ -16,9 +16,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/kv/memberlist"
 
-	cert "github.com/fgouteroux/acme_manager/certificate"
 	"github.com/fgouteroux/acme_manager/certstore"
-	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/ring"
 )
 
@@ -127,7 +125,7 @@ var certificatePageHTML string
 
 type certificateHandlerData struct {
 	Now          time.Time
-	Certificates []cert.Certificate
+	Certificates []certstore.Certificate
 }
 
 func certificateListHandler() http.HandlerFunc {
@@ -188,7 +186,6 @@ var tokenPageHTML string
 
 type tokenHandlerData struct {
 	Now         time.Time
-	DefaultDays int
 	Tokens      map[string]certstore.Token
 }
 
@@ -202,7 +199,6 @@ func tokenListHandler() http.HandlerFunc {
 		v := &tokenHandlerData{
 			Now:         time.Now(),
 			Tokens:      data,
-			DefaultDays: config.GlobalConfig.Common.CertDays,
 		}
 
 		accept := r.Header.Get("Accept")

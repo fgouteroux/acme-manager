@@ -13,7 +13,6 @@ import (
 
 	"github.com/go-kit/log/level"
 
-	cert "github.com/fgouteroux/acme_manager/certificate"
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
@@ -103,7 +102,7 @@ func checkAuth(r *http.Request) (certstore.Token, error) {
 // @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
 // @Param issuer query string false "Certificate issuer" default(letsencrypt)
 // @Param domain query string false "Certificate domain" default(testfgx.example.com)
-// @Success 200 {object} []cert.Certificate
+// @Success 200 {object} []certstore.Certificate
 // @Success 404 {object} responseErrorJSON
 // @Success 500 {object} responseErrorJSON
 // @Router /certificate/metadata [get]
@@ -127,9 +126,9 @@ func certificateMetadataHandler() http.HandlerFunc {
 		issuer := r.URL.Query().Get("issuer")
 		domain := r.URL.Query().Get("domain")
 
-		var metadata []cert.Certificate
+		var metadata []certstore.Certificate
 		if issuer != "" && domain != "" {
-			idx := slices.IndexFunc(data, func(c cert.Certificate) bool {
+			idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
 				return c.Domain == domain && c.Issuer == issuer && c.Owner == tokenValue.Username
 			})
 			if idx == -1 {
@@ -176,7 +175,7 @@ func getCertificateHandler() http.HandlerFunc {
 
 		w.Header().Set("Username", tokenValue.Username)
 
-		certData := &cert.Certificate{
+		certData := &certstore.Certificate{
 			Domain: r.PathValue("domain"),
 			Issuer: r.PathValue("issuer"),
 			Owner:  tokenValue.Username,
@@ -193,7 +192,7 @@ func getCertificateHandler() http.HandlerFunc {
 			return
 		}
 
-		idx := slices.IndexFunc(data, func(c cert.Certificate) bool {
+		idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
 			return c.Domain == certData.Domain && c.Issuer == certData.Issuer
 		})
 
@@ -278,7 +277,7 @@ func createCertificateHandler() http.HandlerFunc {
 
 		// convert request params to certificate object
 		certBytes, _ := json.Marshal(certParams)
-		var certData cert.Certificate
+		var certData certstore.Certificate
 		err = json.Unmarshal(certBytes, &certData)
 		if err != nil {
 			responseJSON(w, nil, err, http.StatusInternalServerError)
@@ -293,7 +292,7 @@ func createCertificateHandler() http.HandlerFunc {
 			return
 		}
 
-		idx := slices.IndexFunc(data, func(c cert.Certificate) bool {
+		idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
 			return c.Domain == certData.Domain && c.Issuer == certData.Issuer
 		})
 
@@ -419,7 +418,7 @@ func updateCertificateHandler() http.HandlerFunc {
 
 		// convert request params to certificate object
 		certBytes, _ := json.Marshal(certParams)
-		var certData cert.Certificate
+		var certData certstore.Certificate
 		err = json.Unmarshal(certBytes, &certData)
 		if err != nil {
 			responseJSON(w, nil, err, http.StatusInternalServerError)
@@ -434,7 +433,7 @@ func updateCertificateHandler() http.HandlerFunc {
 			return
 		}
 
-		idx := slices.IndexFunc(data, func(c cert.Certificate) bool {
+		idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
 			return c.Domain == certData.Domain && c.Issuer == certData.Issuer && c.Owner == certData.Owner
 		})
 
@@ -513,11 +512,21 @@ func updateCertificateHandler() http.HandlerFunc {
 			data = append(data, newCert)
 		} else {
 			data[idx].RenewalDays = certData.RenewalDays
-			err = vault.GlobalClient.PutSecretWithAppRole(secretKeyPath, utils.StructToMapInterface(data[idx]))
+			secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 			if err != nil {
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
+			secret["renewal_days"] = certData.RenewalDays
+			err = vault.GlobalClient.PutSecretWithAppRole(secretKeyPath, utils.StructToMapInterface(secret))
+			if err != nil {
+				responseJSON(w, nil, err, http.StatusInternalServerError)
+				return
+			}
+			// udpate kv store
+			certstore.AmStore.PutKVRing(certstore.AmRingKey, data)
+			responseJSON(w, certstore.MapInterfaceToCertMap(secret), nil, http.StatusOK)
+			return
 		}
 
 		// udpate kv store
@@ -562,7 +571,7 @@ func revokeCertificateHandler() http.HandlerFunc {
 
 		w.Header().Set("Username", tokenValue.Username)
 
-		certData := &cert.Certificate{
+		certData := &certstore.Certificate{
 			Domain: r.PathValue("domain"),
 			Issuer: r.PathValue("issuer"),
 			Owner:  tokenValue.Username,
@@ -579,7 +588,7 @@ func revokeCertificateHandler() http.HandlerFunc {
 			return
 		}
 
-		idx := slices.IndexFunc(data, func(c cert.Certificate) bool {
+		idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
 			return c.Domain == certData.Domain && c.Issuer == certData.Issuer && c.Owner == certData.Owner
 		})
 

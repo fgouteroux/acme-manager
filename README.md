@@ -11,16 +11,15 @@ ACME Manager is a tool designed to create, manage, and deploy ACME certificates 
 - **Vault Storage**: Stores certificates securely in Vault.
 - **DNS/HTTP Challenges**: Supports both challenge methods for domain validation.
 - **Metrics and Monitoring**: Provides application prometheus metrics and a web UI for certificate management.
-- **Automatic refresh**: Configuration and Certificate file are periodically refreshed without any service restart.
-- **Local Certificate**: Ensure that local certificate deployed are always up-to-date.
-- **Local Cmd Run**: Run a custom command once certificate have been created/updated/renewed/deployed.
+- **Automatic refresh**: Configuration file are periodically refreshed without any service restart.
+- **Client Local Certificate**: Ensure that client local certificate deployed are always up-to-date.
+- **Client Local Cmd Run**: Run a custom command once certificate have been created/updated/renewed/deployed on the client.
 
 ## How It Works
 
 1. ACME Manager creates certificates using [ACME](https://datatracker.ietf.org/doc/html/rfc8555).
-2. Certificates are stored securely in Vault and deployed to specified servers.
+2. Certificates are stored securely in Vault.
 3. The application monitors expiration dates and renews certificates as needed. (by default 30d before expiration)
-4. Deployments include optional custom command execution (e.g., reloading services like HAProxy).
 
 
 ### Usage
@@ -37,16 +36,20 @@ Flags:
                                  server tls certificate file
       --server.tls-key-file=SERVER.TLS-KEY-FILE  
                                  server tls key file
+      --server.tls-client-ca-file=SERVER.TLS-CLIENT-CA-FILE  
+                                 Root certificate authority used to verify client certificates
       --server.http-read-timeout=300  
                                  Read timeout for entire HTTP request, including headers and body
       --server.http-read-header-timeout=10  
                                  Read timeout for HTTP request headers
       --config-path="config.yml"  
                                  Config path
-      --certificate-config-path="certificate.yml"  
-                                 Certificate config path
       --env-config-path=".env"   Environment vars config path
-      --[no-]enable-api          Enables API mode and disable --certificate-config-path parameter.
+      --check-renewal-interval=30m  
+                                 Time interval to check if certificate renewal needed
+      --check-config-interval=30s  
+                                 Time interval to check if config file changes
+      --check-token-interval=1m  Time interval to check if tokens expired
       --ring.instance-id=RING.INSTANCE-ID  
                                  Instance ID to register in the ring.
       --ring.instance-addr=RING.INSTANCE-ADDR  
@@ -56,15 +59,6 @@ Flags:
                                  List of network interface names to look up when finding the instance IP address.
       --ring.join-members=RING.JOIN-MEMBERS  
                                  Other cluster members to join.
-      --check-renewal-interval=30m  
-                                 Time interval to check if renewal needed
-      --check-config-interval=30s  
-                                 Time interval to check if config file changes
-      --check-token-interval=1m  Time interval to check if tokens expired
-      --check-certificate-config-interval=30s  
-                                 Time interval to check if certificate config file changes
-      --check-local-certificate-interval=1m  
-                                 Time interval to check if local certificate changes
       --[no-]client              Enables client mode.
       --client.manager-url="http://localhost:8989/api/v1"  
                                  Client manager URL ($ACME_MANAGER_URL)
@@ -97,18 +91,12 @@ One instance of the ring is elected to be the leader and this is the only one wh
 
 If the leader instance goes down, another one will be elected and will start to manage certificates.
 
-Peers are watching the kv store key for changes and deploy/remove local certificates.
-
 ### Env File
 
 Acme Manager load environment variables from .env file.
 It's use to configure the dns challenge as lego library need it.
 
 ### Config file
-
-Local certificate deployment are controlled by `certificate_deploy` in common block.
-
-It is also possible to execute a custom command once certificate have been generated/revoked wih `cmd_enabled`.
 
 Any valid acme issuers could be added in issuer block.
 
@@ -121,11 +109,6 @@ common:
   api_key_hash: 123abc456def
   rootpath_account: /tmp/accounts
   rootpath_certificate: /tmp/certificates
-  certificate_deploy: true
-  certificate_dir: /etc/haproxy/ssl/vault/
-  cmd_enabled: true
-  cmd_run: /usr/bin/systemctl reload haproxy
-  cmd_timeout: 30
 
 issuer:
   sectigo:
@@ -152,15 +135,6 @@ Optional Common parameters:
 - **api_key_hash** (string):  the api key hash used to manage tokens, required when api mode is enabled.
 - **cert_days** (int): Number of days before certificate expired (default: 90).
 - **cert_days_renewal** (int): Number of days before certificate should be renewed (default: 30).
-- **certificate_deploy** (bool): If set to true, deploy certificate and private key in given `certificate_dir`
-- **certificate_dir** (string): Directory in which to deploy issuers certificates and private keys
-- **certificate_dir_perm** (uint32): Unix permission for certificate directory in octal format (default: 0700)
-- **certificate_file_perm** (uint32): Unix permission for certificate file in octal format (default: 0600)
-- **certificate_keyfile_perm** (uint32): Unix permission for certificate key file in octal format (default: 0600)
-- **cmd_enabled** (bool): If set to true, run a custom command after deploying certificates.
-- **cmd_run** (string):  Command to run.
-- **cmd_timeout** (int): Command timeout.
-- **prune_certificate** (bool): If set to true, revoke certificate found in vault storage and not decalred in certificate file.
 
 Optional Issuer parameters:
 - **eab** (bool): Use External Account Binding for account registration. Requires `kid` and `hmac`.
@@ -169,7 +143,7 @@ Optional Issuer parameters:
 - **http_challenge** (string): http challenge name to use for domain validation
 - **dns_challenge** (string): dns challenge name to use for domain validation
 
-### API mode
+### API
 
 Manage certificate with API endpoints in a secured way.
 
@@ -407,6 +381,10 @@ It need the acme manager server url and a token.
 
 The client start with reading the config file, check certificates from acme manager server and deploy them.
 It regulary check if certificate have been renewed/changed and redeploy them.
+
+Local certificate deployment are controlled by `certificate_deploy` in common block.
+
+It is also possible to execute a custom command once certificate have been generated/revoked wih `cmd_enabled`.
 
 The client start a webserver to expose some metrics.
 
