@@ -43,10 +43,10 @@ type CertStore struct {
 }
 
 type Token struct {
-	Hash     string   `json:"hash"`
-	Scope    []string `json:"scope"`
-	Username string   `json:"username"`
-	Expires  string   `json:"expires"`
+	TokenHash string   `json:"tokenHash"`
+	Scope     []string `json:"scope"`
+	Username  string   `json:"username"`
+	Expires   string   `json:"expires"`
 }
 
 type MapDiff struct {
@@ -79,9 +79,6 @@ func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resou
 }
 
 func kvStore(data cert.Certificate, cert, key []byte) (cert.Certificate, error) {
-	//Override this key to avoid kvring changes
-	data.RenewalDays = 0
-
 	if len(cert) > 0 {
 		x509Cert, err := certcrypto.ParsePEMCertificate(cert)
 		if err != nil {
@@ -337,17 +334,20 @@ func CreateRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 	// save in local in case of vault failure
 	SaveResource(logger, baseCertificateFilePath, resource)
 
-	data := &cert.CertMap{
-		Cert:     string(resource.Certificate),
-		Key:      string(resource.PrivateKey),
-		CAIssuer: string(resource.IssuerCertificate),
-		Issuer:   certData.Issuer,
-		URL:      resource.CertStableURL,
-		Domain:   resource.Domain,
-		Owner:    certData.Owner,
+	newCert, err = kvStore(certData, resource.Certificate, resource.PrivateKey)
+	if err != nil {
+		return newCert, err
 	}
 
-	err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, structToMapInterface(data))
+	data := cert.CertMap{
+		Certificate: newCert,
+		Cert:        string(resource.Certificate),
+		Key:         string(resource.PrivateKey),
+		CAIssuer:    string(resource.IssuerCertificate),
+		URL:         resource.CertStableURL,
+	}
+
+	err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return newCert, err
@@ -356,11 +356,6 @@ func CreateRemoteCertificateResource(certData cert.Certificate, logger log.Logge
 	err = os.RemoveAll(baseCertificateFilePath)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
-	}
-
-	newCert, err = kvStore(certData, resource.Certificate, resource.PrivateKey)
-	if err != nil {
-		return newCert, err
 	}
 
 	return newCert, nil
@@ -609,13 +604,6 @@ func CheckAPICertExpiration(amStore *CertStore, logger log.Logger) error {
 		amStore.PutKVRing(AmRingKey, dataCopy)
 	}
 	return nil
-}
-
-func structToMapInterface(data interface{}) map[string]interface{} {
-	val, _ := json.Marshal(data)
-	var result map[string]interface{}
-	_ = json.Unmarshal(val, &result)
-	return result
 }
 
 func MapInterfaceToCertMap(data map[string]interface{}) cert.CertMap {

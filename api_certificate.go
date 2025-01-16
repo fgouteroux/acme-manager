@@ -87,7 +87,7 @@ func checkAuth(r *http.Request) (certstore.Token, error) {
 
 	reqTokenHash := utils.SHA1Hash(token[1])
 
-	if tokenExists && reqTokenHash != tokenValue.Hash {
+	if tokenExists && reqTokenHash != tokenValue.TokenHash {
 		return tokenValue, fmt.Errorf("Invalid token")
 	}
 	return tokenValue, nil
@@ -407,7 +407,7 @@ func updateCertificateHandler() http.HandlerFunc {
 			return
 		}
 
-		if certParams.RenewalDays >= certParams.Days {
+		if certParams.Days != 0 && certParams.RenewalDays >= certParams.Days {
 			responseJSON(w, nil, fmt.Errorf("'renewal_days' (%d) should be lower than 'days' (%d)", certParams.RenewalDays, certParams.Days), http.StatusBadRequest)
 			return
 		}
@@ -475,27 +475,54 @@ func updateCertificateHandler() http.HandlerFunc {
 			return
 		}
 
-		err = certstore.DeleteRemoteCertificateResource(certData.Domain, certData.Issuer, certstore.AmStore.Logger)
-		if err != nil {
-			responseJSON(w, nil, err, http.StatusInternalServerError)
-			return
-		}
-		metrics.DecManagedCertificate(certData.Issuer)
+		secretKeyPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Issuer, certData.Domain)
 
-		data = slices.Delete(data, idx, idx+1)
-
-		newCert, err := certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
-		if err != nil {
-			responseJSON(w, nil, err, http.StatusInternalServerError)
-			return
+		var recreateCert bool
+		if certData.SAN != data[idx].SAN {
+			recreateCert = true
 		}
-		metrics.IncManagedCertificate(certData.Issuer)
-		data = append(data, newCert)
+		if certData.Days != data[idx].Days {
+			recreateCert = true
+		}
+		if certData.Bundle != data[idx].Bundle {
+			recreateCert = true
+		}
+		if certData.DNSChallenge != data[idx].DNSChallenge {
+			recreateCert = true
+		}
+		if certData.HTTPChallenge != data[idx].HTTPChallenge {
+			recreateCert = true
+		}
+
+		if recreateCert {
+			err = certstore.DeleteRemoteCertificateResource(certData.Domain, certData.Issuer, certstore.AmStore.Logger)
+			if err != nil {
+				responseJSON(w, nil, err, http.StatusInternalServerError)
+				return
+			}
+			metrics.DecManagedCertificate(certData.Issuer)
+
+			data = slices.Delete(data, idx, idx+1)
+
+			newCert, err := certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
+			if err != nil {
+				responseJSON(w, nil, err, http.StatusInternalServerError)
+				return
+			}
+			metrics.IncManagedCertificate(certData.Issuer)
+			data = append(data, newCert)
+		} else {
+			data[idx].RenewalDays = certData.RenewalDays
+			err = vault.GlobalClient.PutSecretWithAppRole(secretKeyPath, utils.StructToMapInterface(data[idx]))
+			if err != nil {
+				responseJSON(w, nil, err, http.StatusInternalServerError)
+				return
+			}
+		}
 
 		// udpate kv store
 		certstore.AmStore.PutKVRing(certstore.AmRingKey, data)
 
-		secretKeyPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Issuer, certData.Domain)
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 		if err != nil {
 			responseJSON(w, nil, err, http.StatusInternalServerError)

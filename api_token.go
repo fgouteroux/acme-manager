@@ -183,10 +183,10 @@ func createTokenHandler() http.HandlerFunc {
 		}
 
 		data[ID] = certstore.Token{
-			Hash:     tokenHash,
-			Scope:    token.Scope,
-			Username: token.Username,
-			Expires:  expires,
+			TokenHash: tokenHash,
+			Scope:     token.Scope,
+			Username:  token.Username,
+			Expires:   expires,
 		}
 
 		// udpate kv store
@@ -308,10 +308,10 @@ func updateTokenHandler() http.HandlerFunc {
 		}
 
 		data[token.ID] = certstore.Token{
-			Hash:     tokenHash,
-			Scope:    token.Scope,
-			Username: token.Username,
-			Expires:  expires,
+			TokenHash: tokenHash,
+			Scope:     token.Scope,
+			Username:  token.Username,
+			Expires:   expires,
 		}
 
 		// udpate kv store

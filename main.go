@@ -122,9 +122,9 @@ func main() {
 		acmeClient, err := restclient.NewClient(
 			*clientManagerURL,
 			*clientManagerToken,
-			*clientManagerTLSCAFile,
 			*clientManagerTLSCertFile,
 			*clientManagerTLSKeyFile,
+			*clientManagerTLSCAFile,
 			*clientManagerTLSSkipVerify,
 		)
 		if err != nil {

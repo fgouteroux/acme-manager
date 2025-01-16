@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -74,6 +75,13 @@ func RandomStringCrypto(length int) (string, error) {
 	}
 
 	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
+}
+
+func StructToMapInterface(data interface{}) map[string]interface{} {
+	val, _ := json.Marshal(data)
+	var result map[string]interface{}
+	_ = json.Unmarshal(val, &result)
+	return result
 }
 
 // Get sha1 from string

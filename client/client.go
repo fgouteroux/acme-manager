@@ -24,6 +24,10 @@ var (
 )
 
 func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Client) {
+	if !certConfig.Common.CertDeploy {
+		return
+	}
+
 	certificates, err := acmeClient.GetAllCertificateMetadata()
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
@@ -175,7 +179,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff certstore.MapDiff,
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' deleted", certData.Domain))
 		metrics.DecManagedCertificate(certData.Issuer)
 		if certConfig.Common.CertDeploy {
-			deleteLocalCertificateResource(cert.CertMap{Issuer: certData.Issuer, Domain: certData.Domain}, logger)
+			deleteLocalCertificateResource(cert.CertMap{Certificate: certData}, logger)
 		}
 	}
 
@@ -274,11 +278,16 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 		if idx == -1 {
 			newCertList = append(newCertList, certData)
 		} else {
-
-			// Ignoring this field
-			certData.RenewalDays = 0
-
 			var toUpdate bool
+			if certData.RenewalDays != old[idx].RenewalDays {
+				toUpdate = true
+				_ = level.Info(logger).Log("msg", fmt.Sprintf(
+					"Certificate '%s' renewal_days changed from '%d' to '%d'.",
+					certData.Domain,
+					old[idx].RenewalDays,
+					certData.RenewalDays,
+				))
+			}
 			if certData.SAN != old[idx].SAN {
 				toUpdate = true
 				_ = level.Info(logger).Log("msg", fmt.Sprintf(
@@ -304,6 +313,24 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 					certData.Domain,
 					old[idx].Bundle,
 					certData.Bundle,
+				))
+			}
+			if certData.DNSChallenge != old[idx].DNSChallenge {
+				toUpdate = true
+				_ = level.Info(logger).Log("msg", fmt.Sprintf(
+					"Certificate '%s' dns_challenge changed from '%s' to '%s'.",
+					certData.Domain,
+					old[idx].DNSChallenge,
+					certData.DNSChallenge,
+				))
+			}
+			if certData.HTTPChallenge != old[idx].HTTPChallenge {
+				toUpdate = true
+				_ = level.Info(logger).Log("msg", fmt.Sprintf(
+					"Certificate '%s' http_challenge changed from '%s' to '%s'.",
+					certData.Domain,
+					old[idx].HTTPChallenge,
+					certData.HTTPChallenge,
 				))
 			}
 

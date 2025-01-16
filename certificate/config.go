@@ -57,11 +57,9 @@ type Certificate struct {
 }
 
 type CertMap struct {
+	Certificate
 	Cert     string `json:"cert" example:"LS0tLS1CRUdJTiBDR..."`
 	Key      string `json:"key"  example:"LS0tLS1CRUdJTiBSU..."`
 	CAIssuer string `json:"ca_issuer" example:"Ci0tLS0tQkVHSU4gQ0..."`
-	Issuer   string `json:"issuer" example:"letsencrypt"`
 	URL      string `json:"url" example:"https://acme-staging-v02.api.letsencrypt.org/acme/cert/4b63b4e8b6109"`
-	Domain   string `json:"domain" example:"testfgx.example.com"`
-	Owner    string `json:"owner" example:"testfgx"`
 }

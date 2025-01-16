@@ -1,6 +1,7 @@
 package certstore
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -84,19 +85,7 @@ func OnStartup(logger log.Logger, configPath string, enableAPI bool) error {
 					return c.Domain == certData.Domain && c.Issuer == certData.Issuer
 				})
 
-				if idx >= 0 {
-					c := vaultCertList[idx]
-					c.Bundle = certData.Bundle
-					c.SAN = certData.SAN
-
-					if certData.Days == 0 {
-						c.Days = config.GlobalConfig.Common.CertDays
-					} else {
-						c.Days = certData.Days
-					}
-
-					content = append(content, c)
-				} else {
+				if idx == -1 {
 					newCert, err := CreateRemoteCertificateResource(certData, logger)
 					if err != nil {
 						_ = level.Error(logger).Log("err", err)
@@ -184,16 +173,6 @@ func getVaultAllCertificate(logger log.Logger) []cert.Certificate {
 		var vaultCertCount int
 		for _, secretKey := range vaultSecrets {
 			secretKeyPath := config.GlobalConfig.Storage.Vault.CertPrefix + "/" + secretKey
-
-			secretKeyPathArr := strings.Split(secretKeyPath, "/")
-			issuer := secretKeyPathArr[len(secretKeyPathArr)-2]
-			name := secretKeyPathArr[len(secretKeyPathArr)-1]
-
-			tmp := cert.Certificate{
-				Domain: name,
-				Issuer: issuer,
-			}
-
 			secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -215,13 +194,17 @@ func getVaultAllCertificate(logger log.Logger) []cert.Certificate {
 				continue
 			}
 
-			if owner, ok := secret["owner"]; ok {
-				tmp.Owner = owner.(string)
-			}
-
-			vaultCert, err := kvStore(tmp, vaultCertBytes, vaultKeyBytes)
+			val, err := json.Marshal(secret)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+
+			var vaultCert cert.Certificate
+			err = json.Unmarshal(val, &vaultCert)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
 			}
 
 			var certBytes, keyBytes []byte
@@ -248,7 +231,7 @@ func getVaultAllCertificate(logger log.Logger) []cert.Certificate {
 			}
 
 			if config.GlobalConfig.Common.CertDeploy {
-				currentCert, err := kvStore(tmp, certBytes, keyBytes)
+				currentCert, err := kvStore(vaultCert, certBytes, keyBytes)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
 				}
@@ -299,7 +282,6 @@ func getVaultAllToken(logger log.Logger) map[string]Token {
 			secretKeyPath := config.GlobalConfig.Storage.Vault.TokenPrefix + "/" + secretKey
 
 			secretKeyPathArr := strings.Split(secretKeyPath, "/")
-			username := secretKeyPathArr[len(secretKeyPathArr)-2]
 			ID := secretKeyPathArr[len(secretKeyPathArr)-1]
 
 			secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
@@ -308,15 +290,22 @@ func getVaultAllToken(logger log.Logger) map[string]Token {
 				continue
 			}
 
-			var scope []string
-			if secret["scope"] != nil {
-				for _, item := range secret["scope"].([]interface{}) {
-					scope = append(scope, item.(string))
-				}
-
-				tokenMap[ID] = Token{Hash: secret["tokenHash"].(string), Scope: scope, Username: username, Expires: secret["expires"].(string)}
-				vaultTokenCount++
+			val, err := json.Marshal(secret)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
 			}
+
+			var token Token
+			err = json.Unmarshal(val, &token)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+
+			tokenMap[ID] = token
+			vaultTokenCount++
+
 		}
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d tokens from vault", vaultTokenCount))
 	} else {

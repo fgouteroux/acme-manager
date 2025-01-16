@@ -59,12 +59,12 @@ func setTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Confi
 	return tlsConfig, nil
 }
 
-func NewClient(baseURL, token, caFile, certFile, keyFile string, insecure bool) (*Client, error) {
+func NewClient(baseURL, token, certFile, keyFile, caFile string, insecure bool) (*Client, error) {
 	var client Client
 	retryClient := retryablehttp.NewClient()
 	retryClient.Logger = nil
 
-	tlsConfig, err := setTLSConfig(caFile, certFile, keyFile, insecure)
+	tlsConfig, err := setTLSConfig(certFile, keyFile, caFile, insecure)
 	if err != nil {
 		return &client, err
 	}
