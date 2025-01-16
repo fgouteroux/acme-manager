@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"encoding/base64"
@@ -44,7 +44,7 @@ type TokenParams struct {
 // @Success 500 {object} responseErrorJSON
 // @Router /token/{id} [get]
 // @security APIKeyAuth
-func getTokenHandler() http.HandlerFunc {
+func GetTokenHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
@@ -91,7 +91,7 @@ func getTokenHandler() http.HandlerFunc {
 // @Success 500 {object} responseErrorJSON
 // @Router /token [post]
 // @security APIKeyAuth
-func createTokenHandler() http.HandlerFunc {
+func CreateTokenHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
@@ -211,7 +211,7 @@ func createTokenHandler() http.HandlerFunc {
 // @Success 500 {object} responseErrorJSON
 // @Router /token [put]
 // @security APIKeyAuth
-func updateTokenHandler() http.HandlerFunc {
+func UpdateTokenHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
@@ -335,7 +335,7 @@ func updateTokenHandler() http.HandlerFunc {
 // @Success 500 {object} responseErrorJSON
 // @Router /token/{id} [delete]
 // @security APIKeyAuth
-func revokeTokenHandler() http.HandlerFunc {
+func RevokeTokenHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {

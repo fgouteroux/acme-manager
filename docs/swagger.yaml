@@ -1,15 +1,87 @@
 basePath: /api/v1
 definitions:
-  certificate.CertMap:
+  api.CertificateParams:
     properties:
+      bundle:
+        example: false
+        type: boolean
+      days:
+        example: 90
+        type: integer
+      dns_challenge:
+        example: ns1
+        type: string
+      domain:
+        example: testfgx.example.com
+        type: string
+      http_challenge:
+        example: ""
+        type: string
+      issuer:
+        example: letsencrypt
+        type: string
+      renewal_days:
+        example: 30
+        type: integer
+      san:
+        example: ""
+        type: string
+    type: object
+  api.TokenParams:
+    properties:
+      expires:
+        example: 30d
+        type: string
+      id:
+        example: 021b5075-2d1e-44bd-b5e5-ffc7be7ad4c3
+        type: string
+      scope:
+        example:
+        - read
+        - create
+        - update
+        - delete
+        items:
+          type: string
+        type: array
+      username:
+        example: testfgx
+        type: string
+    type: object
+  api.responseErrorJSON:
+    properties:
+      error:
+        example: error
+        type: string
+    type: object
+  certstore.CertMap:
+    properties:
+      bundle:
+        example: false
+        type: boolean
       ca_issuer:
         example: Ci0tLS0tQkVHSU4gQ0...
         type: string
       cert:
         example: LS0tLS1CRUdJTiBDR...
         type: string
+      days:
+        example: 90
+        type: integer
+      dns_challenge:
+        example: ns1
+        type: string
       domain:
         example: testfgx.example.com
+        type: string
+      expires:
+        example: 2025-04-09 09:56:34 +0000 UTC
+        type: string
+      fingerprint:
+        example: 3c7bccea1992d5095e7ab8c38f247352cd75ff26cdb95972d34ad54ebcef36af
+        type: string
+      http_challenge:
+        example: ""
         type: string
       issuer:
         example: letsencrypt
@@ -17,14 +89,23 @@ definitions:
       key:
         example: LS0tLS1CRUdJTiBSU...
         type: string
+      key_fingerprint:
+        example: 031312e2ea90eb8070c8da352c048171075f2ecfa3f300354bacc497e02247fc
+        type: string
       owner:
         example: testfgx
+        type: string
+      renewal_days:
+        example: 30
+        type: integer
+      san:
+        example: ""
         type: string
       url:
         example: https://acme-staging-v02.api.letsencrypt.org/acme/cert/4b63b4e8b6109
         type: string
     type: object
-  certificate.Certificate:
+  certstore.Certificate:
     properties:
       bundle:
         example: false
@@ -67,67 +148,13 @@ definitions:
     properties:
       expires:
         type: string
-      hash:
-        type: string
       scope:
         items:
           type: string
         type: array
+      tokenHash:
+        type: string
       username:
-        type: string
-    type: object
-  main.CertificateParams:
-    properties:
-      bundle:
-        example: false
-        type: boolean
-      days:
-        example: 90
-        type: integer
-      dns_challenge:
-        example: ns1
-        type: string
-      domain:
-        example: testfgx.example.com
-        type: string
-      http_challenge:
-        example: ""
-        type: string
-      issuer:
-        example: letsencrypt
-        type: string
-      renewal_days:
-        example: 30
-        type: integer
-      san:
-        example: ""
-        type: string
-    type: object
-  main.TokenParams:
-    properties:
-      expires:
-        example: 30d
-        type: string
-      id:
-        example: 021b5075-2d1e-44bd-b5e5-ffc7be7ad4c3
-        type: string
-      scope:
-        example:
-        - read
-        - create
-        - update
-        - delete
-        items:
-          type: string
-        type: array
-      username:
-        example: testfgx
-        type: string
-    type: object
-  main.responseErrorJSON:
-    properties:
-      error:
-        example: error
         type: string
     type: object
 info:
@@ -156,38 +183,38 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/main.CertificateParams'
+          $ref: '#/definitions/api.CertificateParams'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/certificate.CertMap'
+            $ref: '#/definitions/certstore.CertMap'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "429":
           description: Too Many Requests
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "502":
           description: Bad Gateway
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
       summary: Create certificate
       tags:
       - certificate
@@ -206,42 +233,42 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/main.CertificateParams'
+          $ref: '#/definitions/api.CertificateParams'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/certificate.CertMap'
+            $ref: '#/definitions/certstore.CertMap'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "429":
           description: Too Many Requests
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "502":
           description: Bad Gateway
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
       summary: Update certificate
       tags:
       - certificate
@@ -275,31 +302,31 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "429":
           description: Too Many Requests
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "502":
           description: Bad Gateway
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
       summary: Revoke certificate
       tags:
       - certificate
@@ -331,27 +358,27 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/certificate.CertMap'
+            $ref: '#/definitions/certstore.CertMap'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
       summary: Read certificate
       tags:
       - certificate
@@ -382,16 +409,16 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/certificate.Certificate'
+              $ref: '#/definitions/certstore.Certificate'
             type: array
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
       summary: Read metadata certificate
       tags:
       - metadata certificate
@@ -404,7 +431,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/main.TokenParams'
+          $ref: '#/definitions/api.TokenParams'
       produces:
       - application/json
       responses:
@@ -416,15 +443,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
       security:
       - APIKeyAuth: []
       summary: Create token
@@ -439,7 +466,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/main.TokenParams'
+          $ref: '#/definitions/api.TokenParams'
       produces:
       - application/json
       responses:
@@ -451,19 +478,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "429":
           description: Too Many Requests
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
       security:
       - APIKeyAuth: []
       summary: Update token
@@ -486,15 +513,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
       security:
       - APIKeyAuth: []
       summary: Revoke token
@@ -518,19 +545,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/main.responseErrorJSON'
+            $ref: '#/definitions/api.responseErrorJSON'
       security:
       - APIKeyAuth: []
       summary: Read token

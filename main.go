@@ -24,6 +24,7 @@ import (
 
 	httpSwagger "github.com/swaggo/http-swagger"
 
+	"github.com/fgouteroux/acme_manager/api"
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/client"
 	"github.com/fgouteroux/acme_manager/config"
@@ -68,8 +69,7 @@ var (
 	clientConfigPath           = kingpin.Flag("client.config-path", "Client config path").Default("client-config.yml").String()
 	clientCheckConfigInterval  = kingpin.Flag("client.check-config-interval", "Time interval to check if client config file changes and to update local certificate file").Default("1m").Duration()
 
-	logger      log.Logger
-	proxyClient *http.Client
+	logger log.Logger
 )
 
 // @title acme manager
@@ -232,22 +232,22 @@ func main() {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
-	proxyClient = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+	proxyClient := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
 
 	// metadata certificate
-	http.Handle("GET /api/v1/certificate/metadata", LoggerHandler(certificateMetadataHandler()))
+	http.Handle("GET /api/v1/certificate/metadata", LoggerHandler(api.CertificateMetadataHandler()))
 
 	// certificate
-	http.Handle("PUT /api/v1/certificate", LoggerHandler(updateCertificateHandler()))
-	http.Handle("POST /api/v1/certificate", LoggerHandler(createCertificateHandler()))
-	http.Handle("GET /api/v1/certificate/{issuer}/{domain}", LoggerHandler(getCertificateHandler()))
-	http.Handle("DELETE /api/v1/certificate/{issuer}/{domain}", LoggerHandler(revokeCertificateHandler()))
+	http.Handle("PUT /api/v1/certificate", LoggerHandler(api.UpdateCertificateHandler(logger, proxyClient)))
+	http.Handle("POST /api/v1/certificate", LoggerHandler(api.CreateCertificateHandler(logger, proxyClient)))
+	http.Handle("GET /api/v1/certificate/{issuer}/{domain}", LoggerHandler(api.GetCertificateHandler()))
+	http.Handle("DELETE /api/v1/certificate/{issuer}/{domain}", LoggerHandler(api.RevokeCertificateHandler(logger, proxyClient)))
 
 	// token
-	http.Handle("PUT /api/v1/token/", LoggerHandler(updateTokenHandler()))
-	http.Handle("POST /api/v1/token", LoggerHandler(createTokenHandler()))
-	http.Handle("GET /api/v1/token/{id}", LoggerHandler(getTokenHandler()))
-	http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(revokeTokenHandler()))
+	http.Handle("PUT /api/v1/token/", LoggerHandler(api.UpdateTokenHandler()))
+	http.Handle("POST /api/v1/token", LoggerHandler(api.CreateTokenHandler()))
+	http.Handle("GET /api/v1/token/{id}", LoggerHandler(api.GetTokenHandler()))
+	http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(api.RevokeTokenHandler()))
 
 	http.Handle("/tokens", LoggerHandler(tokenListHandler()))
 

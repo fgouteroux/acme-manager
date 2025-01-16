@@ -47,7 +47,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/main.CertificateParams"
+                            "$ref": "#/definitions/api.CertificateParams"
                         }
                     }
                 ],
@@ -55,49 +55,49 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/certificate.CertMap"
+                            "$ref": "#/definitions/certstore.CertMap"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "429": {
                         "description": "Too Many Requests",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     }
                 }
@@ -126,7 +126,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/main.CertificateParams"
+                            "$ref": "#/definitions/api.CertificateParams"
                         }
                     }
                 ],
@@ -134,43 +134,43 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/certificate.CertMap"
+                            "$ref": "#/definitions/certstore.CertMap"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "429": {
                         "description": "Too Many Requests",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     }
                 }
@@ -216,20 +216,20 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/certificate.Certificate"
+                                "$ref": "#/definitions/certstore.Certificate"
                             }
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     }
                 }
@@ -275,37 +275,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/certificate.CertMap"
+                            "$ref": "#/definitions/certstore.CertMap"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     }
                 }
@@ -352,43 +352,43 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "429": {
                         "description": "Too Many Requests",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     }
                 }
@@ -416,7 +416,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/main.TokenParams"
+                            "$ref": "#/definitions/api.TokenParams"
                         }
                     }
                 ],
@@ -431,25 +431,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "429": {
                         "description": "Too Many Requests",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     }
                 }
@@ -475,7 +475,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/main.TokenParams"
+                            "$ref": "#/definitions/api.TokenParams"
                         }
                     }
                 ],
@@ -490,19 +490,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     }
                 }
@@ -542,25 +542,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     }
                 }
@@ -595,19 +595,19 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/main.responseErrorJSON"
+                            "$ref": "#/definitions/api.responseErrorJSON"
                         }
                     }
                 }
@@ -615,9 +615,88 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "certificate.CertMap": {
+        "api.CertificateParams": {
             "type": "object",
             "properties": {
+                "bundle": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "days": {
+                    "type": "integer",
+                    "example": 90
+                },
+                "dns_challenge": {
+                    "type": "string",
+                    "example": "ns1"
+                },
+                "domain": {
+                    "type": "string",
+                    "example": "testfgx.example.com"
+                },
+                "http_challenge": {
+                    "type": "string",
+                    "example": ""
+                },
+                "issuer": {
+                    "type": "string",
+                    "example": "letsencrypt"
+                },
+                "renewal_days": {
+                    "type": "integer",
+                    "example": 30
+                },
+                "san": {
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "api.TokenParams": {
+            "type": "object",
+            "properties": {
+                "expires": {
+                    "type": "string",
+                    "example": "30d"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "021b5075-2d1e-44bd-b5e5-ffc7be7ad4c3"
+                },
+                "scope": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "read",
+                        "create",
+                        "update",
+                        "delete"
+                    ]
+                },
+                "username": {
+                    "type": "string",
+                    "example": "testfgx"
+                }
+            }
+        },
+        "api.responseErrorJSON": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "error"
+                }
+            }
+        },
+        "certstore.CertMap": {
+            "type": "object",
+            "properties": {
+                "bundle": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "ca_issuer": {
                     "type": "string",
                     "example": "Ci0tLS0tQkVHSU4gQ0..."
@@ -626,9 +705,29 @@ const docTemplate = `{
                     "type": "string",
                     "example": "LS0tLS1CRUdJTiBDR..."
                 },
+                "days": {
+                    "type": "integer",
+                    "example": 90
+                },
+                "dns_challenge": {
+                    "type": "string",
+                    "example": "ns1"
+                },
                 "domain": {
                     "type": "string",
                     "example": "testfgx.example.com"
+                },
+                "expires": {
+                    "type": "string",
+                    "example": "2025-04-09 09:56:34 +0000 UTC"
+                },
+                "fingerprint": {
+                    "type": "string",
+                    "example": "3c7bccea1992d5095e7ab8c38f247352cd75ff26cdb95972d34ad54ebcef36af"
+                },
+                "http_challenge": {
+                    "type": "string",
+                    "example": ""
                 },
                 "issuer": {
                     "type": "string",
@@ -638,9 +737,21 @@ const docTemplate = `{
                     "type": "string",
                     "example": "LS0tLS1CRUdJTiBSU..."
                 },
+                "key_fingerprint": {
+                    "type": "string",
+                    "example": "031312e2ea90eb8070c8da352c048171075f2ecfa3f300354bacc497e02247fc"
+                },
                 "owner": {
                     "type": "string",
                     "example": "testfgx"
+                },
+                "renewal_days": {
+                    "type": "integer",
+                    "example": 30
+                },
+                "san": {
+                    "type": "string",
+                    "example": ""
                 },
                 "url": {
                     "type": "string",
@@ -648,7 +759,7 @@ const docTemplate = `{
                 }
             }
         },
-        "certificate.Certificate": {
+        "certstore.Certificate": {
             "type": "object",
             "properties": {
                 "bundle": {
@@ -707,92 +818,17 @@ const docTemplate = `{
                 "expires": {
                     "type": "string"
                 },
-                "hash": {
-                    "type": "string"
-                },
                 "scope": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
+                "tokenHash": {
+                    "type": "string"
+                },
                 "username": {
                     "type": "string"
-                }
-            }
-        },
-        "main.CertificateParams": {
-            "type": "object",
-            "properties": {
-                "bundle": {
-                    "type": "boolean",
-                    "example": false
-                },
-                "days": {
-                    "type": "integer",
-                    "example": 90
-                },
-                "dns_challenge": {
-                    "type": "string",
-                    "example": "ns1"
-                },
-                "domain": {
-                    "type": "string",
-                    "example": "testfgx.example.com"
-                },
-                "http_challenge": {
-                    "type": "string",
-                    "example": ""
-                },
-                "issuer": {
-                    "type": "string",
-                    "example": "letsencrypt"
-                },
-                "renewal_days": {
-                    "type": "integer",
-                    "example": 30
-                },
-                "san": {
-                    "type": "string",
-                    "example": ""
-                }
-            }
-        },
-        "main.TokenParams": {
-            "type": "object",
-            "properties": {
-                "expires": {
-                    "type": "string",
-                    "example": "30d"
-                },
-                "id": {
-                    "type": "string",
-                    "example": "021b5075-2d1e-44bd-b5e5-ffc7be7ad4c3"
-                },
-                "scope": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "read",
-                        "create",
-                        "update",
-                        "delete"
-                    ]
-                },
-                "username": {
-                    "type": "string",
-                    "example": "testfgx"
-                }
-            }
-        },
-        "main.responseErrorJSON": {
-            "type": "object",
-            "properties": {
-                "error": {
-                    "type": "string",
-                    "example": "error"
                 }
             }
         }

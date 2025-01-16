@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
 	"github.com/fgouteroux/acme_manager/certstore"
@@ -120,7 +121,7 @@ func checkAuth(r *http.Request) (certstore.Token, error) {
 // @Success 404 {object} responseErrorJSON
 // @Success 500 {object} responseErrorJSON
 // @Router /certificate/metadata [get]
-func certificateMetadataHandler() http.HandlerFunc {
+func CertificateMetadataHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		tokenValue, err := checkAuth(r)
@@ -172,14 +173,14 @@ func certificateMetadataHandler() http.HandlerFunc {
 // @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
 // @Param issuer path string true "Certificate issuer" default(letsencrypt)
 // @Param domain path string true "Certificate domain" default(testfgx.example.com)
-// @Success 200 {object} cert.CertMap
+// @Success 200 {object} certstore.CertMap
 // @Success 400 {object} responseErrorJSON
 // @Success 401 {object} responseErrorJSON
 // @Success 403 {object} responseErrorJSON
 // @Success 404 {object} responseErrorJSON
 // @Success 500 {object} responseErrorJSON
 // @Router /certificate/{issuer}/{domain} [get]
-func getCertificateHandler() http.HandlerFunc {
+func GetCertificateHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
 		if err != nil {
@@ -243,7 +244,7 @@ func getCertificateHandler() http.HandlerFunc {
 // @Produce  application/json
 // @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
 // @Param body body CertificateParams true "Certificate body"
-// @Success 201 {object} cert.CertMap
+// @Success 201 {object} certstore.CertMap
 // @Success 400 {object} responseErrorJSON
 // @Success 401 {object} responseErrorJSON
 // @Success 403 {object} responseErrorJSON
@@ -251,7 +252,7 @@ func getCertificateHandler() http.HandlerFunc {
 // @Success 500 {object} responseErrorJSON
 // @Success 502 {object} responseErrorJSON
 // @Router /certificate [post]
-func createCertificateHandler() http.HandlerFunc {
+func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
 		if err != nil {
@@ -325,7 +326,7 @@ func createCertificateHandler() http.HandlerFunc {
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
 			body, _ := json.Marshal(certData)
 			r.Body = io.NopCloser(bytes.NewReader(body))
-			forwardRequest(host, w, r)
+			forwardRequest(proxyClient, host, w, r)
 			return
 		}
 
@@ -383,7 +384,7 @@ func createCertificateHandler() http.HandlerFunc {
 // @Produce  application/json
 // @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
 // @Param body body CertificateParams true "Certificate body"
-// @Success 200 {object} cert.CertMap
+// @Success 200 {object} certstore.CertMap
 // @Success 400 {object} responseErrorJSON
 // @Success 401 {object} responseErrorJSON
 // @Success 403 {object} responseErrorJSON
@@ -392,7 +393,7 @@ func createCertificateHandler() http.HandlerFunc {
 // @Success 500 {object} responseErrorJSON
 // @Success 502 {object} responseErrorJSON
 // @Router /certificate [put]
-func updateCertificateHandler() http.HandlerFunc {
+func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
 		if err != nil {
@@ -466,7 +467,7 @@ func updateCertificateHandler() http.HandlerFunc {
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
 			body, _ := json.Marshal(certData)
 			r.Body = io.NopCloser(bytes.NewReader(body))
-			forwardRequest(host, w, r)
+			forwardRequest(proxyClient, host, w, r)
 			return
 		}
 
@@ -575,7 +576,7 @@ func updateCertificateHandler() http.HandlerFunc {
 // @Success 500 {object} responseErrorJSON
 // @Success 502 {object} responseErrorJSON
 // @Router /certificate/{issuer}/{domain} [delete]
-func revokeCertificateHandler() http.HandlerFunc {
+func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
 		if err != nil {
@@ -621,7 +622,7 @@ func revokeCertificateHandler() http.HandlerFunc {
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
 			body, _ := json.Marshal(certData)
 			r.Body = io.NopCloser(bytes.NewReader(body))
-			forwardRequest(host, w, r)
+			forwardRequest(proxyClient, host, w, r)
 			return
 		}
 
@@ -658,7 +659,7 @@ func revokeCertificateHandler() http.HandlerFunc {
 	})
 }
 
-func forwardRequest(host string, w http.ResponseWriter, req *http.Request) {
+func forwardRequest(proxyClient *http.Client, host string, w http.ResponseWriter, req *http.Request) {
 	scheme := "http"
 	if req.TLS != nil {
 		scheme = "https"
