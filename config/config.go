@@ -19,10 +19,10 @@ type Config struct {
 
 // Common represents common config.
 type Common struct {
-	APIKeyHash          string      `yaml:"api_key_hash"`
-	CertDaysRenewal     int         `yaml:"cert_days_renewal"`
-	RootPathAccount     string      `yaml:"rootpath_account"`
-	RootPathCertificate string      `yaml:"rootpath_certificate"`
+	APIKeyHash          string `yaml:"api_key_hash"`
+	CertDaysRenewal     int    `yaml:"cert_days_renewal"`
+	RootPathAccount     string `yaml:"rootpath_account"`
+	RootPathCertificate string `yaml:"rootpath_certificate"`
 }
 
 type Issuer struct {

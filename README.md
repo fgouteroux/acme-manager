@@ -131,9 +131,12 @@ storage:
     mount_path: "login/approle"
 ```
 
+Required Common parameters:
+- **api_key_hash** (string): the api key hash used to manage tokens, required when api mode is enabled.
+- **rootpath_account** (string): path to find issuer private keys and account file
+- **rootpath_certificate** (string): path to temporary store certificate file before storing in vault.
+
 Optional Common parameters:
-- **api_key_hash** (string):  the api key hash used to manage tokens, required when api mode is enabled.
-- **cert_days** (int): Number of days before certificate expired (default: 90).
 - **cert_days_renewal** (int): Number of days before certificate should be renewed (default: 30).
 
 Optional Issuer parameters:

@@ -185,8 +185,8 @@ func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
 var tokenPageHTML string
 
 type tokenHandlerData struct {
-	Now         time.Time
-	Tokens      map[string]certstore.Token
+	Now    time.Time
+	Tokens map[string]certstore.Token
 }
 
 func tokenListHandler() http.HandlerFunc {
@@ -197,8 +197,8 @@ func tokenListHandler() http.HandlerFunc {
 		}
 
 		v := &tokenHandlerData{
-			Now:         time.Now(),
-			Tokens:      data,
+			Now:    time.Now(),
+			Tokens: data,
 		}
 
 		accept := r.Header.Get("Accept")
