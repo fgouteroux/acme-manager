@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-kit/log/level"
 
@@ -53,43 +54,56 @@ func responseJSON(w http.ResponseWriter, data interface{}, err error, statusCode
 }
 
 func checkAuth(r *http.Request) (certstore.Token, error) {
-	var tokenValue certstore.Token
+	var tokenData certstore.Token
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		return tokenValue, fmt.Errorf("Authorization Header is missing or empty")
+		return tokenData, fmt.Errorf("Authorization Header is missing or empty")
 	}
 	splitToken := strings.Split(authHeader, "Bearer ")
 	if len(splitToken) != 2 {
-		return tokenValue, fmt.Errorf("Invalid token format")
+		return tokenData, fmt.Errorf("Invalid token format")
 	}
 
 	payload, err := base64.StdEncoding.DecodeString(splitToken[1])
 	if err != nil {
-		return tokenValue, fmt.Errorf("Invalid token format")
+		return tokenData, fmt.Errorf("Invalid token format")
 	}
 
 	token := strings.SplitN(string(payload), ":", 2)
 	if len(token) != 2 {
-		return tokenValue, fmt.Errorf("Invalid token format")
+		return tokenData, fmt.Errorf("Invalid token format")
 	}
 
-	tokenData, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
+	tokens, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
 	if err != nil {
-		return tokenValue, err
+		return tokenData, err
 	}
 
 	var tokenExists bool
-	tokenValue, tokenExists = tokenData[token[0]]
+	tokenData, tokenExists = tokens[token[0]]
 	if !tokenExists {
-		return tokenValue, fmt.Errorf("Token not found")
+		return tokenData, fmt.Errorf("Token not found")
 	}
 
 	reqTokenHash := utils.SHA1Hash(token[1])
 
-	if tokenExists && reqTokenHash != tokenValue.TokenHash {
-		return tokenValue, fmt.Errorf("Invalid token")
+	if tokenExists && reqTokenHash != tokenData.TokenHash {
+		return tokenData, fmt.Errorf("Invalid token")
 	}
-	return tokenValue, nil
+
+	if tokenData.Expires != "Never" {
+		layout := "2006-01-02 15:04:05 -0700 MST"
+		t, err := time.Parse(layout, tokenData.Expires)
+		if err != nil {
+			return tokenData, fmt.Errorf("Could not parse token expiration time")
+		}
+
+		if time.Now().After(t) {
+			return tokenData, fmt.Errorf("Token expired")
+		}
+	}
+
+	return tokenData, nil
 }
 
 // manage metadata certificate
