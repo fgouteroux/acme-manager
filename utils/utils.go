@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -9,6 +11,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
+
 	"fmt"
 	"io/fs"
 	"os"
@@ -17,6 +21,8 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+
+	"github.com/go-acme/lego/v4/certcrypto"
 
 	"github.com/sirupsen/logrus"
 
@@ -124,4 +130,27 @@ func SetTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Confi
 		tlsConfig.RootCAs = caCertPool
 	}
 	return tlsConfig, nil
+}
+
+// GenerateCSRAndPrivateKey generates a Certificate Signing Request (CSR) and a private key.
+func GenerateCSRAndPrivateKey(domain string, SAN []string) (string, []byte, error) {
+	// Generate a new ECDSA key pair using the P-256 curve
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Create and sign the CSR using the private key
+	csrBytes, err := certcrypto.GenerateCSR(privateKey, domain, SAN, false)
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Encode the CSR in PEM format
+	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrBytes})
+
+	// Encode the CSR PEM to bas64
+	csr64 := base64.StdEncoding.EncodeToString(csrPEM)
+
+	return csr64, certcrypto.PEMEncode(privateKey), nil
 }

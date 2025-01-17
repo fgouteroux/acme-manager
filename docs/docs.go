@@ -237,7 +237,7 @@ const docTemplate = `{
         },
         "/certificate/{issuer}/{domain}": {
             "get": {
-                "description": "Return certificate, private key and issuer ca certificate in base64 format.",
+                "description": "Return certificate and issuer ca certificate.",
                 "produces": [
                     "application/json"
                 ],
@@ -622,6 +622,9 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": false
                 },
+                "csr": {
+                    "type": "string"
+                },
                 "days": {
                     "type": "integer",
                     "example": 90
@@ -699,11 +702,14 @@ const docTemplate = `{
                 },
                 "ca_issuer": {
                     "type": "string",
-                    "example": "Ci0tLS0tQkVHSU4gQ0..."
+                    "example": "-----BEGIN CERTIFICATE-----\n..."
                 },
                 "cert": {
                     "type": "string",
-                    "example": "LS0tLS1CRUdJTiBDR..."
+                    "example": "-----BEGIN CERTIFICATE-----\n..."
+                },
+                "csr": {
+                    "type": "string"
                 },
                 "days": {
                     "type": "integer",
@@ -732,14 +738,6 @@ const docTemplate = `{
                 "issuer": {
                     "type": "string",
                     "example": "letsencrypt"
-                },
-                "key": {
-                    "type": "string",
-                    "example": "LS0tLS1CRUdJTiBSU..."
-                },
-                "key_fingerprint": {
-                    "type": "string",
-                    "example": "031312e2ea90eb8070c8da352c048171075f2ecfa3f300354bacc497e02247fc"
                 },
                 "owner": {
                     "type": "string",
@@ -766,6 +764,9 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": false
                 },
+                "csr": {
+                    "type": "string"
+                },
                 "days": {
                     "type": "integer",
                     "example": 90
@@ -793,10 +794,6 @@ const docTemplate = `{
                 "issuer": {
                     "type": "string",
                     "example": "letsencrypt"
-                },
-                "key_fingerprint": {
-                    "type": "string",
-                    "example": "031312e2ea90eb8070c8da352c048171075f2ecfa3f300354bacc497e02247fc"
                 },
                 "owner": {
                     "type": "string",

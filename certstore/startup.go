@@ -85,11 +85,6 @@ func getVaultAllCertificate(logger log.Logger) []Certificate {
 				continue
 			}
 
-			if _, ok := secret["key"]; !ok {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("No private key found in vault secret key %s", secretKeyPath))
-				continue
-			}
-
 			cert, err := json.Marshal(secret)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)

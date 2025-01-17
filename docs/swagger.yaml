@@ -5,6 +5,8 @@ definitions:
       bundle:
         example: false
         type: boolean
+      csr:
+        type: string
       days:
         example: 90
         type: integer
@@ -60,10 +62,16 @@ definitions:
         example: false
         type: boolean
       ca_issuer:
-        example: Ci0tLS0tQkVHSU4gQ0...
+        example: |-
+          -----BEGIN CERTIFICATE-----
+          ...
         type: string
       cert:
-        example: LS0tLS1CRUdJTiBDR...
+        example: |-
+          -----BEGIN CERTIFICATE-----
+          ...
+        type: string
+      csr:
         type: string
       days:
         example: 90
@@ -85,12 +93,6 @@ definitions:
         type: string
       issuer:
         example: letsencrypt
-        type: string
-      key:
-        example: LS0tLS1CRUdJTiBSU...
-        type: string
-      key_fingerprint:
-        example: 031312e2ea90eb8070c8da352c048171075f2ecfa3f300354bacc497e02247fc
         type: string
       owner:
         example: testfgx
@@ -110,6 +112,8 @@ definitions:
       bundle:
         example: false
         type: boolean
+      csr:
+        type: string
       days:
         example: 90
         type: integer
@@ -130,9 +134,6 @@ definitions:
         type: string
       issuer:
         example: letsencrypt
-        type: string
-      key_fingerprint:
-        example: 031312e2ea90eb8070c8da352c048171075f2ecfa3f300354bacc497e02247fc
         type: string
       owner:
         example: testfgx
@@ -331,8 +332,7 @@ paths:
       tags:
       - certificate
     get:
-      description: Return certificate, private key and issuer ca certificate in base64
-        format.
+      description: Return certificate and issuer ca certificate.
       parameters:
       - default: Bearer <Add access token here>
         description: Access token
