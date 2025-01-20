@@ -5,33 +5,33 @@ import "github.com/prometheus/client_golang/prometheus"
 var managedCertificate = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "acme_manager_certificate_total",
-		Help: "Number of managed certificates by issuer",
+		Help: "Number of managed certificates by issuer and owner",
 	},
-	[]string{"issuer"},
+	[]string{"issuer", "owner"},
 )
 
 var createdCertificate = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "acme_manager_certificate_created_total",
-		Help: "Number of created certificates by issuer",
+		Help: "Number of created certificates by issuer and owner",
 	},
-	[]string{"issuer"},
+	[]string{"issuer", "owner"},
 )
 
 var revokedCertificate = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "acme_manager_certificate_revoked_total",
-		Help: "Number of revoked certificates by issuer",
+		Help: "Number of revoked certificates by issuer and owner",
 	},
-	[]string{"issuer"},
+	[]string{"issuer", "owner"},
 )
 
 var renewedCertificate = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "acme_manager_certificate_renewed_total",
-		Help: "Number of renewed certificates by issuer",
+		Help: "Number of renewed certificates by issuer and owner",
 	},
-	[]string{"issuer"},
+	[]string{"issuer", "owner"},
 )
 
 var createdLocalCertificate = prometheus.NewCounterVec(
@@ -146,28 +146,28 @@ var configError = prometheus.NewGaugeVec(
 	[]string{},
 )
 
-func SetManagedCertificate(issuer string, value float64) {
-	managedCertificate.WithLabelValues(issuer).Set(value)
+func SetManagedCertificate(issuer, owner string, value float64) {
+	managedCertificate.WithLabelValues(issuer, owner).Set(value)
 }
 
-func IncManagedCertificate(issuer string) {
-	managedCertificate.WithLabelValues(issuer).Inc()
+func IncManagedCertificate(issuer, owner string) {
+	managedCertificate.WithLabelValues(issuer, owner).Inc()
 }
 
-func DecManagedCertificate(issuer string) {
-	managedCertificate.WithLabelValues(issuer).Dec()
+func DecManagedCertificate(issuer, owner string) {
+	managedCertificate.WithLabelValues(issuer, owner).Dec()
 }
 
-func IncCreatedCertificate(issuer string) {
-	createdCertificate.WithLabelValues(issuer).Inc()
+func IncCreatedCertificate(issuer, owner string) {
+	createdCertificate.WithLabelValues(issuer, owner).Inc()
 }
 
-func IncRevokedCertificate(issuer string) {
-	revokedCertificate.WithLabelValues(issuer).Inc()
+func IncRevokedCertificate(issuer, owner string) {
+	revokedCertificate.WithLabelValues(issuer, owner).Inc()
 }
 
-func IncRenewedCertificate(issuer string) {
-	renewedCertificate.WithLabelValues(issuer).Inc()
+func IncRenewedCertificate(issuer, owner string) {
+	renewedCertificate.WithLabelValues(issuer, owner).Inc()
 }
 
 func IncCreatedLocalCertificate(issuer string) {

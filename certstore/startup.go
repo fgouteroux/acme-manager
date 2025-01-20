@@ -48,7 +48,7 @@ func OnStartup(logger log.Logger) error {
 
 		var content []Certificate
 		for _, certData := range vaultCertList {
-			metrics.IncManagedCertificate(certData.Issuer)
+			metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 		}
 		content = vaultCertList
 
@@ -82,11 +82,6 @@ func getVaultAllCertificate(logger log.Logger) []Certificate {
 
 			if _, ok := secret["cert"]; !ok {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath))
-				continue
-			}
-
-			if _, ok := secret["key"]; !ok {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("No private key found in vault secret key %s", secretKeyPath))
 				continue
 			}
 

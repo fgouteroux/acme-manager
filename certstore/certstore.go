@@ -1,10 +1,10 @@
 package certstore
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -37,25 +37,24 @@ type CertStore struct {
 
 // Certificate represents issuer certificate.
 type Certificate struct {
-	Domain         string `json:"domain" yaml:"domain" example:"testfgx.example.com"`
-	Issuer         string `json:"issuer" yaml:"issuer" example:"letsencrypt"`
-	Bundle         bool   `json:"bundle" yaml:"bundle" example:"false"`
-	SAN            string `json:"san,omitempty" yaml:"san,omitempty" example:""`
-	Days           int    `json:"days,omitempty" yaml:"days,omitempty" example:"90"`
-	RenewalDays    int    `json:"renewal_days,omitempty" yaml:"renewal_days,omitempty" example:"30"`
-	DNSChallenge   string `json:"dns_challenge,omitempty" yaml:"dns_challenge,omitempty" example:"ns1"`
-	HTTPChallenge  string `json:"http_challenge,omitempty" yaml:"http_challenge,omitempty" example:""`
-	Expires        string `json:"expires" example:"2025-04-09 09:56:34 +0000 UTC"`
-	Fingerprint    string `json:"fingerprint" example:"3c7bccea1992d5095e7ab8c38f247352cd75ff26cdb95972d34ad54ebcef36af"`
-	KeyFingerprint string `json:"key_fingerprint" example:"031312e2ea90eb8070c8da352c048171075f2ecfa3f300354bacc497e02247fc"`
-	Owner          string `json:"owner" example:"testfgx"`
+	Domain        string `json:"domain" yaml:"domain" example:"testfgx.example.com"`
+	Issuer        string `json:"issuer" yaml:"issuer" example:"letsencrypt"`
+	Bundle        bool   `json:"bundle" yaml:"bundle" example:"false"`
+	SAN           string `json:"san,omitempty" yaml:"san,omitempty" example:""`
+	Days          int    `json:"days,omitempty" yaml:"days,omitempty" example:"90"`
+	RenewalDays   int    `json:"renewal_days,omitempty" yaml:"renewal_days,omitempty" example:"30"`
+	DNSChallenge  string `json:"dns_challenge,omitempty" yaml:"dns_challenge,omitempty" example:"ns1"`
+	HTTPChallenge string `json:"http_challenge,omitempty" yaml:"http_challenge,omitempty" example:""`
+	Expires       string `json:"expires" example:"2025-04-09 09:56:34 +0000 UTC"`
+	Fingerprint   string `json:"fingerprint" example:"3c7bccea1992d5095e7ab8c38f247352cd75ff26cdb95972d34ad54ebcef36af"`
+	Owner         string `json:"owner" example:"testfgx"`
+	CSR           string `json:"csr"`
 }
 
 type CertMap struct {
 	Certificate
-	Cert     string `json:"cert" example:"LS0tLS1CRUdJTiBDR..."`
-	Key      string `json:"key"  example:"LS0tLS1CRUdJTiBSU..."`
-	CAIssuer string `json:"ca_issuer" example:"Ci0tLS0tQkVHSU4gQ0..."`
+	Cert     string `json:"cert" example:"-----BEGIN CERTIFICATE-----\n..."`
+	CAIssuer string `json:"ca_issuer" example:"-----BEGIN CERTIFICATE-----\n..."`
 	URL      string `json:"url" example:"https://acme-staging-v02.api.letsencrypt.org/acme/cert/4b63b4e8b6109"`
 }
 
@@ -79,13 +78,6 @@ func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resou
 			_ = level.Error(logger).Log("err", "Unable to save IssuerCertificate for domain %s\n\t%v", err)
 		}
 	}
-
-	if certRes.PrivateKey != nil {
-		err = os.WriteFile(filepath+domain+".key", certRes.PrivateKey, 0400)
-		if err != nil {
-			_ = level.Error(logger).Log("err", "Unable to save PrivateKey for domain %s\n\t%v", err)
-		}
-	}
 }
 
 func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (Certificate, error) {
@@ -98,15 +90,19 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 		return certData, err
 	}
 
-	domains := []string{domain}
-	if certData.SAN != "" {
-		san := strings.Split(strings.TrimSuffix(certData.SAN, ","), ",")
-		domains = append(domains, san...)
+	csrDecoded, err := base64.StdEncoding.DecodeString(certData.CSR)
+	if err != nil {
+		return certData, err
 	}
 
-	request := certificate.ObtainRequest{
-		Domains: domains,
-		Bundle:  certData.Bundle,
+	csr, err := certcrypto.PemDecodeTox509CSR([]byte(csrDecoded))
+	if err != nil {
+		return certData, err
+	}
+
+	request := certificate.ObtainForCSRRequest{
+		CSR:    csr,
+		Bundle: certData.Bundle,
 	}
 
 	if certData.Days != 0 {
@@ -143,13 +139,13 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 		}
 	}
 
-	resource, err := issuerAcmeClient.Certificate.Obtain(request)
+	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(request)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return certData, err
 	}
 
-	metrics.IncCreatedCertificate(certData.Issuer)
+	metrics.IncCreatedCertificate(certData.Issuer, certData.Owner)
 
 	// save in local in case of vault failure
 	SaveResource(logger, baseCertificateFilePath, resource)
@@ -161,12 +157,10 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 	}
 	certData.Expires = x509Cert.NotAfter.String()
 	certData.Fingerprint = utils.GenerateFingerprint(resource.Certificate)
-	certData.KeyFingerprint = utils.GenerateFingerprint(resource.PrivateKey)
 
 	data := CertMap{
 		Certificate: certData,
 		Cert:        string(resource.Certificate),
-		Key:         string(resource.PrivateKey),
 		CAIssuer:    string(resource.IssuerCertificate),
 		URL:         resource.CertStableURL,
 	}
@@ -201,7 +195,7 @@ func DeleteRemoteCertificateResource(name, issuer string, logger log.Logger) err
 			return err
 		}
 
-		metrics.IncRevokedCertificate(issuer)
+		metrics.IncRevokedCertificate(issuer, data["owner"].(string))
 
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate domain %s for %s issuer revoked", domain, issuer))
 		err = vault.GlobalClient.DeleteSecretWithAppRole(vaultSecretPath)
@@ -250,7 +244,7 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 			if err != nil {
 				return err
 			}
-			metrics.IncRenewedCertificate(certData.Issuer)
+			metrics.IncRenewedCertificate(certData.Issuer, certData.Owner)
 			dataCopy[i] = cert
 		}
 	}

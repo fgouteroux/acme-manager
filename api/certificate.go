@@ -15,6 +15,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
+	"github.com/go-acme/lego/v4/certcrypto"
+
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
@@ -36,6 +38,7 @@ type CertificateParams struct {
 	Issuer        string `json:"issuer" example:"letsencrypt"`
 	Bundle        bool   `json:"bundle" example:"false"`
 	SAN           string `json:"san,omitempty" example:""`
+	CSR           string `json:"csr,omitempty"`
 	Days          int    `json:"days,omitempty" example:"90"`
 	RenewalDays   int    `json:"renewal_days,omitempty" example:"30"`
 	DNSChallenge  string `json:"dns_challenge,omitempty" example:"ns1"`
@@ -87,7 +90,6 @@ func checkAuth(r *http.Request) (certstore.Token, error) {
 	}
 
 	reqTokenHash := utils.SHA1Hash(token[1])
-
 	if tokenExists && reqTokenHash != tokenData.TokenHash {
 		return tokenData, fmt.Errorf("Invalid token")
 	}
@@ -167,7 +169,7 @@ func CertificateMetadataHandler() http.HandlerFunc {
 
 // certificate godoc
 // @Summary Read certificate
-// @Description Return certificate, private key and issuer ca certificate in base64 format.
+// @Description Return certificate and issuer ca certificate.
 // @Tags certificate
 // @Produce  application/json
 // @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
@@ -197,7 +199,7 @@ func GetCertificateHandler() http.HandlerFunc {
 		}
 
 		if certData.Domain == "" || certData.Issuer == "" {
-			responseJSON(w, "missing 'issuer' and/or 'domain' parameter", nil, http.StatusBadRequest)
+			responseJSON(w, nil, fmt.Errorf("missing 'issuer' and/or 'domain' parameter"), http.StatusBadRequest)
 			return
 		}
 
@@ -271,7 +273,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		if certParams.Domain == "" || certParams.Issuer == "" {
-			responseJSON(w, "missing 'issuer' and/or 'domain' parameter", nil, http.StatusBadRequest)
+			responseJSON(w, nil, fmt.Errorf("missing 'issuer' and/or 'domain' parameter"), http.StatusBadRequest)
 			return
 		}
 
@@ -290,11 +292,18 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
+		err = checkCSR(certParams)
+		if err != nil {
+			responseJSON(w, nil, err, http.StatusBadRequest)
+			return
+		}
+
 		// convert request params to certificate object
 		certBytes, _ := json.Marshal(certParams)
 		var certData certstore.Certificate
 		err = json.Unmarshal(certBytes, &certData)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -303,6 +312,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -318,6 +328,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -350,6 +361,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		newCert, err := certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			statusCode := http.StatusInternalServerError
 			if strings.Contains(err.Error(), "urn:ietf:params:acme:error:malformed") {
 				statusCode = http.StatusBadRequest
@@ -358,7 +370,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			responseJSON(w, nil, err, statusCode)
 			return
 		}
-		metrics.IncManagedCertificate(certData.Issuer)
+		metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 		data = append(data, newCert)
 
 		// udpate kv store
@@ -367,6 +379,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		secretKeyPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Issuer, certData.Domain)
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -412,7 +425,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		if certParams.Domain == "" || certParams.Issuer == "" {
-			responseJSON(w, "missing 'issuer' and/or 'domain' parameter", nil, http.StatusBadRequest)
+			responseJSON(w, nil, fmt.Errorf("missing 'issuer' and/or 'domain' parameter"), http.StatusBadRequest)
 			return
 		}
 
@@ -428,6 +441,12 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		if certParams.DNSChallenge != "" && certParams.HTTPChallenge != "" {
 			responseJSON(w, nil, fmt.Errorf("'dns_challenge' and 'http_challenge' are mutually exclusive"), http.StatusBadRequest)
+			return
+		}
+
+		err = checkCSR(certParams)
+		if err != nil {
+			responseJSON(w, nil, err, http.StatusBadRequest)
 			return
 		}
 
@@ -507,6 +526,9 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		if certData.HTTPChallenge != data[idx].HTTPChallenge {
 			recreateCert = true
 		}
+		if certData.CSR != data[idx].CSR {
+			recreateCert = true
+		}
 
 		if recreateCert {
 			err = certstore.DeleteRemoteCertificateResource(certData.Domain, certData.Issuer, certstore.AmStore.Logger)
@@ -514,7 +536,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
-			metrics.DecManagedCertificate(certData.Issuer)
+			metrics.DecManagedCertificate(certData.Issuer, certData.Owner)
 
 			data = slices.Delete(data, idx, idx+1)
 
@@ -523,7 +545,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
-			metrics.IncManagedCertificate(certData.Issuer)
+			metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 			data = append(data, newCert)
 		} else {
 			data[idx].RenewalDays = certData.RenewalDays
@@ -593,7 +615,7 @@ func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		if certData.Domain == "" || certData.Issuer == "" {
-			responseJSON(w, "missing 'issuer' and/or 'domain' parameter", nil, http.StatusBadRequest)
+			responseJSON(w, nil, fmt.Errorf("missing 'issuer' and/or 'domain' parameter"), http.StatusBadRequest)
 			return
 		}
 
@@ -649,7 +671,7 @@ func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
-		metrics.DecManagedCertificate(certData.Issuer)
+		metrics.DecManagedCertificate(certData.Issuer, certData.Owner)
 
 		data = slices.Delete(data, idx, idx+1)
 
@@ -693,4 +715,48 @@ func forwardRequest(proxyClient *http.Client, host string, w http.ResponseWriter
 	if err != nil {
 		responseJSON(w, nil, err, http.StatusInternalServerError)
 	}
+}
+
+func checkCSR(certParams CertificateParams) error {
+	if certParams.CSR == "" {
+		return fmt.Errorf("missing 'csr' parameter")
+	}
+
+	csrDecoded, err := base64.StdEncoding.DecodeString(certParams.CSR)
+	if err != nil {
+		return fmt.Errorf("Invalid 'csr' parameter, bad format: %v", err)
+	}
+
+	csr, err := certcrypto.PemDecodeTox509CSR([]byte(csrDecoded))
+	if err != nil {
+		return fmt.Errorf("Invalid 'csr' parameter: %v", err)
+	}
+
+	// checks domains, sstart with the common name
+	domains := certcrypto.ExtractDomainsCSR(csr)
+
+	var san []string
+	if certParams.SAN != "" {
+		san = strings.Split(certParams.SAN, ",")
+	}
+
+	if certParams.Domain != domains[0] {
+		return fmt.Errorf("CSR Common Name should match 'domain' parameter. Domain '%s' - Common Name '%s'", certParams.Domain, domains[0])
+	}
+
+	if len(domains) > 1 && certParams.SAN == "" {
+		return fmt.Errorf("CSR Domains should match 'SAN' parameter. SAN: %v - CSR domains: %v", san, domains[1:])
+	}
+
+	for _, domain := range san {
+		if !slices.Contains(domains[1:], domain) {
+			return fmt.Errorf("CSR Domains should match 'SAN' parameter. SAN: %v - CSR domains: %v", san, domains[1:])
+		}
+	}
+	for _, domain := range domains[1:] {
+		if !slices.Contains(san, domain) {
+			return fmt.Errorf("CSR Domains should match 'SAN' parameter. SAN: %v - CSR domains: %v", san, domains[1:])
+		}
+	}
+	return nil
 }
