@@ -9,6 +9,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
+	"github.com/go-acme/lego/v4/certcrypto"
+
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
 	"github.com/fgouteroux/acme_manager/ring"
@@ -127,6 +129,43 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 				// udpate kv store
 				AmStore.PutKVRing(TokenRingKey, data)
 			}
+		}
+	}
+}
+
+func WatchIssuerHealth(logger log.Logger, interval time.Duration, version string) {
+	// create a new Ticker
+	tk := time.NewTicker(interval)
+
+	// start the ticker
+	for range tk.C {
+
+		for issuer, issuerConf := range config.GlobalConfig.Issuer {
+
+			issuerError := 1.0
+			privateKeyPath := fmt.Sprintf("%s/%s/private_key.pem", config.GlobalConfig.Common.RootPathAccount, issuer)
+
+			privateKeyBytes, err := os.ReadFile(privateKeyPath)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				metrics.SetIssuerConfigError(issuer, issuerError)
+				continue
+			}
+			privateKeyPEM, err := certcrypto.ParsePEMPrivateKey(privateKeyBytes)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", fmt.Errorf("Unable parse private key '%s'", privateKeyPath), "err", err)
+				metrics.SetIssuerConfigError(issuer, issuerError)
+				continue
+			}
+
+			userAgent := fmt.Sprintf("acme-manager/%s", version)
+			_, _, err = tryRecoverRegistration(privateKeyPEM, issuerConf.CADirURL, userAgent)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", fmt.Errorf("Unable to recover registration account for private key '%s'", privateKeyPath), "err", err)
+			}
+
+			metrics.SetIssuerConfigError(issuer, 0.0)
+
 		}
 	}
 }

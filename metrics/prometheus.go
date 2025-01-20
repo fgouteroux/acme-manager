@@ -146,6 +146,14 @@ var configError = prometheus.NewGaugeVec(
 	[]string{},
 )
 
+var issuerConfigError = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "acme_manager_issuer_config_error",
+		Help: "1 if there was an error with issuer config, 0 otherwise",
+	},
+	[]string{"issuer"},
+)
+
 func SetManagedCertificate(issuer, owner string, value float64) {
 	managedCertificate.WithLabelValues(issuer, owner).Set(value)
 }
@@ -226,6 +234,10 @@ func SetConfigError(value float64) {
 	configError.WithLabelValues().Set(value)
 }
 
+func SetIssuerConfigError(issuer string, value float64) {
+	issuerConfigError.WithLabelValues(issuer).Set(value)
+}
+
 func init() {
 	collectors := []prometheus.Collector{
 		managedCertificate,
@@ -246,6 +258,7 @@ func init() {
 		certificateConfigError,
 		configReload,
 		configError,
+		issuerConfigError,
 	}
 
 	for _, collector := range collectors {

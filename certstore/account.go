@@ -22,6 +22,7 @@ import (
 	"github.com/go-acme/lego/v4/registration"
 
 	"github.com/fgouteroux/acme_manager/config"
+	"github.com/fgouteroux/acme_manager/metrics"
 )
 
 var (
@@ -107,7 +108,7 @@ func Setup(logger log.Logger, cfg config.Config, version string) error {
 		}
 		account.key, err = certcrypto.ParsePEMPrivateKey(privateKeyBytes)
 		if err != nil {
-			_ = level.Error(logger).Log("err", err)
+			_ = level.Error(logger).Log("msg", fmt.Errorf("Unable parse private key '%s'", privateKeyPath), "err", err)
 			return err
 		}
 
@@ -118,6 +119,7 @@ func Setup(logger log.Logger, cfg config.Config, version string) error {
 			client, reg, err := tryRecoverRegistration(account.key, issuerConf.CADirURL, userAgent)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
+				metrics.SetIssuerConfigError(issuer, 1.0)
 				return fmt.Errorf("Unable to recover registration account for private key '%s'", privateKeyPath)
 			}
 
@@ -149,6 +151,8 @@ func Setup(logger log.Logger, cfg config.Config, version string) error {
 			}
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Account file %s saved", accountFilePath))
 		}
+
+		metrics.SetIssuerConfigError(issuer, 0.0)
 
 		conf := lego.NewConfig(&account)
 		conf.CADirURL = issuerConf.CADirURL

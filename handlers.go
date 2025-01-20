@@ -52,12 +52,14 @@ type IndexPageLink struct {
 // List of weights to order link groups in the same order as weights are ordered here.
 const (
 	certificateWeight = iota
+	tokenWeight
 	metricsWeight
 	hostWeight
 	hostFactWeight
 	defaultWeight
-	ringWeight
 	memberlistWeight
+	ringWeight
+	swaggerWeight
 )
 
 func (pc *IndexPageContent) AddLinks(weight int, groupDesc string, links []IndexPageLink) {
@@ -118,6 +120,10 @@ func memberlistStatusHandler(httpPathPrefix string, kvs *memberlist.KVInitServic
 func leaderHandler(w http.ResponseWriter, _ *http.Request) {
 	name, _ := ring.GetLeader(certstore.AmStore.RingConfig)
 	_, _ = io.WriteString(w, fmt.Sprintf("{\"name\":\"%s\"}", name))
+}
+
+func healthHandler(w http.ResponseWriter, _ *http.Request) {
+	_, _ = io.WriteString(w, "Server is healthy")
 }
 
 //go:embed templates/certificate.gohtml

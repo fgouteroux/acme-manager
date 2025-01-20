@@ -52,6 +52,7 @@ var (
 	checkRenewalInterval = kingpin.Flag("check-renewal-interval", "Time interval to check if certificate renewal needed").Default("30m").Duration()
 	checkConfigInterval  = kingpin.Flag("check-config-interval", "Time interval to check if config file changes").Default("30s").Duration()
 	checkTokenInterval   = kingpin.Flag("check-token-interval", "Time interval to check if tokens expired").Default("1m").Duration()
+	checkIssuerInterval  = kingpin.Flag("check-issuer-interval", "Time interval to check issuer health").Default("10m").Duration()
 
 	ringInstanceID             = kingpin.Flag("ring.instance-id", "Instance ID to register in the ring.").String()
 	ringInstanceAddr           = kingpin.Flag("ring.instance-addr", "IP address to advertise in the ring. Default is auto-detected.").String()
@@ -172,11 +173,18 @@ func main() {
 	http.Handle("/static/", http.FileServer(http.FS(staticFiles)))
 
 	indexPage := newIndexPageContent()
-	indexPage.AddLinks(metricsWeight, "Certificates", []IndexPageLink{
+	indexPage.AddLinks(certificateWeight, "Certificates", []IndexPageLink{
 		{Desc: "Managed certificates", Path: "/certificates"},
+	})
+	indexPage.AddLinks(tokenWeight, "Tokens", []IndexPageLink{
+		{Desc: "Managed tokens", Path: "/tokens"},
 	})
 	indexPage.AddLinks(metricsWeight, "Metrics", []IndexPageLink{
 		{Desc: "Exported metrics", Path: "/metrics"},
+	})
+
+	indexPage.AddLinks(swaggerWeight, "Swagger", []IndexPageLink{
+		{Desc: "Swagger UI", Path: "/swagger"},
 	})
 
 	var ringConfig ring.AcmeManagerRing
@@ -209,7 +217,6 @@ func main() {
 
 	err = certstore.Setup(logger, cfg, version.Version)
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 
@@ -249,11 +256,6 @@ func main() {
 	http.Handle("GET /api/v1/token/{id}", LoggerHandler(api.GetTokenHandler()))
 	http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(api.RevokeTokenHandler()))
 
-	http.Handle("/tokens", LoggerHandler(tokenListHandler()))
-
-	indexPage.AddLinks(metricsWeight, "Tokens", []IndexPageLink{
-		{Desc: "Managed tokens", Path: "/tokens"},
-	})
 	go certstore.WatchTokenExpiration(logger, *checkTokenInterval)
 
 	// renewal certificate
@@ -262,17 +264,21 @@ func main() {
 	// check config file changes
 	go certstore.WatchConfigFileChanges(logger, *checkConfigInterval, *configPath, version.Version)
 
+	go certstore.WatchIssuerHealth(logger, *checkIssuerInterval, version.Version)
+
 	http.Handle("/", indexHandler("", indexPage))
 	http.HandleFunc("/ring/leader", func(w http.ResponseWriter, req *http.Request) {
 		leaderHandler(w, req)
 	})
 	http.Handle("/certificates", LoggerHandler(certificateListHandler()))
+	http.Handle("/tokens", LoggerHandler(tokenListHandler()))
 
 	http.HandleFunc("/.well-known/acme-challenge/", func(w http.ResponseWriter, req *http.Request) {
 		httpChallengeHandler(w, req)
 	})
 
 	http.HandleFunc("/swagger/", httpSwagger.WrapHandler)
+	http.HandleFunc("/health", healthHandler)
 
 	runHTTPServer(*serverListenAddress, *serverTLSCertFile, *serverTLSKeyFile, *serverReadTimeout, *serverReadHeaderTimeout)
 }
