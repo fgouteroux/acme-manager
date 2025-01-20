@@ -48,7 +48,7 @@ func OnStartup(logger log.Logger) error {
 
 		var content []Certificate
 		for _, certData := range vaultCertList {
-			metrics.IncManagedCertificate(certData.Issuer)
+			metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 		}
 		content = vaultCertList
 

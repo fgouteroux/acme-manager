@@ -145,7 +145,7 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 		return certData, err
 	}
 
-	metrics.IncCreatedCertificate(certData.Issuer)
+	metrics.IncCreatedCertificate(certData.Issuer, certData.Owner)
 
 	// save in local in case of vault failure
 	SaveResource(logger, baseCertificateFilePath, resource)
@@ -195,7 +195,7 @@ func DeleteRemoteCertificateResource(name, issuer string, logger log.Logger) err
 			return err
 		}
 
-		metrics.IncRevokedCertificate(issuer)
+		metrics.IncRevokedCertificate(issuer, data["owner"].(string))
 
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate domain %s for %s issuer revoked", domain, issuer))
 		err = vault.GlobalClient.DeleteSecretWithAppRole(vaultSecretPath)
@@ -244,7 +244,7 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 			if err != nil {
 				return err
 			}
-			metrics.IncRenewedCertificate(certData.Issuer)
+			metrics.IncRenewedCertificate(certData.Issuer, certData.Owner)
 			dataCopy[i] = cert
 		}
 	}

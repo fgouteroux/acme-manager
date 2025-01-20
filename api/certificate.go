@@ -292,7 +292,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		err = checkCSR(certParams, w)
+		err = checkCSR(certParams)
 		if err != nil {
 			responseJSON(w, nil, err, http.StatusBadRequest)
 			return
@@ -370,7 +370,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			responseJSON(w, nil, err, statusCode)
 			return
 		}
-		metrics.IncManagedCertificate(certData.Issuer)
+		metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 		data = append(data, newCert)
 
 		// udpate kv store
@@ -444,7 +444,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		err = checkCSR(certParams, w)
+		err = checkCSR(certParams)
 		if err != nil {
 			responseJSON(w, nil, err, http.StatusBadRequest)
 			return
@@ -536,7 +536,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
-			metrics.DecManagedCertificate(certData.Issuer)
+			metrics.DecManagedCertificate(certData.Issuer, certData.Owner)
 
 			data = slices.Delete(data, idx, idx+1)
 
@@ -545,7 +545,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
-			metrics.IncManagedCertificate(certData.Issuer)
+			metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 			data = append(data, newCert)
 		} else {
 			data[idx].RenewalDays = certData.RenewalDays
@@ -671,7 +671,7 @@ func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
-		metrics.DecManagedCertificate(certData.Issuer)
+		metrics.DecManagedCertificate(certData.Issuer, certData.Owner)
 
 		data = slices.Delete(data, idx, idx+1)
 
@@ -717,7 +717,7 @@ func forwardRequest(proxyClient *http.Client, host string, w http.ResponseWriter
 	}
 }
 
-func checkCSR(certParams CertificateParams, w http.ResponseWriter) error {
+func checkCSR(certParams CertificateParams) error {
 	if certParams.CSR == "" {
 		return fmt.Errorf("missing 'csr' parameter")
 	}

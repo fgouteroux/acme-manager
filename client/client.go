@@ -177,7 +177,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		}
 
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' created", newCert.Domain))
-		metrics.IncManagedCertificate(certData.Issuer)
+		metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 
 		if config.Common.CertDeploy {
 			createLocalCertificateResource(newCert, logger)
@@ -227,7 +227,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			continue
 		}
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' deleted", certData.Domain))
-		metrics.DecManagedCertificate(certData.Issuer)
+		metrics.DecManagedCertificate(certData.Issuer, certData.Owner)
 		if config.Common.CertDeploy {
 			deleteLocalCertificateResource(certstore.CertMap{Certificate: certData}, logger)
 		}
