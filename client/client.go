@@ -43,6 +43,16 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 		_ = level.Error(logger).Log("err", err)
 		return
 	}
+
+	certStat := make(map[string]float64)
+	for _, certificate := range certificates {
+		certStat[certificate.Issuer] += 1.0
+	}
+
+	for issuer, count := range certStat {
+		metrics.SetManagedCertificate(issuer, "", count)
+	}
+
 	var hasChange bool
 	for _, certData := range config.Certificate {
 
@@ -177,7 +187,6 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		}
 
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' created", newCert.Domain))
-		metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 
 		if config.Common.CertDeploy {
 			createLocalCertificateResource(newCert, logger)
@@ -227,7 +236,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			continue
 		}
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' deleted", certData.Domain))
-		metrics.DecManagedCertificate(certData.Issuer, certData.Owner)
+
 		if config.Common.CertDeploy {
 			deleteLocalCertificateResource(certstore.CertMap{Certificate: certData}, logger)
 		}
@@ -291,12 +300,14 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 	_ = level.Info(logger).Log("msg", "Checking certificates from config file with remote server")
 
 	old, err := acmeClient.GetAllCertificateMetadata()
+
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return
 	}
 
 	var newCertList []certstore.Certificate
+
 	for _, certData := range cfg.Certificate {
 
 		err := utils.CreateNonExistingFolder(config.Common.CertDir+certData.Issuer, config.Common.CertDirPerm)
@@ -317,6 +328,7 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 		if idx == -1 {
 			newCertList = append(newCertList, certData)
 		} else {
+
 			var toUpdate bool
 			var toRecreate bool
 
@@ -325,7 +337,8 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 			if certData.SAN != old[idx].SAN {
 				toRecreate = true
 				_ = level.Info(logger).Log("msg", fmt.Sprintf(
-					"Certificate '%s' SAN changed from '%s' to '%s'.",
+					"Certificate issuer '%s' for domain '%s' SAN changed from '%s' to '%s'.",
+					certData.Issuer,
 					certData.Domain,
 					old[idx].SAN,
 					certData.SAN,
@@ -334,7 +347,8 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 			if certData.Days != old[idx].Days {
 				toRecreate = true
 				_ = level.Info(logger).Log("msg", fmt.Sprintf(
-					"Certificate '%s' days changed from '%d' to '%d'.",
+					"Certificate issuer '%s' for domain '%s' days changed from '%d' to '%d'.",
+					certData.Issuer,
 					certData.Domain,
 					old[idx].Days,
 					certData.Days,
@@ -343,7 +357,8 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 			if certData.Bundle != old[idx].Bundle {
 				toRecreate = true
 				_ = level.Info(logger).Log("msg", fmt.Sprintf(
-					"Certificate '%s' bundle changed from '%v' to '%v'.",
+					"Certificate issuer '%s' for domain '%s' bundle changed from '%v' to '%v'.",
+					certData.Issuer,
 					certData.Domain,
 					old[idx].Bundle,
 					certData.Bundle,
@@ -352,7 +367,8 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 			if certData.DNSChallenge != old[idx].DNSChallenge {
 				toRecreate = true
 				_ = level.Info(logger).Log("msg", fmt.Sprintf(
-					"Certificate '%s' dns_challenge changed from '%s' to '%s'.",
+					"Certificate issuer '%s' for domain '%s' dns_challenge changed from '%s' to '%s'.",
+					certData.Issuer,
 					certData.Domain,
 					old[idx].DNSChallenge,
 					certData.DNSChallenge,
@@ -361,7 +377,8 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 			if certData.HTTPChallenge != old[idx].HTTPChallenge {
 				toRecreate = true
 				_ = level.Info(logger).Log("msg", fmt.Sprintf(
-					"Certificate '%s' http_challenge changed from '%s' to '%s'.",
+					"Certificate issuer '%s' for domain '%s' http_challenge changed from '%s' to '%s'.",
+					certData.Issuer,
 					certData.Domain,
 					old[idx].HTTPChallenge,
 					certData.HTTPChallenge,
@@ -375,7 +392,8 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 					tmp.RenewalDays = certData.RenewalDays
 				}
 				_ = level.Info(logger).Log("msg", fmt.Sprintf(
-					"Certificate '%s' renewal_days changed from '%d' to '%d'.",
+					"Certificate issuer '%s' for domain '%s' renewal_days changed from '%d' to '%d'.",
+					certData.Issuer,
 					certData.Domain,
 					old[idx].RenewalDays,
 					certData.RenewalDays,
