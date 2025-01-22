@@ -81,7 +81,7 @@ func getVaultAllCertificate(logger log.Logger) []Certificate {
 			}
 
 			if _, ok := secret["cert"]; !ok {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath))
+				_ = level.Debug(logger).Log("msg", fmt.Sprintf("No certificate found in vault secret key %s", secretKeyPath))
 				continue
 			}
 
@@ -134,6 +134,11 @@ func getVaultAllToken(logger log.Logger) map[string]Token {
 			secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+
+			if _, ok := secret["tokenHash"]; !ok {
+				_ = level.Debug(logger).Log("msg", fmt.Sprintf("No token found in vault secret key %s", secretKeyPath))
 				continue
 			}
 
