@@ -10,6 +10,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
+	"github.com/fgouteroux/acme_manager/metrics"
 	"github.com/fgouteroux/acme_manager/restclient"
 )
 
@@ -50,6 +51,8 @@ func WatchCertificateUpdate(logger log.Logger, configPath string, acmeClient *re
 			// only work on WRITE events of the original filename
 			if event.Op&fsnotify.Write == fsnotify.Write && event.Name == fileName {
 				_ = level.Info(logger).Log("msg", fmt.Sprintf("modified file: %s", configPath))
+
+				metrics.IncCertificateConfigReload()
 
 				// Compare and create/update certificate from config file to remote server
 				CheckCertificate(logger, configPath, acmeClient)

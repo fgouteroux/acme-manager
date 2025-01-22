@@ -159,7 +159,8 @@ func checkCertDiff(old, newCertList []certstore.Certificate, logger log.Logger) 
 	return diff, hasChange
 }
 
-func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger log.Logger) error {
+func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger log.Logger) {
+	var hasErrors bool
 	for _, certData := range diff.Create {
 
 		keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".key"
@@ -169,12 +170,14 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		}
 		csr, privateKey, err := utils.GenerateCSRAndPrivateKey(certData.Domain, san)
 		if err != nil {
+			hasErrors = true
 			_ = level.Error(logger).Log("err", err)
 			continue
 		}
 
 		err = os.WriteFile(keyFilePath, privateKey, config.Common.CertKeyFilePerm)
 		if err != nil {
+			hasErrors = true
 			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
 			continue
 		}
@@ -183,6 +186,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		certData.CSR = string(csr)
 		newCert, err := acmeClient.CreateCertificate(certData)
 		if err != nil {
+			hasErrors = true
 			_ = level.Error(logger).Log("err", err)
 			continue
 		}
@@ -204,12 +208,14 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			}
 			csr, privateKey, err := utils.GenerateCSRAndPrivateKey(certData.Domain, san)
 			if err != nil {
+				hasErrors = true
 				_ = level.Error(logger).Log("err", err)
 				continue
 			}
 
 			err = os.WriteFile(keyFilePath, privateKey, config.Common.CertKeyFilePerm)
 			if err != nil {
+				hasErrors = true
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
 				continue
 			}
@@ -220,6 +226,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 
 		newCert, err := acmeClient.UpdateCertificate(certData)
 		if err != nil {
+			hasErrors = true
 			_ = level.Error(logger).Log("err", err)
 			continue
 		}
@@ -233,6 +240,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 	for _, certData := range diff.Delete {
 		err := acmeClient.DeleteCertificate(certData)
 		if err != nil {
+			hasErrors = true
 			_ = level.Error(logger).Log("err", err)
 			continue
 		}
@@ -243,11 +251,9 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		}
 	}
 
-	if config.Common.CmdEnabled {
+	if !hasErrors && config.Common.CmdEnabled {
 		executeCommand(logger, config.Common)
 	}
-
-	return nil
 }
 
 func createLocalCertificateResource(certData certstore.CertMap, logger log.Logger) {
@@ -414,12 +420,7 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 	diff, hasChanged := checkCertDiff(old, newCertList, logger)
 
 	if hasChanged {
-		err := applyCertFileChanges(acmeClient, diff, logger)
-		if err == nil {
-			metrics.IncCertificateConfigReload()
-		} else {
-			_ = level.Error(logger).Log("err", err)
-		}
+		applyCertFileChanges(acmeClient, diff, logger)
 	}
 }
 
