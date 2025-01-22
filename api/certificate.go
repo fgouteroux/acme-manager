@@ -210,7 +210,7 @@ func GetCertificateHandler() http.HandlerFunc {
 		}
 
 		idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
-			return c.Domain == certData.Domain && c.Issuer == certData.Issuer
+			return c.Domain == certData.Domain && c.Issuer == certData.Issuer && c.Owner == certData.Owner
 		})
 
 		var owner string
@@ -318,7 +318,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
-			return c.Domain == certData.Domain && c.Issuer == certData.Issuer
+			return c.Domain == certData.Domain && c.Issuer == certData.Issuer && c.Owner == certData.Owner
 		})
 
 		if idx >= 0 {
