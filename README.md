@@ -74,7 +74,7 @@ Flags:
                                  Client manager tls skip verify
       --client.config-path="client-config.yml"  
                                  Client config path
-      --client.check-config-interval=1m  
+      --client.check-config-interval=5m  
                                  Time interval to check if client config file changes and to update local certificate file
       --log.level=info           Only log messages with the given severity or above. One of: [debug, info, warn, error]
       --log.format=logfmt        Output format of log messages. One of: [logfmt, json]
@@ -132,7 +132,7 @@ storage:
 ```
 
 Required Common parameters:
-- **api_key_hash** (string): the api key hash used to manage tokens, required when api mode is enabled.
+- **api_key_hash** (string): the api key hash used to manage tokens.
 - **rootpath_account** (string): path to find issuer private keys and account file
 - **rootpath_certificate** (string): path to temporary store certificate file before storing in vault.
 
@@ -389,9 +389,11 @@ Optional Common parameters:
 - **certificate_dir_perm** (uint32): Unix permission for certificate directory in octal format (default: 0700)
 - **certificate_file_perm** (uint32): Unix permission for certificate file in octal format (default: 0600)
 - **certificate_keyfile_perm** (uint32): Unix permission for certificate key file in octal format (default: 0600)
-- **cmd_enabled** (bool): If set to true, run a custom command after deploying certificates.
-- **cmd_run** (string):  Command to run.
-- **cmd_timeout** (int): Command timeout.
+- **cmd_enabled** (bool): If set to true, allow running pre and post command.
+- **pre_cmd_run** (string): Pre Command to run before executing certificate changes.
+- **pre_cmd_timeout** (int): Pre Command timeout (default: 60)
+- **post_cmd_run** (string): Post Command to run after executing certificate changes.
+- **post_cmd_timeout** (int): Post Command timeout (default: 60)
 
 Optional Certificate parameters:
 - **bundle** (bool): if true, add the issuers certificate to the new certificate
@@ -407,8 +409,8 @@ common:
   certificate_dir: /etc/myapp/ssl/
 
   cmd_enabled: true
-  cmd_run: /usr/bin/systemcl reload myapp
-  cmd_timeout: 30
+  post_cmd_run: /usr/bin/systemcl reload myapp
+  post_cmd_timeout: 30
 
 
 certificate:

@@ -68,7 +68,7 @@ var (
 	clientManagerTLSKeyFile    = kingpin.Flag("client.tls-key-file", "Client manager tls key file").String()
 	clientManagerTLSSkipVerify = kingpin.Flag("client.tls-skip-verify", "Client manager tls skip verify").Bool()
 	clientConfigPath           = kingpin.Flag("client.config-path", "Client config path").Default("client-config.yml").String()
-	clientCheckConfigInterval  = kingpin.Flag("client.check-config-interval", "Time interval to check if client config file changes and to update local certificate file").Default("1m").Duration()
+	clientCheckConfigInterval  = kingpin.Flag("client.check-config-interval", "Time interval to check if client config file changes and to update local certificate file").Default("5m").Duration()
 
 	logger log.Logger
 )
@@ -134,10 +134,10 @@ func main() {
 		client.CheckAndDeployLocalCertificate(logger, acmeClient)
 
 		// periodically check local certificate are up-to-date
-		go client.WatchLocalCertificate(logger, *clientCheckConfigInterval, acmeClient)
+		go client.WatchCertificateChange(logger, *clientCheckConfigInterval, *clientConfigPath, acmeClient)
 
 		// listen for config file event change
-		go client.WatchCertificateUpdate(logger, *clientConfigPath, acmeClient)
+		go client.WatchCertificateEventChange(logger, *clientConfigPath, acmeClient)
 
 		http.Handle("/metrics", promhttp.Handler())
 

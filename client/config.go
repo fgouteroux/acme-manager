@@ -21,8 +21,10 @@ type Common struct {
 	CertFilePerm    fs.FileMode `yaml:"certificate_file_perm"`
 	CertKeyFilePerm fs.FileMode `yaml:"certificate_keyfile_perm"`
 	CmdEnabled      bool        `yaml:"cmd_enabled"`
-	CmdRun          string      `yaml:"cmd_run"`
-	CmdTimeout      int         `yaml:"cmd_timeout"`
+	PreCmdRun       string      `yaml:"pre_cmd_run"`
+	PreCmdTimeout   int         `yaml:"pre_cmd_timeout"`
+	PostCmdRun      string      `yaml:"post_cmd_run"`
+	PostCmdTimeout  int         `yaml:"post_cmd_timeout"`
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.

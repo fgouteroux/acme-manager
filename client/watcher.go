@@ -14,18 +14,22 @@ import (
 	"github.com/fgouteroux/acme_manager/restclient"
 )
 
-func WatchLocalCertificate(logger log.Logger, interval time.Duration, acmeClient *restclient.Client) {
+func WatchCertificateChange(logger log.Logger, interval time.Duration, configPath string, acmeClient *restclient.Client) {
 	// create a new Ticker
 	tk := time.NewTicker(interval)
 
 	// start the ticker
 	for range tk.C {
+
+		// Compare and create/update certificate from config file to remote server
+		CheckCertificate(logger, configPath, acmeClient)
+
 		// check local certificate are up-to-date
 		CheckAndDeployLocalCertificate(logger, acmeClient)
 	}
 }
 
-func WatchCertificateUpdate(logger log.Logger, configPath string, acmeClient *restclient.Client) {
+func WatchCertificateEventChange(logger log.Logger, configPath string, acmeClient *restclient.Client) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)

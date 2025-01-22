@@ -118,7 +118,10 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 	}
 
 	if hasChange && config.Common.CmdEnabled {
-		executeCommand(logger, config.Common)
+		err = executeCommand(logger, config.Common, false)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+		}
 	}
 }
 
@@ -160,6 +163,15 @@ func checkCertDiff(old, newCertList []certstore.Certificate, logger log.Logger) 
 }
 
 func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger log.Logger) {
+
+	if config.Common.CmdEnabled {
+		err := executeCommand(logger, config.Common, true)
+		if err != nil {
+			_ = level.Error(logger).Log("msg", "Skipping changes because pre_cmd failed", "err", err)
+			return
+		}
+	}
+
 	var hasErrors bool
 	for _, certData := range diff.Create {
 
@@ -252,7 +264,10 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 	}
 
 	if !hasErrors && config.Common.CmdEnabled {
-		executeCommand(logger, config.Common)
+		err := executeCommand(logger, config.Common, false)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+		}
 	}
 }
 
@@ -424,29 +439,48 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 	}
 }
 
-func executeCommand(logger log.Logger, cfg Common) {
-	cmdArr := strings.Split(cfg.CmdRun, " ")
-	cmdPath := cmdArr[0]
-	cmdArgs := cmdArr[1:]
+func executeCommand(logger log.Logger, cfg Common, preCmd bool) error {
+	var cmdRun string
+	var cmdTimeout int
 
-	run := func(cmdPath string, cmdArgs []string, cmdTimeout int) (string, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cmdTimeout)*time.Second)
-		defer cancel()
-
-		var out bytes.Buffer
-
-		cmd := exec.CommandContext(ctx, cmdPath, cmdArgs...)
-		cmd.Stdout = &out
-
-		return out.String(), cmd.Run()
+	if preCmd {
+		cmdRun = cfg.PreCmdRun
+		cmdTimeout = cfg.PreCmdTimeout
+	} else {
+		cmdRun = cfg.PostCmdRun
+		cmdTimeout = cfg.PostCmdTimeout
 	}
 
-	out, err := run(cmdPath, cmdArgs, cfg.CmdTimeout)
-	if err != nil {
-		_ = level.Error(logger).Log("msg", fmt.Sprintf("Command '%s %s' failed: %s", cmdPath, strings.Join(cmdArgs, " "), out), "err", err)
-		metrics.IncRunFailedLocalCmd()
-	} else {
+	if cmdRun != "" {
+
+		// set default timeout
+		if cmdTimeout == 0 {
+			cmdTimeout = 60
+		}
+
+		cmdArr := strings.Split(cmdRun, " ")
+		cmdPath := cmdArr[0]
+		cmdArgs := cmdArr[1:]
+
+		run := func(cmdPath string, cmdArgs []string, cmdTimeout int) (string, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cmdTimeout)*time.Second)
+			defer cancel()
+
+			var out bytes.Buffer
+
+			cmd := exec.CommandContext(ctx, cmdPath, cmdArgs...)
+			cmd.Stdout = &out
+
+			return out.String(), cmd.Run()
+		}
+
+		out, err := run(cmdPath, cmdArgs, cmdTimeout)
+		if err != nil {
+			metrics.IncRunFailedLocalCmd()
+			return fmt.Errorf("Command '%s %s' failed: %s. Error: %s", cmdPath, strings.Join(cmdArgs, " "), out, err.Error())
+		}
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Command '%s %s' successfully executed", cmdPath, strings.Join(cmdArgs, " ")))
 		metrics.IncRunSuccessLocalCmd()
 	}
+	return nil
 }
