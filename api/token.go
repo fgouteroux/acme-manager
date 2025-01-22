@@ -363,13 +363,12 @@ func RevokeTokenHandler() http.HandlerFunc {
 					secretKeyPathPrefix = "token"
 				}
 				secretKeyPath := fmt.Sprintf("%s/%s/%s", secretKeyPathPrefix, tokenData.Username, ID)
-				delete(data, ID)
-
 				err = vault.GlobalClient.DeleteSecretWithAppRole(secretKeyPath)
 				if err != nil {
 					responseJSON(w, nil, err, http.StatusInternalServerError)
 					return
 				}
+				delete(data, ID)
 
 				// udpate kv store
 				certstore.AmStore.PutKVRing(certstore.TokenRingKey, data)
@@ -378,6 +377,7 @@ func RevokeTokenHandler() http.HandlerFunc {
 				return
 			}
 			responseJSON(w, nil, fmt.Errorf("Token ID '%s' not found", ID), http.StatusNotFound)
+			return
 		}
 		http.Error(w, "Missing token ID", http.StatusBadRequest)
 	})
