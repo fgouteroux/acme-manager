@@ -531,7 +531,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		if recreateCert {
-			err = certstore.DeleteRemoteCertificateResource(certData.Domain, certData.Issuer, certstore.AmStore.Logger)
+			err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
 			if err != nil {
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
@@ -608,7 +608,7 @@ func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		w.Header().Set("Username", tokenValue.Username)
 
-		certData := &certstore.Certificate{
+		certData := certstore.Certificate{
 			Domain: r.PathValue("domain"),
 			Issuer: r.PathValue("issuer"),
 			Owner:  tokenValue.Username,
@@ -666,7 +666,7 @@ func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		err = certstore.DeleteRemoteCertificateResource(certData.Domain, certData.Issuer, certstore.AmStore.Logger)
+		err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
 		if err != nil {
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return

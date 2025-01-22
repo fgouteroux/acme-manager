@@ -81,10 +81,10 @@ func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resou
 }
 
 func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (Certificate, error) {
-	vaultSecretPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Issuer, certData.Domain)
+	vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 	domain := utils.SanitizedDomain(logger, certData.Domain)
 
-	baseCertificateFilePath := fmt.Sprintf("%s/%s/%s/", config.GlobalConfig.Common.RootPathCertificate, certData.Issuer, domain)
+	baseCertificateFilePath := fmt.Sprintf("%s/%s/%s/%s/", config.GlobalConfig.Common.RootPathCertificate, certData.Owner, certData.Issuer, domain)
 	err := utils.CreateNonExistingFolder(baseCertificateFilePath, 0750)
 	if err != nil {
 		return certData, err
@@ -179,9 +179,8 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 	return certData, nil
 }
 
-func DeleteRemoteCertificateResource(name, issuer string, logger log.Logger) error {
-	vaultSecretPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, issuer, name)
-	domain := utils.SanitizedDomain(logger, name)
+func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) error {
+	vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 	data, err := vault.GlobalClient.GetSecretWithAppRole(vaultSecretPath)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
@@ -189,15 +188,15 @@ func DeleteRemoteCertificateResource(name, issuer string, logger log.Logger) err
 	}
 
 	if certBytes, ok := data["cert"]; ok {
-		err = AcmeClient[issuer].Certificate.Revoke([]byte(certBytes.(string)))
+		err = AcmeClient[certData.Issuer].Certificate.Revoke([]byte(certBytes.(string)))
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			return err
 		}
 
-		metrics.IncRevokedCertificate(issuer, data["owner"].(string))
+		metrics.IncRevokedCertificate(certData.Issuer, certData.Owner)
 
-		_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate domain %s for %s issuer revoked", domain, issuer))
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate domain %s for %s issuer revoked", certData.Domain, certData.Issuer))
 		err = vault.GlobalClient.DeleteSecretWithAppRole(vaultSecretPath)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
