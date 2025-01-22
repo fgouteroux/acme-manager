@@ -123,11 +123,12 @@ func checkAuth(r *http.Request) (certstore.Token, error) {
 // @Success 404 {object} responseErrorJSON
 // @Success 500 {object} responseErrorJSON
 // @Router /certificate/metadata [get]
-func CertificateMetadataHandler() http.HandlerFunc {
+func CertificateMetadataHandler(logger log.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		tokenValue, err := checkAuth(r)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusUnauthorized)
 			return
 		}
@@ -136,6 +137,7 @@ func CertificateMetadataHandler() http.HandlerFunc {
 
 		data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -182,10 +184,11 @@ func CertificateMetadataHandler() http.HandlerFunc {
 // @Success 404 {object} responseErrorJSON
 // @Success 500 {object} responseErrorJSON
 // @Router /certificate/{issuer}/{domain} [get]
-func GetCertificateHandler() http.HandlerFunc {
+func GetCertificateHandler(logger log.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusUnauthorized)
 			return
 		}
@@ -205,6 +208,7 @@ func GetCertificateHandler() http.HandlerFunc {
 
 		data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -226,9 +230,10 @@ func GetCertificateHandler() http.HandlerFunc {
 			responseJSON(w, nil, fmt.Errorf("Certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
 			return
 		}
-		secretKeyPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Issuer, certData.Domain)
+		secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -258,6 +263,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusUnauthorized)
 			return
 		}
@@ -337,7 +343,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
 			body, _ := json.Marshal(certData)
 			r.Body = io.NopCloser(bytes.NewReader(body))
-			forwardRequest(proxyClient, host, w, r)
+			forwardRequest(logger, proxyClient, host, w, r)
 			return
 		}
 
@@ -376,7 +382,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		// udpate kv store
 		certstore.AmStore.PutKVRing(certstore.AmRingKey, data)
 
-		secretKeyPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Issuer, certData.Domain)
+		secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -410,6 +416,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusUnauthorized)
 			return
 		}
@@ -455,6 +462,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		var certData certstore.Certificate
 		err = json.Unmarshal(certBytes, &certData)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -463,6 +471,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -478,6 +487,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -486,7 +496,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
 			body, _ := json.Marshal(certData)
 			r.Body = io.NopCloser(bytes.NewReader(body))
-			forwardRequest(proxyClient, host, w, r)
+			forwardRequest(logger, proxyClient, host, w, r)
 			return
 		}
 
@@ -508,7 +518,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		secretKeyPath := fmt.Sprintf("%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Issuer, certData.Domain)
+		secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 
 		var recreateCert bool
 		if certData.SAN != data[idx].SAN {
@@ -533,6 +543,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		if recreateCert {
 			err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
 			if err != nil {
+				_ = level.Error(logger).Log("err", err)
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
@@ -542,6 +553,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 			newCert, err := certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
 			if err != nil {
+				_ = level.Error(logger).Log("err", err)
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
@@ -551,12 +563,14 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			data[idx].RenewalDays = certData.RenewalDays
 			secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 			if err != nil {
+				_ = level.Error(logger).Log("err", err)
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
 			secret["renewal_days"] = certData.RenewalDays
 			err = vault.GlobalClient.PutSecretWithAppRole(secretKeyPath, utils.StructToMapInterface(secret))
 			if err != nil {
+				_ = level.Error(logger).Log("err", err)
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
@@ -571,6 +585,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -602,6 +617,7 @@ func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusUnauthorized)
 			return
 		}
@@ -621,6 +637,7 @@ func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -636,6 +653,7 @@ func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -644,7 +662,7 @@ func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
 			body, _ := json.Marshal(certData)
 			r.Body = io.NopCloser(bytes.NewReader(body))
-			forwardRequest(proxyClient, host, w, r)
+			forwardRequest(logger, proxyClient, host, w, r)
 			return
 		}
 
@@ -668,6 +686,7 @@ func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -681,7 +700,7 @@ func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 	})
 }
 
-func forwardRequest(proxyClient *http.Client, host string, w http.ResponseWriter, req *http.Request) {
+func forwardRequest(logger log.Logger, proxyClient *http.Client, host string, w http.ResponseWriter, req *http.Request) {
 	scheme := "http"
 	if req.TLS != nil {
 		scheme = "https"
@@ -691,6 +710,7 @@ func forwardRequest(proxyClient *http.Client, host string, w http.ResponseWriter
 
 	proxyReq, err := http.NewRequest(req.Method, url, req.Body)
 	if err != nil {
+		_ = level.Error(logger).Log("err", err)
 		responseJSON(w, nil, err, http.StatusInternalServerError)
 		return
 	}
@@ -713,6 +733,7 @@ func forwardRequest(proxyClient *http.Client, host string, w http.ResponseWriter
 	w.WriteHeader(resp.StatusCode)
 	_, err = io.Copy(w, resp.Body)
 	if err != nil {
+		_ = level.Error(logger).Log("err", err)
 		responseJSON(w, nil, err, http.StatusInternalServerError)
 	}
 }

@@ -8,6 +8,9 @@ import (
 	"slices"
 	"time"
 
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+
 	"github.com/google/uuid"
 	"github.com/prometheus/common/model"
 
@@ -44,7 +47,7 @@ type TokenParams struct {
 // @Success 500 {object} responseErrorJSON
 // @Router /token/{id} [get]
 // @security APIKeyAuth
-func GetTokenHandler() http.HandlerFunc {
+func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
@@ -61,6 +64,7 @@ func GetTokenHandler() http.HandlerFunc {
 		if ID != "" {
 			data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
 			if err != nil {
+				_ = level.Error(logger).Log("err", err)
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
@@ -91,7 +95,7 @@ func GetTokenHandler() http.HandlerFunc {
 // @Success 500 {object} responseErrorJSON
 // @Router /token [post]
 // @security APIKeyAuth
-func CreateTokenHandler() http.HandlerFunc {
+func CreateTokenHandler(logger log.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
@@ -113,6 +117,7 @@ func CreateTokenHandler() http.HandlerFunc {
 
 		data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -146,6 +151,7 @@ func CreateTokenHandler() http.HandlerFunc {
 		ID := uuid.New().String()
 		randomToken, err := utils.RandomStringCrypto(32)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, fmt.Errorf("Error generating token: %v", err), http.StatusInternalServerError)
 			return
 		}
@@ -178,6 +184,7 @@ func CreateTokenHandler() http.HandlerFunc {
 		secretKeyPath := fmt.Sprintf("%s/%s/%s", secretKeyPathPrefix, token.Username, ID)
 		err = vault.GlobalClient.PutSecretWithAppRole(secretKeyPath, newData)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -211,7 +218,7 @@ func CreateTokenHandler() http.HandlerFunc {
 // @Success 500 {object} responseErrorJSON
 // @Router /token [put]
 // @security APIKeyAuth
-func UpdateTokenHandler() http.HandlerFunc {
+func UpdateTokenHandler(logger log.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
@@ -233,6 +240,7 @@ func UpdateTokenHandler() http.HandlerFunc {
 
 		data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -271,6 +279,7 @@ func UpdateTokenHandler() http.HandlerFunc {
 
 		randomToken, err := utils.RandomStringCrypto(32)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, fmt.Errorf("Error generating token: %v", err), http.StatusInternalServerError)
 			return
 		}
@@ -303,6 +312,7 @@ func UpdateTokenHandler() http.HandlerFunc {
 		secretKeyPath := fmt.Sprintf("%s/%s/%s", secretKeyPathPrefix, token.Username, token.ID)
 		err = vault.GlobalClient.PutSecretWithAppRole(secretKeyPath, newData)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -335,7 +345,7 @@ func UpdateTokenHandler() http.HandlerFunc {
 // @Success 500 {object} responseErrorJSON
 // @Router /token/{id} [delete]
 // @security APIKeyAuth
-func RevokeTokenHandler() http.HandlerFunc {
+func RevokeTokenHandler(logger log.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
@@ -350,6 +360,7 @@ func RevokeTokenHandler() http.HandlerFunc {
 
 		data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
 		if err != nil {
+			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -365,6 +376,7 @@ func RevokeTokenHandler() http.HandlerFunc {
 				secretKeyPath := fmt.Sprintf("%s/%s/%s", secretKeyPathPrefix, tokenData.Username, ID)
 				err = vault.GlobalClient.DeleteSecretWithAppRole(secretKeyPath)
 				if err != nil {
+					_ = level.Error(logger).Log("err", err)
 					responseJSON(w, nil, err, http.StatusInternalServerError)
 					return
 				}

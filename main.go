@@ -242,19 +242,19 @@ func main() {
 	proxyClient := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
 
 	// metadata certificate
-	http.Handle("GET /api/v1/certificate/metadata", LoggerHandler(api.CertificateMetadataHandler()))
+	http.Handle("GET /api/v1/certificate/metadata", LoggerHandler(api.CertificateMetadataHandler(logger)))
 
 	// certificate
 	http.Handle("PUT /api/v1/certificate", LoggerHandler(api.UpdateCertificateHandler(logger, proxyClient)))
 	http.Handle("POST /api/v1/certificate", LoggerHandler(api.CreateCertificateHandler(logger, proxyClient)))
-	http.Handle("GET /api/v1/certificate/{issuer}/{domain}", LoggerHandler(api.GetCertificateHandler()))
+	http.Handle("GET /api/v1/certificate/{issuer}/{domain}", LoggerHandler(api.GetCertificateHandler(logger)))
 	http.Handle("DELETE /api/v1/certificate/{issuer}/{domain}", LoggerHandler(api.RevokeCertificateHandler(logger, proxyClient)))
 
 	// token
-	http.Handle("PUT /api/v1/token/", LoggerHandler(api.UpdateTokenHandler()))
-	http.Handle("POST /api/v1/token", LoggerHandler(api.CreateTokenHandler()))
-	http.Handle("GET /api/v1/token/{id}", LoggerHandler(api.GetTokenHandler()))
-	http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(api.RevokeTokenHandler()))
+	http.Handle("PUT /api/v1/token/", LoggerHandler(api.UpdateTokenHandler(logger)))
+	http.Handle("POST /api/v1/token", LoggerHandler(api.CreateTokenHandler(logger)))
+	http.Handle("GET /api/v1/token/{id}", LoggerHandler(api.GetTokenHandler(logger)))
+	http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(api.RevokeTokenHandler(logger)))
 
 	go certstore.WatchTokenExpiration(logger, *checkTokenInterval)
 
