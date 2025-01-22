@@ -62,11 +62,11 @@ func getVaultAllCertificate(logger log.Logger) []Certificate {
 	_ = level.Info(logger).Log("msg", "Retrieving certificates from vault")
 
 	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(config.GlobalConfig.Storage.Vault.CertPrefix + "/")
-
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
+	_ = level.Debug(logger).Log("msg", fmt.Sprintf("vault certificate secrets list: %v", vaultSecrets))
 
 	var vaultCertList []Certificate
 	if len(vaultSecrets) > 0 {
@@ -114,6 +114,7 @@ func getVaultAllToken(logger log.Logger) map[string]Token {
 	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(
 		config.GlobalConfig.Storage.Vault.TokenPrefix + "/",
 	)
+	_ = level.Debug(logger).Log("msg", fmt.Sprintf("vault token secrets list: %v", vaultSecrets))
 
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)

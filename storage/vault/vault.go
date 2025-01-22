@@ -61,8 +61,9 @@ func (client *Client) ListSecretWithAppRole(secretPath string) ([]string, error)
 	if err != nil {
 		return []string{}, err
 	}
+	var secretListPath []string
 	path := client.config.SecretEngine + "/metadata/" + secretPath
-	secrets, err := recursiveListSecret(client, path)
+	secrets, err := recursiveListSecret(client, path, secretListPath)
 	if err != nil {
 		return secrets, fmt.Errorf("unable to list secrets: %w", err)
 	}
@@ -139,8 +140,7 @@ func listSecret(client *Client, path string) (*vaultApi.Secret, error) {
 }
 
 // recursiveListSecret returns a list of secrets paths from Vault
-func recursiveListSecret(client *Client, path string) ([]string, error) {
-	var secretListPath []string
+func recursiveListSecret(client *Client, path string, secretListPath []string) ([]string, error) {
 	secretList, err := listSecret(client, path)
 	if err != nil {
 		return []string{}, err
@@ -150,7 +150,7 @@ func recursiveListSecret(client *Client, path string) ([]string, error) {
 		for _, secret := range secretList.Data["keys"].([]interface{}) {
 			if strings.HasSuffix(secret.(string), "/") {
 				var err error
-				secretListPath, err = recursiveListSecret(client, path+secret.(string))
+				secretListPath, err = recursiveListSecret(client, path+secret.(string), secretListPath)
 				if err != nil {
 					return []string{}, err
 				}
