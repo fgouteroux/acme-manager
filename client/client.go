@@ -38,6 +38,7 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 		return
 	}
 
+	_ = level.Info(logger).Log("msg", "Checking local certificates with remote server")
 	certificates, err := acmeClient.GetAllCertificateMetadata()
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)

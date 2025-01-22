@@ -127,13 +127,17 @@ func main() {
 			_ = level.Error(logger).Log("err", err)
 			os.Exit(1)
 		}
-		// Compare and create/update certificate from config file to remote server
+		// On startup compare and create/update certificate from config file to remote server
 		client.CheckCertificate(logger, *clientConfigPath, acmeClient)
 
-		// check local certificate are up-to-date
+		// on startup check local certificate are up-to-date
 		client.CheckAndDeployLocalCertificate(logger, acmeClient)
 
-		go client.WatchCertificate(logger, *clientCheckConfigInterval, *clientConfigPath, acmeClient)
+		// periodically check local certificate are up-to-date
+		go client.WatchLocalCertificate(logger, *clientCheckConfigInterval, acmeClient)
+
+		// listen for config file event change
+		go client.WatchCertificateUpdate(logger, *clientConfigPath, acmeClient)
 
 		http.Handle("/metrics", promhttp.Handler())
 
