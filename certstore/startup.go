@@ -72,8 +72,7 @@ func getVaultAllCertificate(logger log.Logger) []Certificate {
 	if len(vaultSecrets) > 0 {
 
 		var vaultCertCount int
-		for _, secretKey := range vaultSecrets {
-			secretKeyPath := config.GlobalConfig.Storage.Vault.CertPrefix + "/" + secretKey
+		for _, secretKeyPath := range vaultSecrets {
 			secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -125,9 +124,7 @@ func getVaultAllToken(logger log.Logger) map[string]Token {
 	if len(vaultSecrets) > 0 {
 
 		var vaultTokenCount int
-		for _, secretKey := range vaultSecrets {
-			secretKeyPath := config.GlobalConfig.Storage.Vault.TokenPrefix + "/" + secretKey
-
+		for _, secretKeyPath := range vaultSecrets {
 			secretKeyPathArr := strings.Split(secretKeyPath, "/")
 			ID := secretKeyPathArr[len(secretKeyPathArr)-1]
 

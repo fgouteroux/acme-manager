@@ -62,7 +62,7 @@ func (client *Client) ListSecretWithAppRole(secretPath string) ([]string, error)
 		return []string{}, err
 	}
 	path := client.config.SecretEngine + "/metadata/" + secretPath
-	secrets, err := recursiveListSecret(client, path, "")
+	secrets, err := recursiveListSecret(client, path)
 	if err != nil {
 		return secrets, fmt.Errorf("unable to list secrets: %w", err)
 	}
@@ -139,7 +139,7 @@ func listSecret(client *Client, path string) (*vaultApi.Secret, error) {
 }
 
 // recursiveListSecret returns a list of secrets paths from Vault
-func recursiveListSecret(client *Client, path, prefix string) ([]string, error) {
+func recursiveListSecret(client *Client, path string) ([]string, error) {
 	var secretListPath []string
 	secretList, err := listSecret(client, path)
 	if err != nil {
@@ -150,14 +150,14 @@ func recursiveListSecret(client *Client, path, prefix string) ([]string, error) 
 		for _, secret := range secretList.Data["keys"].([]interface{}) {
 			if strings.HasSuffix(secret.(string), "/") {
 				var err error
-				secretListPath, err = recursiveListSecret(client, path+secret.(string), secret.(string))
+				secretListPath, err = recursiveListSecret(client, path+secret.(string))
 				if err != nil {
 					return []string{}, err
 				}
-			} else if prefix != "" {
-				secretListPath = append([]string{prefix + secret.(string)}, secretListPath...)
 			} else {
-				secretListPath = append([]string{secret.(string)}, secretListPath...)
+				// remove secret engine + metadata path as it is implicit in GetSecretWithAppRole
+				secretPath := strings.Split(path, client.config.SecretEngine+"/metadata")[1] + secret.(string)
+				secretListPath = append(secretListPath, secretPath)
 			}
 		}
 	}
