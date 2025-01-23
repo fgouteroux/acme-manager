@@ -37,13 +37,14 @@ func WatchCertificateEventChange(logger log.Logger, configPath string, acmeClien
 	}
 	defer watcher.Close()
 
-	fileName := filepath.Base(configPath)
-	if !filepath.IsAbs(configPath) {
-		fileName = "./" + fileName
+	fileName := configPath
+	watchDir := filepath.Dir(configPath)
+	if watchDir == "." {
+		fileName = "./" + configPath
 	}
 
 	// watch the parent dir of the file to catch changes
-	err = watcher.Add(filepath.Dir(configPath))
+	err = watcher.Add(watchDir)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
