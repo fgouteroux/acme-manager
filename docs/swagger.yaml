@@ -50,6 +50,36 @@ definitions:
         example: testfgx
         type: string
     type: object
+  api.TokenResponse:
+    properties:
+      expires:
+        type: string
+      id:
+        type: string
+      scope:
+        items:
+          type: string
+        type: array
+      token:
+        type: string
+      tokenHash:
+        type: string
+      username:
+        type: string
+    type: object
+  api.TokenResponseGet:
+    properties:
+      expires:
+        type: string
+      scope:
+        items:
+          type: string
+        type: array
+      tokenHash:
+        type: string
+      username:
+        type: string
+    type: object
   api.responseErrorJSON:
     properties:
       error:
@@ -143,19 +173,6 @@ definitions:
         type: integer
       san:
         example: ""
-        type: string
-    type: object
-  certstore.Token:
-    properties:
-      expires:
-        type: string
-      scope:
-        items:
-          type: string
-        type: array
-      tokenHash:
-        type: string
-      username:
         type: string
     type: object
 info:
@@ -438,8 +455,7 @@ paths:
         "201":
           description: Created
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.TokenResponse'
         "400":
           description: Bad Request
           schema:
@@ -473,8 +489,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.TokenResponse'
         "400":
           description: Bad Request
           schema:
@@ -541,7 +556,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/certstore.Token'
+            $ref: '#/definitions/api.TokenResponseGet'
         "400":
           description: Bad Request
           schema:

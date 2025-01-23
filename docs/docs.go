@@ -424,8 +424,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.TokenResponse"
                         }
                     },
                     "400": {
@@ -483,8 +482,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.TokenResponse"
                         }
                     },
                     "400": {
@@ -536,7 +534,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/certstore.Token"
+                            "$ref": "#/definitions/api.TokenResponseGet"
                         }
                     },
                     "400": {
@@ -684,6 +682,52 @@ const docTemplate = `{
                 }
             }
         },
+        "api.TokenResponse": {
+            "type": "object",
+            "properties": {
+                "expires": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "token": {
+                    "type": "string"
+                },
+                "tokenHash": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.TokenResponseGet": {
+            "type": "object",
+            "properties": {
+                "expires": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tokenHash": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "api.responseErrorJSON": {
             "type": "object",
             "properties": {
@@ -806,26 +850,6 @@ const docTemplate = `{
                 "san": {
                     "type": "string",
                     "example": ""
-                }
-            }
-        },
-        "certstore.Token": {
-            "type": "object",
-            "properties": {
-                "expires": {
-                    "type": "string"
-                },
-                "scope": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "tokenHash": {
-                    "type": "string"
-                },
-                "username": {
-                    "type": "string"
                 }
             }
         }

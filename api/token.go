@@ -32,6 +32,22 @@ type TokenParams struct {
 	Expires  string   `json:"expires" example:"30d"`
 }
 
+type TokenResponse struct {
+	ID       string   `json:"id"`
+	Token    string   `json:"token"`
+	Hash     string   `json:"tokenHash"`
+	Username string   `json:"username"`
+	Expires  string   `json:"expires"`
+	Scope    []string `json:"scope"`
+}
+
+type TokenResponseGet struct {
+	Hash     string   `json:"tokenHash"`
+	Username string   `json:"username"`
+	Expires  string   `json:"expires"`
+	Scope    []string `json:"scope"`
+}
+
 // manage token
 
 // getToken godoc
@@ -40,7 +56,7 @@ type TokenParams struct {
 // @Tags token
 // @Produce  application/json
 // @Param id path string true "Token ID"
-// @Success 200 {object} certstore.Token
+// @Success 200 {object} TokenResponseGet
 // @Success 400 {object} responseErrorJSON
 // @Success 401 {object} responseErrorJSON
 // @Success 404 {object} responseErrorJSON
@@ -89,7 +105,7 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 // @Tags token
 // @Produce  application/json
 // @Param body body TokenParams true "Token Body"
-// @Success 201 {object} map[string]interface{}
+// @Success 201 {object} TokenResponse
 // @Success 400 {object} responseErrorJSON
 // @Success 401 {object} responseErrorJSON
 // @Success 500 {object} responseErrorJSON
@@ -211,7 +227,7 @@ func CreateTokenHandler(logger log.Logger) http.HandlerFunc {
 // @Tags token
 // @Produce  application/json
 // @Param body body TokenParams true "Token Body"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} TokenResponse
 // @Success 400 {object} responseErrorJSON
 // @Success 401 {object} responseErrorJSON
 // @Success 429 {object} responseErrorJSON

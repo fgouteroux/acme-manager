@@ -255,7 +255,7 @@ func main() {
 	http.Handle("DELETE /api/v1/certificate/{issuer}/{domain}", LoggerHandler(api.RevokeCertificateHandler(logger, proxyClient)))
 
 	// token
-	http.Handle("PUT /api/v1/token/", LoggerHandler(api.UpdateTokenHandler(logger)))
+	http.Handle("PUT /api/v1/token", LoggerHandler(api.UpdateTokenHandler(logger)))
 	http.Handle("POST /api/v1/token", LoggerHandler(api.CreateTokenHandler(logger)))
 	http.Handle("GET /api/v1/token/{id}", LoggerHandler(api.GetTokenHandler(logger)))
 	http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(api.RevokeTokenHandler(logger)))
