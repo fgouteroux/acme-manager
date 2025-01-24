@@ -255,10 +255,10 @@ func main() {
 	http.Handle("DELETE /api/v1/certificate/{issuer}/{domain}", LoggerHandler(api.DeleteCertificateHandler(logger, proxyClient)))
 
 	// token
-	http.Handle("PUT /api/v1/token", LoggerHandler(api.UpdateTokenHandler(logger)))
-	http.Handle("POST /api/v1/token", LoggerHandler(api.CreateTokenHandler(logger)))
+	http.Handle("PUT /api/v1/token", LoggerHandler(api.UpdateTokenHandler(logger, proxyClient)))
+	http.Handle("POST /api/v1/token", LoggerHandler(api.CreateTokenHandler(logger, proxyClient)))
 	http.Handle("GET /api/v1/token/{id}", LoggerHandler(api.GetTokenHandler(logger)))
-	http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(api.RevokeTokenHandler(logger)))
+	http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(api.RevokeTokenHandler(logger, proxyClient)))
 
 	go certstore.WatchTokenExpiration(logger, *checkTokenInterval)
 

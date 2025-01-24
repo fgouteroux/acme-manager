@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
 	"time"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/config"
+	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
 )
@@ -113,7 +116,7 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 // @Success 500 {object} responseErrorJSON
 // @Router /token [post]
 // @security APIKeyAuth
-func CreateTokenHandler(logger log.Logger) http.HandlerFunc {
+func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
@@ -164,6 +167,21 @@ func CreateTokenHandler(logger log.Logger) http.HandlerFunc {
 				responseJSON(w, nil, fmt.Errorf("Invalid scope value '%s', must be in %v", scope, allowedScope), http.StatusBadRequest)
 				return
 			}
+		}
+
+		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, nil, err, http.StatusInternalServerError)
+			return
+		}
+		if !isLeaderNow {
+			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
+			body, _ := json.Marshal(token)
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			forwardRequest(logger, proxyClient, host, w, r)
+			return
 		}
 
 		ID := uuid.New().String()
@@ -238,7 +256,7 @@ func CreateTokenHandler(logger log.Logger) http.HandlerFunc {
 // @Success 500 {object} responseErrorJSON
 // @Router /token [put]
 // @security APIKeyAuth
-func UpdateTokenHandler(logger log.Logger) http.HandlerFunc {
+func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
@@ -295,6 +313,21 @@ func UpdateTokenHandler(logger log.Logger) http.HandlerFunc {
 				responseJSON(w, nil, fmt.Errorf("Invalid 'scope' must be in %v", allowedScope), http.StatusBadRequest)
 				return
 			}
+		}
+
+		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, nil, err, http.StatusInternalServerError)
+			return
+		}
+		if !isLeaderNow {
+			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
+			body, _ := json.Marshal(token)
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			forwardRequest(logger, proxyClient, host, w, r)
+			return
 		}
 
 		randomToken, err := utils.RandomStringCrypto(32)
@@ -367,7 +400,7 @@ func UpdateTokenHandler(logger log.Logger) http.HandlerFunc {
 // @Success 500 {object} responseErrorJSON
 // @Router /token/{id} [delete]
 // @security APIKeyAuth
-func RevokeTokenHandler(logger log.Logger) http.HandlerFunc {
+func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
@@ -391,6 +424,20 @@ func RevokeTokenHandler(logger log.Logger) http.HandlerFunc {
 		if ID != "" {
 			tokenData, tokenExists := data[ID]
 			if tokenExists {
+
+				isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
+				if err != nil {
+					_ = level.Error(logger).Log("err", err)
+					responseJSON(w, nil, err, http.StatusInternalServerError)
+					return
+				}
+				if !isLeaderNow {
+					host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
+					_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
+					forwardRequest(logger, proxyClient, host, w, r)
+					return
+				}
+
 				secretKeyPathPrefix := config.GlobalConfig.Storage.Vault.TokenPrefix
 				if secretKeyPathPrefix == "" {
 					secretKeyPathPrefix = "token"
