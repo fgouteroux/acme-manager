@@ -29,7 +29,7 @@ type TokenParams struct {
 	ID       string   `json:"id" example:"021b5075-2d1e-44bd-b5e5-ffc7be7ad4c3"`
 	Username string   `json:"username" example:"testfgx"`
 	Scope    []string `json:"scope" example:"read,create,update,delete"`
-	Expires  string   `json:"expires" example:"30d"`
+	Duration string   `json:"duration" example:"30d"`
 }
 
 type TokenResponse struct {
@@ -38,6 +38,7 @@ type TokenResponse struct {
 	Hash     string   `json:"tokenHash"`
 	Username string   `json:"username"`
 	Expires  string   `json:"expires"`
+	Duration string   `json:"duration"`
 	Scope    []string `json:"scope"`
 }
 
@@ -45,6 +46,7 @@ type TokenResponseGet struct {
 	Hash     string   `json:"tokenHash"`
 	Username string   `json:"username"`
 	Expires  string   `json:"expires"`
+	Duration string   `json:"duration"`
 	Scope    []string `json:"scope"`
 }
 
@@ -173,10 +175,10 @@ func CreateTokenHandler(logger log.Logger) http.HandlerFunc {
 		}
 
 		var expires string
-		if token.Expires == "" {
+		if token.Duration == "" {
 			expires = "Never"
 		} else {
-			duration, err := model.ParseDuration(token.Expires)
+			duration, err := model.ParseDuration(token.Duration)
 			if err != nil {
 				responseJSON(w, nil, fmt.Errorf("Invalid duration for 'expires' parameter: %v", err), http.StatusBadRequest)
 				return
@@ -195,6 +197,7 @@ func CreateTokenHandler(logger log.Logger) http.HandlerFunc {
 			"scope":     token.Scope,
 			"username":  token.Username,
 			"expires":   expires,
+			"duration":  token.Duration,
 		}
 
 		secretKeyPath := fmt.Sprintf("%s/%s/%s", secretKeyPathPrefix, token.Username, ID)
@@ -210,6 +213,7 @@ func CreateTokenHandler(logger log.Logger) http.HandlerFunc {
 			Scope:     token.Scope,
 			Username:  token.Username,
 			Expires:   expires,
+			Duration:  token.Duration,
 		}
 
 		// udpate kv store
@@ -301,10 +305,10 @@ func UpdateTokenHandler(logger log.Logger) http.HandlerFunc {
 		}
 
 		var expires string
-		if token.Expires == "" {
+		if token.Duration == "" {
 			expires = "Never"
 		} else {
-			duration, err := model.ParseDuration(token.Expires)
+			duration, err := model.ParseDuration(token.Duration)
 			if err != nil {
 				responseJSON(w, nil, fmt.Errorf("Invalid duration for 'expires' parameter: %v", err), http.StatusBadRequest)
 				return
@@ -323,6 +327,7 @@ func UpdateTokenHandler(logger log.Logger) http.HandlerFunc {
 			"scope":     token.Scope,
 			"username":  token.Username,
 			"expires":   expires,
+			"duration":  token.Duration,
 		}
 
 		secretKeyPath := fmt.Sprintf("%s/%s/%s", secretKeyPathPrefix, token.Username, token.ID)
@@ -338,6 +343,7 @@ func UpdateTokenHandler(logger log.Logger) http.HandlerFunc {
 			Scope:     token.Scope,
 			Username:  token.Username,
 			Expires:   expires,
+			Duration:  token.Duration,
 		}
 
 		// udpate kv store

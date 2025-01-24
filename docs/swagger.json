@@ -649,7 +649,7 @@
         "api.TokenParams": {
             "type": "object",
             "properties": {
-                "expires": {
+                "duration": {
                     "type": "string",
                     "example": "30d"
                 },
@@ -678,6 +678,9 @@
         "api.TokenResponse": {
             "type": "object",
             "properties": {
+                "duration": {
+                    "type": "string"
+                },
                 "expires": {
                     "type": "string"
                 },
@@ -704,6 +707,9 @@
         "api.TokenResponseGet": {
             "type": "object",
             "properties": {
+                "duration": {
+                    "type": "string"
+                },
                 "expires": {
                     "type": "string"
                 },

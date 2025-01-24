@@ -31,7 +31,7 @@ definitions:
     type: object
   api.TokenParams:
     properties:
-      expires:
+      duration:
         example: 30d
         type: string
       id:
@@ -52,6 +52,8 @@ definitions:
     type: object
   api.TokenResponse:
     properties:
+      duration:
+        type: string
       expires:
         type: string
       id:
@@ -69,6 +71,8 @@ definitions:
     type: object
   api.TokenResponseGet:
     properties:
+      duration:
+        type: string
       expires:
         type: string
       scope:

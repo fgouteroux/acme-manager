@@ -63,6 +63,7 @@ type Token struct {
 	Scope     []string `json:"scope"`
 	Username  string   `json:"username"`
 	Expires   string   `json:"expires"`
+	Duration  string   `json:"duration"`
 }
 
 func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resource) {

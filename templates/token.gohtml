@@ -34,6 +34,7 @@
         <th>Owner</th>
         <th>Scope</th>
         <th>Expires</th>
+        <th>Duration</th>
       </tr>
     </thead>
     <tbody>
@@ -44,6 +45,7 @@
         <td id="owner">{{ $tokenData.Username }}</td>
         <td id="scope">{{ Join $tokenData.Scope "," }}</td>
         <td id="expires">{{ $tokenData.Expires }}</td>
+        <td id="expires">{{ $tokenData.Duration }}</td>
       </tr>
       {{ end }}
     </tbody>

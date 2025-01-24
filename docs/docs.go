@@ -656,7 +656,7 @@ const docTemplate = `{
         "api.TokenParams": {
             "type": "object",
             "properties": {
-                "expires": {
+                "duration": {
                     "type": "string",
                     "example": "30d"
                 },
@@ -685,6 +685,9 @@ const docTemplate = `{
         "api.TokenResponse": {
             "type": "object",
             "properties": {
+                "duration": {
+                    "type": "string"
+                },
                 "expires": {
                     "type": "string"
                 },
@@ -711,6 +714,9 @@ const docTemplate = `{
         "api.TokenResponseGet": {
             "type": "object",
             "properties": {
+                "duration": {
+                    "type": "string"
+                },
                 "expires": {
                     "type": "string"
                 },
