@@ -15,6 +15,7 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 
+	"github.com/fgouteroux/acme_manager/api"
 	"github.com/fgouteroux/acme_manager/certstore"
 )
 
@@ -190,7 +191,7 @@ func (c *Client) ReadCertificate(data certstore.Certificate) (certstore.CertMap,
 	return certificate, nil
 }
 
-func (c *Client) CreateCertificate(data certstore.Certificate) (certstore.CertMap, error) {
+func (c *Client) CreateCertificate(data api.CertificateParams) (certstore.CertMap, error) {
 	var certificate certstore.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
@@ -223,7 +224,7 @@ func (c *Client) CreateCertificate(data certstore.Certificate) (certstore.CertMa
 	return certificate, nil
 }
 
-func (c *Client) UpdateCertificate(data certstore.Certificate) (certstore.CertMap, error) {
+func (c *Client) UpdateCertificate(data api.CertificateParams) (certstore.CertMap, error) {
 	var certificate certstore.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
@@ -256,19 +257,14 @@ func (c *Client) UpdateCertificate(data certstore.Certificate) (certstore.CertMa
 	return certificate, nil
 }
 
-func (c *Client) DeleteCertificate(data certstore.Certificate) error {
+func (c *Client) DeleteCertificate(issuer, domain string, revoke bool) error {
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
-
-	reqBody, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	resp, err := c.doRequest(ctx, "DELETE", fmt.Sprintf("/certificate/%s/%s", data.Issuer, data.Domain), headers, bytes.NewReader(reqBody))
+	resp, err := c.doRequest(ctx, "DELETE", fmt.Sprintf("/certificate/%s/%s?revoke=%v", issuer, domain, revoke), headers, nil)
 	if err != nil {
 		return err
 	}
@@ -278,7 +274,7 @@ func (c *Client) DeleteCertificate(data certstore.Certificate) error {
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("error deleting certificate with issuer '%s' and domain '%s': %s - %s", data.Issuer, data.Domain, resp.Status, string(respBody))
+		return fmt.Errorf("error deleting certificate with issuer '%s' and domain '%s': %s - %s", issuer, domain, resp.Status, string(respBody))
 	}
 
 	return nil

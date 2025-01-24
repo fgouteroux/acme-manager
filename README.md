@@ -394,7 +394,9 @@ Optional Common parameters:
 - **pre_cmd_timeout** (int): Pre Command timeout (default: 60)
 - **post_cmd_run** (string): Post Command to run after executing certificate changes.
 - **post_cmd_timeout** (int): Post Command timeout (default: 60)
-
+- **revoke_on_update** (bool): If set to true, revoke the old certificate on update (default: false)
+- **revoke_on_delete** (bool): If set to true, revoke the certificate on delete (default: false)
+ 
 Optional Certificate parameters:
 - **bundle** (bool): if true, add the issuers certificate to the new certificate
 - **renewal_days** (int): number of days before automatic certificate renewal

@@ -25,6 +25,8 @@ type Common struct {
 	PreCmdTimeout   int         `yaml:"pre_cmd_timeout"`
 	PostCmdRun      string      `yaml:"post_cmd_run"`
 	PostCmdTimeout  int         `yaml:"post_cmd_timeout"`
+	RevokeOnUpdate  bool        `yaml:"revoke_on_update"`
+	RevokeOnDelete  bool        `yaml:"revoke_on_delete"`
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.

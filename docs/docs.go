@@ -311,14 +311,14 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Revoke certificate for the given issuer and domain name.",
+                "description": "Delete certificate for the given issuer and domain name.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "certificate"
                 ],
-                "summary": "Revoke certificate",
+                "summary": "Delete certificate",
                 "parameters": [
                     {
                         "type": "string",
@@ -343,6 +343,13 @@ const docTemplate = `{
                         "name": "domain",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Revoke Certificate",
+                        "name": "revoke",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -646,6 +653,9 @@ const docTemplate = `{
                 "renewal_days": {
                     "type": "integer",
                     "example": 30
+                },
+                "revoke": {
+                    "type": "boolean"
                 },
                 "san": {
                     "type": "string",

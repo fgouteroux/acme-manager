@@ -15,6 +15,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
+	"github.com/fgouteroux/acme_manager/api"
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/metrics"
 	"github.com/fgouteroux/acme_manager/restclient"
@@ -196,7 +197,18 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Created private key %s", keyFilePath))
 
 		certData.CSR = string(csr)
-		newCert, err := acmeClient.CreateCertificate(certData)
+
+		certDataBytes, _ := json.Marshal(certData)
+
+		var certParams api.CertificateParams
+		err = json.Unmarshal(certDataBytes, &certParams)
+		if err != nil {
+			hasErrors = true
+			_ = level.Error(logger).Log("err", err)
+			continue
+		}
+
+		newCert, err := acmeClient.CreateCertificate(certParams)
 		if err != nil {
 			hasErrors = true
 			_ = level.Error(logger).Log("err", err)
@@ -236,7 +248,21 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			certData.CSR = string(csr)
 		}
 
-		newCert, err := acmeClient.UpdateCertificate(certData)
+		certDataBytes, _ := json.Marshal(certData)
+
+		var certParams api.CertificateParams
+		err := json.Unmarshal(certDataBytes, &certParams)
+		if err != nil {
+			hasErrors = true
+			_ = level.Error(logger).Log("err", err)
+			continue
+		}
+
+		if config.Common.RevokeOnUpdate {
+			certParams.Revoke = true
+		}
+
+		newCert, err := acmeClient.UpdateCertificate(certParams)
 		if err != nil {
 			hasErrors = true
 			_ = level.Error(logger).Log("err", err)
@@ -250,7 +276,12 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 	}
 
 	for _, certData := range diff.Delete {
-		err := acmeClient.DeleteCertificate(certData)
+		var revoke bool
+		if config.Common.RevokeOnDelete {
+			revoke = true
+		}
+
+		err := acmeClient.DeleteCertificate(certData.Issuer, certData.Domain, revoke)
 		if err != nil {
 			hasErrors = true
 			_ = level.Error(logger).Log("err", err)

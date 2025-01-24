@@ -25,6 +25,8 @@ definitions:
       renewal_days:
         example: 30
         type: integer
+      revoke:
+        type: boolean
       san:
         example: ""
         type: string
@@ -296,7 +298,7 @@ paths:
       - certificate
   /certificate/{issuer}/{domain}:
     delete:
-      description: Revoke certificate for the given issuer and domain name.
+      description: Delete certificate for the given issuer and domain name.
       parameters:
       - default: Bearer <Add access token here>
         description: Access token
@@ -316,6 +318,11 @@ paths:
         name: domain
         required: true
         type: string
+      - default: false
+        description: Revoke Certificate
+        in: query
+        name: revoke
+        type: boolean
       produces:
       - application/json
       responses:
@@ -349,7 +356,7 @@ paths:
           description: Bad Gateway
           schema:
             $ref: '#/definitions/api.responseErrorJSON'
-      summary: Revoke certificate
+      summary: Delete certificate
       tags:
       - certificate
     get:

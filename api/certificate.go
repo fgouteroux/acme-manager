@@ -43,6 +43,7 @@ type CertificateParams struct {
 	RenewalDays   int    `json:"renewal_days,omitempty" example:"30"`
 	DNSChallenge  string `json:"dns_challenge,omitempty" example:"ns1"`
 	HTTPChallenge string `json:"http_challenge,omitempty" example:""`
+	Revoke        bool   `json:"revoke"`
 }
 
 func responseJSON(w http.ResponseWriter, data interface{}, err error, statusCode int) {
@@ -541,14 +542,14 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		if recreateCert {
-			err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
-			if err != nil {
-				_ = level.Error(logger).Log("err", err)
-				responseJSON(w, nil, err, http.StatusInternalServerError)
-				return
+			if certParams.Revoke {
+				err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
+				if err != nil {
+					_ = level.Error(logger).Log("err", err)
+					responseJSON(w, nil, err, http.StatusInternalServerError)
+					return
+				}
 			}
-			metrics.DecManagedCertificate(certData.Issuer, certData.Owner)
-
 			data = slices.Delete(data, idx, idx+1)
 
 			newCert, err := certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
@@ -557,7 +558,6 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
-			metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 			data = append(data, newCert)
 		} else {
 			data[idx].RenewalDays = certData.RenewalDays
@@ -597,13 +597,14 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 // manage certificate
 
 // certificate godoc
-// @Summary Revoke certificate
-// @Description Revoke certificate for the given issuer and domain name.
+// @Summary Delete certificate
+// @Description Delete certificate for the given issuer and domain name.
 // @Tags certificate
 // @Produce  application/json
 // @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
 // @Param issuer path string true "Certificate issuer" default(letsencrypt)
 // @Param domain path string true "Certificate domain" default(testfgx.example.com)
+// @Param revoke query bool false "Revoke Certificate" default(false)
 // @Success 204
 // @Success 400 {object} responseErrorJSON
 // @Success 401 {object} responseErrorJSON
@@ -613,13 +614,19 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 // @Success 500 {object} responseErrorJSON
 // @Success 502 {object} responseErrorJSON
 // @Router /certificate/{issuer}/{domain} [delete]
-func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
+func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusUnauthorized)
 			return
+		}
+
+		var revoke bool
+		revokeParam := r.URL.Query().Get("revoke")
+		if revokeParam == "true" {
+			revoke = true
 		}
 
 		w.Header().Set("Username", tokenValue.Username)
@@ -684,11 +691,21 @@ func RevokeCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
-			return
+		if revoke {
+			err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				responseJSON(w, nil, err, http.StatusInternalServerError)
+				return
+			}
+		} else {
+			secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
+			err = vault.GlobalClient.DeleteSecretWithAppRole(secretKeyPath)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				responseJSON(w, nil, err, http.StatusInternalServerError)
+				return
+			}
 		}
 		metrics.DecManagedCertificate(certData.Issuer, certData.Owner)
 
