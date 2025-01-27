@@ -18,6 +18,7 @@ import (
 
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/config"
+	"github.com/fgouteroux/acme_manager/queue"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -136,20 +137,9 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
-			return
-		}
-
 		secretKeyPathPrefix := config.GlobalConfig.Storage.Vault.TokenPrefix
 		if secretKeyPathPrefix == "" {
 			secretKeyPathPrefix = "token"
-		}
-
-		if len(data) == 0 {
-			data = make(map[string]certstore.Token, 1)
 		}
 
 		if token.Username == "" || len(token.Scope) == 0 {
@@ -226,16 +216,33 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		data[ID] = certstore.Token{
-			TokenHash: tokenHash,
-			Scope:     token.Scope,
-			Username:  token.Username,
-			Expires:   expires,
-			Duration:  token.Duration,
+		action := func() error {
+			data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
+			if err != nil {
+				return err
+			}
+
+			if len(data) == 0 {
+				data = make(map[string]certstore.Token, 1)
+			}
+
+			data[ID] = certstore.Token{
+				TokenHash: tokenHash,
+				Scope:     token.Scope,
+				Username:  token.Username,
+				Expires:   expires,
+				Duration:  token.Duration,
+			}
+
+			// udpate kv store
+			certstore.AmStore.PutKVRing(certstore.TokenRingKey, data)
+			return nil
 		}
 
-		// udpate kv store
-		certstore.AmStore.PutKVRing(certstore.TokenRingKey, data)
+		certstore.TokenQueue.AddJob(queue.Job{
+			Name:   fmt.Sprintf("%s/%s", token.Username, token.ID),
+			Action: action,
+		})
 
 		responseJSON(w, newData, nil, http.StatusCreated)
 	})
@@ -292,10 +299,6 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		secretKeyPathPrefix := config.GlobalConfig.Storage.Vault.TokenPrefix
 		if secretKeyPathPrefix == "" {
 			secretKeyPathPrefix = "token"
-		}
-
-		if len(data) == 0 {
-			data = make(map[string]certstore.Token, 1)
 		}
 
 		if token.Username == "" || len(token.Scope) == 0 {
@@ -371,16 +374,29 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		data[token.ID] = certstore.Token{
-			TokenHash: tokenHash,
-			Scope:     token.Scope,
-			Username:  token.Username,
-			Expires:   expires,
-			Duration:  token.Duration,
+		action := func() error {
+			data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
+			if err != nil {
+				return err
+			}
+
+			data[token.ID] = certstore.Token{
+				TokenHash: tokenHash,
+				Scope:     token.Scope,
+				Username:  token.Username,
+				Expires:   expires,
+				Duration:  token.Duration,
+			}
+
+			// udpate kv store
+			certstore.AmStore.PutKVRing(certstore.TokenRingKey, data)
+			return nil
 		}
 
-		// udpate kv store
-		certstore.AmStore.PutKVRing(certstore.TokenRingKey, data)
+		certstore.TokenQueue.AddJob(queue.Job{
+			Name:   fmt.Sprintf("%s/%s", token.Username, token.ID),
+			Action: action,
+		})
 
 		responseJSON(w, newData, nil, http.StatusOK)
 	})
@@ -449,10 +465,24 @@ func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 					responseJSON(w, nil, err, http.StatusInternalServerError)
 					return
 				}
-				delete(data, ID)
 
-				// udpate kv store
-				certstore.AmStore.PutKVRing(certstore.TokenRingKey, data)
+				action := func() error {
+					data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
+					if err != nil {
+						return err
+					}
+
+					delete(data, ID)
+
+					// udpate kv store
+					certstore.AmStore.PutKVRing(certstore.TokenRingKey, data)
+					return nil
+				}
+
+				certstore.TokenQueue.AddJob(queue.Job{
+					Name:   fmt.Sprintf("%s/%s", tokenData.Username, ID),
+					Action: action,
+				})
 
 				w.WriteHeader(http.StatusNoContent)
 				return

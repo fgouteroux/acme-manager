@@ -11,8 +11,15 @@ import (
 
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
+	"github.com/fgouteroux/acme_manager/queue"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
+)
+
+var (
+	CertificateQueue *queue.Queue
+	ChallengeQueue   *queue.Queue
+	TokenQueue       *queue.Queue
 )
 
 func OnStartup(logger log.Logger) error {
@@ -55,6 +62,22 @@ func OnStartup(logger log.Logger) error {
 		// udpate kv store
 		AmStore.PutKVRing(AmRingKey, content)
 	}
+
+	// init queues
+	CertificateQueue = queue.NewQueue("certificate")
+	ChallengeQueue = queue.NewQueue("challenge")
+	TokenQueue = queue.NewQueue("token")
+
+	// init workers
+	tokenWorker := queue.NewWorker(TokenQueue)
+	challengeWorker := queue.NewWorker(ChallengeQueue)
+	certificateWorker := queue.NewWorker(CertificateQueue)
+
+	// start workers
+	go tokenWorker.DoWork()
+	go certificateWorker.DoWork()
+	go challengeWorker.DoWork()
+
 	return nil
 }
 

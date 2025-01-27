@@ -3,6 +3,8 @@ package certstore
 
 import (
 	"github.com/go-acme/lego/v4/challenge/http01"
+
+	"github.com/fgouteroux/acme_manager/queue"
 )
 
 // HTTPProvider implements HTTPProvider for `http-01` challenge.
@@ -15,27 +17,49 @@ func NewKVRingProvider() (*HTTPProvider, error) {
 
 // Present makes the token available at `HTTP01ChallengePath(token)` by creating the key in the kvring.
 func (w *HTTPProvider) Present(_, token, keyAuth string) error {
-	data, err := AmStore.GetKVRingMapString(AmRingChallengeKey)
-	if err != nil {
-		return err
+	action := func() error {
+		data, err := AmStore.GetKVRingMapString(AmRingChallengeKey)
+		if err != nil {
+			return err
+		}
+
+		if data == nil {
+			data = make(map[string]string)
+		}
+
+		data[http01.ChallengePath(token)] = keyAuth
+
+		AmStore.PutKVRing(AmRingChallengeKey, data)
+		return nil
 	}
 
-	if data == nil {
-		data = make(map[string]string)
-	}
-	data[http01.ChallengePath(token)] = keyAuth
+	ChallengeQueue.AddJob(queue.Job{
+		Name:   http01.ChallengePath(token),
+		Action: action,
+	})
 
-	AmStore.PutKVRing(AmRingChallengeKey, data)
 	return nil
 }
 
 // CleanUp removes the file created for the challenge.
 func (w *HTTPProvider) CleanUp(_, token, _ string) error {
-	data, err := AmStore.GetKVRingMapString(AmRingChallengeKey)
-	if err != nil {
-		return err
+
+	action := func() error {
+		data, err := AmStore.GetKVRingMapString(AmRingChallengeKey)
+		if err != nil {
+			return err
+		}
+
+		delete(data, http01.ChallengePath(token))
+
+		AmStore.PutKVRing(AmRingChallengeKey, data)
+		return nil
 	}
-	delete(data, http01.ChallengePath(token))
-	AmStore.PutKVRing(AmRingChallengeKey, data)
+
+	ChallengeQueue.AddJob(queue.Job{
+		Name:   http01.ChallengePath(token),
+		Action: action,
+	})
+
 	return nil
 }
