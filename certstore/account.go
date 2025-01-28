@@ -180,7 +180,7 @@ func Setup(logger log.Logger, cfg config.Config, version string) error {
 		}
 
 		if issuerConf.HTTPChallenge != "" {
-			httpProvider, err := NewHTTPChallengeProviderByName(issuerConf.HTTPChallenge, issuerConf.HTTPChallengeCfg)
+			httpProvider, err := NewHTTPChallengeProviderByName(issuerConf.HTTPChallenge, issuerConf.HTTPChallengeCfg, logger)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 				return err
@@ -199,7 +199,7 @@ func Setup(logger log.Logger, cfg config.Config, version string) error {
 }
 
 // NewHTTPChallengeProviderByName Factory for HTTP providers.
-func NewHTTPChallengeProviderByName(name, config string) (challenge.Provider, error) {
+func NewHTTPChallengeProviderByName(name, config string, logger log.Logger) (challenge.Provider, error) {
 	switch name {
 	case "memcached":
 		return memcached.NewMemcachedProvider(strings.Split(config, ","))
@@ -208,7 +208,7 @@ func NewHTTPChallengeProviderByName(name, config string) (challenge.Provider, er
 	case "webroot":
 		return webroot.NewHTTPProvider(config)
 	case "kvring":
-		return NewKVRingProvider()
+		return NewKVRingProvider(logger)
 	default:
 		return nil, fmt.Errorf("unrecognized HTTP provider: %s", name)
 	}
