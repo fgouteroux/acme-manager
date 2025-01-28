@@ -23,10 +23,10 @@ import (
 )
 
 var (
-	AmRingKey          = "collectors/cert"
-	AmRingChallengeKey = "collectors/challenge"
-	TokenRingKey       = "collectors/token"
-	AmStore            *CertStore
+	AmCertificateRingKey = "collectors/certificate"
+	AmChallengeRingKey   = "collectors/challenge"
+	AmTokenRingKey       = "collectors/token"
+	AmStore              *CertStore
 )
 
 type CertStore struct {
@@ -127,7 +127,7 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 	}
 
 	if certData.HTTPChallenge != "" {
-		httpProvider, err := NewHTTPChallengeProviderByName(certData.HTTPChallenge, "")
+		httpProvider, err := NewHTTPChallengeProviderByName(certData.HTTPChallenge, "", logger)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			return certData, err
@@ -209,8 +209,8 @@ func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) er
 	return nil
 }
 
-func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
-	data, err := amStore.GetKVRingCert(AmRingKey)
+func CheckCertExpiration(amStore *CertStore, logger log.Logger, isLeader bool) error {
+	data, err := amStore.GetKVRingCert(AmCertificateRingKey, isLeader)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return err
@@ -249,7 +249,7 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 		}
 	}
 	if hasChange {
-		amStore.PutKVRing(AmRingKey, dataCopy)
+		amStore.PutKVRing(AmCertificateRingKey, dataCopy)
 	}
 	return nil
 }

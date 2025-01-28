@@ -1,6 +1,7 @@
 package certstore
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,7 +77,7 @@ func WatchCertExpiration(logger log.Logger, interval time.Duration) {
 	for range tk.C {
 		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 		if isLeaderNow {
-			err := CheckCertExpiration(AmStore, logger)
+			err := CheckCertExpiration(AmStore, logger, isLeaderNow)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "Certificate check renewal failed", "err", err)
 			}
@@ -92,7 +93,7 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 	for range tk.C {
 		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 		if isLeaderNow {
-			data, err := AmStore.GetKVRingToken(TokenRingKey)
+			data, err := AmStore.GetKVRingToken(AmTokenRingKey, isLeaderNow)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 			}
@@ -127,7 +128,7 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 			}
 			if hasChange {
 				// udpate kv store
-				AmStore.PutKVRing(TokenRingKey, data)
+				AmStore.PutKVRing(AmTokenRingKey, data)
 			}
 		}
 	}
@@ -168,4 +169,36 @@ func WatchIssuerHealth(logger log.Logger, interval time.Duration, version string
 
 		}
 	}
+}
+
+func WatchRingKvStoreChanges(ringConfig ring.AcmeManagerRing, logger log.Logger) {
+	go ringConfig.KvStore.WatchKey(context.Background(), AmCertificateRingKey, ring.JSONCodec, func(in interface{}) bool {
+		isLeaderNow, _ := ring.IsLeader(ringConfig)
+		if !isLeaderNow {
+			val := in.(*ring.Data)
+			localCache.Set(AmCertificateRingKey, val.Content)
+			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", AmCertificateRingKey)) // #nosec G104
+		}
+		return true // yes, keep watching
+	})
+
+	go ringConfig.KvStore.WatchKey(context.Background(), AmTokenRingKey, ring.JSONCodec, func(in interface{}) bool {
+		isLeaderNow, _ := ring.IsLeader(ringConfig)
+		if !isLeaderNow {
+			val := in.(*ring.Data)
+			localCache.Set(AmTokenRingKey, val.Content)
+			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", AmTokenRingKey)) // #nosec G104
+		}
+		return true // yes, keep watching
+	})
+
+	go ringConfig.KvStore.WatchKey(context.Background(), AmChallengeRingKey, ring.JSONCodec, func(in interface{}) bool {
+		isLeaderNow, _ := ring.IsLeader(ringConfig)
+		if !isLeaderNow {
+			val := in.(*ring.Data)
+			localCache.Set(AmChallengeRingKey, val.Content)
+			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", AmChallengeRingKey)) // #nosec G104
+		}
+		return true // yes, keep watching
+	})
 }

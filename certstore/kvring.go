@@ -10,13 +10,16 @@ import (
 
 	"github.com/grafana/dskit/kv/memberlist"
 
+	"github.com/fgouteroux/acme_manager/memcache"
 	"github.com/fgouteroux/acme_manager/ring"
 )
 
-func (c *CertStore) GetKVRingCert(key string) ([]Certificate, error) {
+var localCache = memcache.NewLocalCache()
+
+func (c *CertStore) GetKVRingCert(key string, isLeader bool) ([]Certificate, error) {
 	var data []Certificate
 
-	content, err := c.GetKVRing(key)
+	content, err := c.GetKVRing(key, isLeader)
 	if err != nil {
 		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to get kv store key '%s'", key), "err", err)
 		return data, err
@@ -30,9 +33,9 @@ func (c *CertStore) GetKVRingCert(key string) ([]Certificate, error) {
 	return data, nil
 }
 
-func (c *CertStore) GetKVRingMapString(key string) (map[string]string, error) {
+func (c *CertStore) GetKVRingMapString(key string, isLeader bool) (map[string]string, error) {
 	var data map[string]string
-	content, err := c.GetKVRing(key)
+	content, err := c.GetKVRing(key, isLeader)
 	if err != nil {
 		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to get kv store key '%s'", key), "err", err)
 		return data, err
@@ -48,9 +51,9 @@ func (c *CertStore) GetKVRingMapString(key string) (map[string]string, error) {
 	return data, nil
 }
 
-func (c *CertStore) GetKVRingToken(key string) (map[string]Token, error) {
+func (c *CertStore) GetKVRingToken(key string, isLeader bool) (map[string]Token, error) {
 	var data map[string]Token
-	content, err := c.GetKVRing(key)
+	content, err := c.GetKVRing(key, isLeader)
 	if err != nil {
 		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to get kv store key '%s'", key), "err", err)
 		return data, err
@@ -66,20 +69,27 @@ func (c *CertStore) GetKVRingToken(key string) (map[string]Token, error) {
 	return data, nil
 }
 
-func (c *CertStore) GetKVRing(key string) (string, error) {
+func (c *CertStore) GetKVRing(key string, isLeader bool) (string, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	var data string
 
-	ctx := context.Background()
-	cached, err := c.RingConfig.JSONClient.Get(ctx, key)
-	if err != nil {
-		return data, err
+	if isLeader {
+		if cached, found := localCache.Get(key); found {
+			data = cached.Value.(string)
+		}
+	} else {
+		ctx := context.Background()
+		cached, err := c.RingConfig.JSONClient.Get(ctx, key)
+		if err != nil {
+			return data, err
+		}
+
+		if cached != nil {
+			data = cached.(*ring.Data).Content
+		}
 	}
 
-	if cached != nil {
-		data = cached.(*ring.Data).Content
-	}
 	return data, nil
 }
 
@@ -91,9 +101,13 @@ func (c *CertStore) PutKVRing(key string, data interface{}) {
 
 	content, _ := json.Marshal(data)
 	c.updateKV(key, string(content))
+	_ = level.Debug(c.Logger).Log("msg", fmt.Sprintf("Updated kv store key '%s'", key))
 }
 
 func (c *CertStore) updateKV(key, content string) {
+	// update local cache
+	localCache.Set(key, content)
+
 	data := &ring.Data{
 		Content:   content,
 		CreatedAt: time.Now(),

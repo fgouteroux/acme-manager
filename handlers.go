@@ -136,7 +136,7 @@ type certificateHandlerData struct {
 
 func certificateListHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
+		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, false)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -175,7 +175,7 @@ func certificateListHandler() http.HandlerFunc {
 }
 
 func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := certstore.AmStore.GetKVRingMapString(certstore.AmRingChallengeKey)
+	data, err := certstore.AmStore.GetKVRingMapString(certstore.AmChallengeRingKey, false)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -197,7 +197,7 @@ type tokenHandlerData struct {
 
 func tokenListHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
+		data, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, false)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

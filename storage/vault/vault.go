@@ -124,6 +124,41 @@ func (client *Client) DeleteSecretWithAppRole(secretPath string) error {
 	return nil
 }
 
+// Delete permanently a key-value secret (kv-v2) after authenticating via AppRole.
+func (client *Client) DestroySecretWithAppRole(secretPath string) error {
+	err := vaultAppRoleLogin(client)
+	if err != nil {
+		return err
+	}
+
+	metaVersions, err := client.APIClient.KVv2(client.config.SecretEngine).GetVersionsAsList(context.Background(), secretPath)
+	if err != nil {
+		metrics.IncDeleteFailedVaultSecret()
+		return err
+	}
+
+	var versionList []int
+	for _, meta := range metaVersions {
+		versionList = append(versionList, meta.Version)
+	}
+
+	err = client.APIClient.KVv2(client.config.SecretEngine).Destroy(context.Background(), secretPath, versionList)
+	if err != nil {
+		metrics.IncDeleteFailedVaultSecret()
+		return err
+	}
+
+	err = client.APIClient.KVv2(client.config.SecretEngine).DeleteMetadata(context.Background(), secretPath)
+	if err != nil {
+		metrics.IncDeleteFailedVaultSecret()
+		return err
+	}
+
+	metrics.IncDeleteSuccessVaultSecret()
+
+	return nil
+}
+
 // listSecret returns a list of secrets from Vault
 func listSecret(client *Client, path string) (*vaultApi.Secret, error) {
 	secret, err := client.APIClient.Logical().List(path)

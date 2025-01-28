@@ -11,38 +11,83 @@ import (
 
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
+	"github.com/fgouteroux/acme_manager/queue"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 )
 
+var (
+	CertificateQueue *queue.Queue
+	ChallengeQueue   *queue.Queue
+	TokenQueue       *queue.Queue
+)
+
 func OnStartup(logger log.Logger) error {
+
+	// init queues
+	CertificateQueue = queue.NewQueue("certificate")
+	ChallengeQueue = queue.NewQueue("challenge")
+	TokenQueue = queue.NewQueue("token")
+
+	// init workers
+	tokenWorker := queue.NewWorker(TokenQueue, logger)
+	challengeWorker := queue.NewWorker(ChallengeQueue, logger)
+	certificateWorker := queue.NewWorker(CertificateQueue, logger)
+
+	// start workers
+	go tokenWorker.DoWork()
+	go certificateWorker.DoWork()
+	go challengeWorker.DoWork()
+
+	// init local cache
+	localCache.Set(AmCertificateRingKey, "")
+	localCache.Set(AmTokenRingKey, "")
+	localCache.Set(AmChallengeRingKey, "")
+
 	isLeaderNow, err := ring.IsLeader(AmStore.RingConfig)
 	if err != nil {
 		_ = level.Warn(logger).Log("msg", "Failed to determine the ring leader", "err", err)
 		return err
 	}
 
-	data, err := AmStore.GetKVRing(AmRingKey)
+	certificateData, err := AmStore.GetKVRing(AmCertificateRingKey, isLeaderNow)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return err
 	}
 
-	tokenData, err := AmStore.GetKVRingToken(TokenRingKey)
+	tokenData, err := AmStore.GetKVRingToken(AmTokenRingKey, isLeaderNow)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return err
 	}
-	if len(tokenData) == 0 {
+
+	challengeData, err := AmStore.GetKVRingMapString(AmChallengeRingKey, isLeaderNow)
+	if err != nil {
+		return err
+	}
+	if challengeData != nil {
+		// update local cache
+		content, _ := json.Marshal(challengeData)
+		localCache.Set(AmCertificateRingKey, string(content))
+	}
+
+	if len(tokenData) == 0 && isLeaderNow {
+		tokens := getVaultAllToken(logger)
+
+		// update local cache
+		content, _ := json.Marshal(tokens)
+		localCache.Set(AmTokenRingKey, content)
+
 		// udpate kv store
-		AmStore.PutKVRing(TokenRingKey, getVaultAllToken(logger))
+		AmStore.PutKVRing(AmTokenRingKey, tokens)
+	} else {
+		// update local cache
+		content, _ := json.Marshal(tokenData)
+		localCache.Set(AmCertificateRingKey, string(content))
 	}
 
-	if len(data) == 0 {
-		if !isLeaderNow {
-			_ = level.Debug(logger).Log("msg", "Skipping because this node is not the ring leader")
-			return nil
-		}
+	if len(certificateData) == 0 && isLeaderNow {
 
 		vaultCertList := getVaultAllCertificate(logger)
 
@@ -52,9 +97,17 @@ func OnStartup(logger log.Logger) error {
 		}
 		content = vaultCertList
 
+		// update local cache
+		localCache.Set(AmCertificateRingKey, content)
+
 		// udpate kv store
-		AmStore.PutKVRing(AmRingKey, content)
+		AmStore.PutKVRing(AmCertificateRingKey, content)
+	} else {
+		// update local cache
+		content, _ := json.Marshal(certificateData)
+		localCache.Set(AmCertificateRingKey, string(content))
 	}
+
 	return nil
 }
 

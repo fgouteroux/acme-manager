@@ -20,6 +20,7 @@ import (
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
+	"github.com/fgouteroux/acme_manager/queue"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -79,7 +80,7 @@ func checkAuth(r *http.Request) (certstore.Token, error) {
 		return tokenData, fmt.Errorf("Invalid token format")
 	}
 
-	tokens, err := certstore.AmStore.GetKVRingToken(certstore.TokenRingKey)
+	tokens, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, false)
 	if err != nil {
 		return tokenData, err
 	}
@@ -136,7 +137,7 @@ func CertificateMetadataHandler(logger log.Logger) http.HandlerFunc {
 
 		w.Header().Set("Username", tokenValue.Username)
 
-		data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
+		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, false)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
@@ -207,7 +208,7 @@ func GetCertificateHandler(logger log.Logger) http.HandlerFunc {
 			return
 		}
 
-		data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
+		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, false)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
@@ -317,7 +318,14 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		certData.Owner = tokenValue.Username
 
-		data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
+		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, nil, err, http.StatusInternalServerError)
+			return
+		}
+
+		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
@@ -333,12 +341,6 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
-			return
-		}
 		if !isLeaderNow {
 			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
@@ -349,7 +351,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		// no concurrent task for the same certificate here
-		certLockKey := certData.Issuer + "/" + certData.Domain
+		certLockKey := certData.Owner + "/" + certData.Issuer + "/" + certData.Domain
 
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
@@ -378,10 +380,24 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 		metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
-		data = append(data, newCert)
 
-		// udpate kv store
-		certstore.AmStore.PutKVRing(certstore.AmRingKey, data)
+		action := func() error {
+			data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
+			if err != nil {
+				return err
+			}
+
+			data = append(data, newCert)
+
+			// udpate kv store
+			certstore.AmStore.PutKVRing(certstore.AmCertificateRingKey, data)
+			return nil
+		}
+
+		certstore.CertificateQueue.AddJob(queue.Job{
+			Name:   fmt.Sprintf("%s/%s/%s", certData.Owner, certData.Issuer, certData.Domain),
+			Action: action,
+		}, logger)
 
 		secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
@@ -470,7 +486,14 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		certData.Owner = tokenValue.Username
 
-		data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
+		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, nil, err, http.StatusInternalServerError)
+			return
+		}
+
+		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
@@ -486,12 +509,6 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
-			return
-		}
 		if !isLeaderNow {
 			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
@@ -541,6 +558,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			recreateCert = true
 		}
 
+		var newCert certstore.Certificate
 		if recreateCert {
 			if certParams.Revoke {
 				err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
@@ -550,17 +568,14 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 					return
 				}
 			}
-			data = slices.Delete(data, idx, idx+1)
 
-			newCert, err := certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
+			newCert, err = certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
-			data = append(data, newCert)
 		} else {
-			data[idx].RenewalDays = certData.RenewalDays
 			secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -574,14 +589,34 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
-			// udpate kv store
-			certstore.AmStore.PutKVRing(certstore.AmRingKey, data)
-			responseJSON(w, certstore.MapInterfaceToCertMap(secret), nil, http.StatusOK)
-			return
 		}
 
-		// udpate kv store
-		certstore.AmStore.PutKVRing(certstore.AmRingKey, data)
+		action := func() error {
+			data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
+			if err != nil {
+				return err
+			}
+
+			idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
+				return c.Domain == certData.Domain && c.Issuer == certData.Issuer && c.Owner == certData.Owner
+			})
+
+			if recreateCert {
+				data = slices.Delete(data, idx, idx+1)
+				data = append(data, newCert)
+			} else {
+				data[idx].RenewalDays = certData.RenewalDays
+			}
+
+			// udpate kv store
+			certstore.AmStore.PutKVRing(certstore.AmCertificateRingKey, data)
+			return nil
+		}
+
+		certstore.CertificateQueue.AddJob(queue.Job{
+			Name:   fmt.Sprintf("%s/%s/%s", certData.Owner, certData.Issuer, certData.Domain),
+			Action: action,
+		}, logger)
 
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 		if err != nil {
@@ -642,7 +677,14 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		data, err := certstore.AmStore.GetKVRingCert(certstore.AmRingKey)
+		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, nil, err, http.StatusInternalServerError)
+			return
+		}
+
+		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
@@ -658,12 +700,6 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
-			return
-		}
 		if !isLeaderNow {
 			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
@@ -709,10 +745,28 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 		metrics.DecManagedCertificate(certData.Issuer, certData.Owner)
 
-		data = slices.Delete(data, idx, idx+1)
+		action := func() error {
+			data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
+			if err != nil {
+				return err
+			}
 
-		// udpate kv store
-		certstore.AmStore.PutKVRing(certstore.AmRingKey, data)
+			idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
+				return c.Domain == certData.Domain && c.Issuer == certData.Issuer && c.Owner == certData.Owner
+			})
+
+			data = slices.Delete(data, idx, idx+1)
+
+			// udpate kv store
+			certstore.AmStore.PutKVRing(certstore.AmCertificateRingKey, data)
+			return nil
+		}
+
+		certstore.CertificateQueue.AddJob(queue.Job{
+			Name:   fmt.Sprintf("%s/%s/%s", certData.Owner, certData.Issuer, certData.Domain),
+			Action: action,
+		}, logger)
+
 		w.WriteHeader(http.StatusNoContent)
 	})
 }
