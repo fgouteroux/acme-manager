@@ -112,17 +112,31 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 
 	issuerAcmeClient := AcmeClient[certData.Issuer]
 
-	dnsChallenge := config.GlobalConfig.Issuer[certData.Issuer].DNSChallenge
+	var dnsChallenge, httpChallenge string
 	if certData.DNSChallenge != "" {
 		dnsChallenge = certData.DNSChallenge
 	}
 
-	httpChallenge := config.GlobalConfig.Issuer[certData.Issuer].HTTPChallenge
 	if certData.HTTPChallenge != "" {
 		httpChallenge = certData.HTTPChallenge
 	}
 
+	// set challenge from issuer config
+	if dnsChallenge == "" && httpChallenge == "" {
+		dnsChallenge = config.GlobalConfig.Issuer[certData.Issuer].DNSChallenge
+		httpChallenge = config.GlobalConfig.Issuer[certData.Issuer].HTTPChallenge
+	}
+
+	var challengeType string
 	if dnsChallenge != "" {
+		challengeType = "dns"
+	}
+
+	if httpChallenge != "" {
+		challengeType = "http"
+	}
+
+	if challengeType == "dns" {
 		dnsProvider, err := dns.NewDNSChallengeProviderByName(dnsChallenge)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -136,7 +150,7 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 		}
 	}
 
-	if httpChallenge != "" {
+	if challengeType == "http" {
 		httpProvider, err := NewHTTPChallengeProviderByName(httpChallenge, "", logger)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
