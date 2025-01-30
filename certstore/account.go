@@ -15,7 +15,6 @@ import (
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/lego"
-	"github.com/go-acme/lego/v4/providers/dns"
 	"github.com/go-acme/lego/v4/providers/http/memcached"
 	"github.com/go-acme/lego/v4/providers/http/s3"
 	"github.com/go-acme/lego/v4/providers/http/webroot"
@@ -163,34 +162,6 @@ func Setup(logger log.Logger, cfg config.Config, version string) error {
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			return err
-		}
-
-		if issuerConf.DNSChallenge != "" {
-			dnsProvider, err := dns.NewDNSChallengeProviderByName(issuerConf.DNSChallenge)
-			if err != nil {
-				_ = level.Error(logger).Log("err", err)
-				return err
-			}
-
-			err = client.Challenge.SetDNS01Provider(dnsProvider)
-			if err != nil {
-				_ = level.Error(logger).Log("err", err)
-				return err
-			}
-		}
-
-		if issuerConf.HTTPChallenge != "" {
-			httpProvider, err := NewHTTPChallengeProviderByName(issuerConf.HTTPChallenge, issuerConf.HTTPChallengeCfg, logger)
-			if err != nil {
-				_ = level.Error(logger).Log("err", err)
-				return err
-			}
-
-			err = client.Challenge.SetHTTP01Provider(httpProvider)
-			if err != nil {
-				_ = level.Error(logger).Log("err", err)
-				return err
-			}
 		}
 
 		AcmeClient[issuer] = client
