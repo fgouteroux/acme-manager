@@ -389,6 +389,8 @@ Optional Common parameters:
 - **certificate_dir_perm** (uint32): Unix permission for certificate directory in octal format (default: 0700)
 - **certificate_file_perm** (uint32): Unix permission for certificate file in octal format (default: 0600)
 - **certificate_keyfile_perm** (uint32): Unix permission for certificate key file in octal format (default: 0600)
+- **certificate_file_ext** (string): certificate file extension (default: ".crt")
+- **certificate_keyfile_ext** (string): certificate key file extension (default: ".key")
 - **cmd_enabled** (bool): If set to true, allow running pre and post command.
 - **pre_cmd_run** (string): Pre Command to run before executing certificate changes.
 - **pre_cmd_timeout** (int): Pre Command timeout (default: 60)
