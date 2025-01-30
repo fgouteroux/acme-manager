@@ -177,22 +177,15 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		if certData.SAN != "" {
 			san = strings.Split(certData.SAN, ",")
 		}
-		csr, privateKey, err := utils.GenerateCSRAndPrivateKey(certData.Domain, san)
+
+		var privateKey []byte
+		var err error
+		certData.CSR, privateKey, err = utils.GenerateCSRAndPrivateKey(certData.Domain, san)
 		if err != nil {
 			hasErrors = true
 			_ = level.Error(logger).Log("err", err)
 			continue
 		}
-
-		err = os.WriteFile(keyFilePath, privateKey, config.Common.CertKeyFilePerm)
-		if err != nil {
-			hasErrors = true
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
-			continue
-		}
-		_ = level.Info(logger).Log("msg", fmt.Sprintf("Created private key %s", keyFilePath))
-
-		certData.CSR = string(csr)
 
 		certDataBytes, _ := json.Marshal(certData)
 
@@ -211,6 +204,14 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			continue
 		}
 
+		err = os.WriteFile(keyFilePath, privateKey, config.Common.CertKeyFilePerm)
+		if err != nil {
+			hasErrors = true
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
+			continue
+		}
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("private key '%s' created", keyFilePath))
+
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' created", newCert.Domain))
 
 		if config.Common.CertDeploy {
@@ -220,28 +221,20 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 
 	for _, certData := range diff.Update {
 
+		var privateKey []byte
+		keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
 		if certData.CSR == "" {
-			keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
 			var san []string
 			if certData.SAN != "" {
 				san = strings.Split(certData.SAN, ",")
 			}
-			csr, privateKey, err := utils.GenerateCSRAndPrivateKey(certData.Domain, san)
+			var err error
+			certData.CSR, privateKey, err = utils.GenerateCSRAndPrivateKey(certData.Domain, san)
 			if err != nil {
 				hasErrors = true
 				_ = level.Error(logger).Log("err", err)
 				continue
 			}
-
-			err = os.WriteFile(keyFilePath, privateKey, config.Common.CertKeyFilePerm)
-			if err != nil {
-				hasErrors = true
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
-				continue
-			}
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("Created new private key %s", keyFilePath))
-
-			certData.CSR = string(csr)
 		}
 
 		certDataBytes, _ := json.Marshal(certData)
@@ -264,6 +257,15 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			_ = level.Error(logger).Log("err", err)
 			continue
 		}
+
+		err = os.WriteFile(keyFilePath, privateKey, config.Common.CertKeyFilePerm)
+		if err != nil {
+			hasErrors = true
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
+			continue
+		}
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("new private key '%s' created", keyFilePath))
+
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' updated", newCert.Domain))
 		if config.Common.CertDeploy {
 			deleteLocalCertificateResource(newCert, logger)
