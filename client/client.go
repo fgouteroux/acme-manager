@@ -64,7 +64,7 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 			continue
 		}
 
-		certFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".crt"
+		certFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertFileExt
 		certFileExists := utils.FileExists(certFilePath)
 
 		if !certFileExists {
@@ -176,7 +176,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 	var hasErrors bool
 	for _, certData := range diff.Create {
 
-		keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".key"
+		keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
 		var san []string
 		if certData.SAN != "" {
 			san = strings.Split(certData.SAN, ",")
@@ -225,7 +225,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 	for _, certData := range diff.Update {
 
 		if certData.CSR == "" {
-			keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".key"
+			keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
 			var san []string
 			if certData.SAN != "" {
 				san = strings.Split(certData.SAN, ",")
@@ -309,7 +309,7 @@ func createLocalCertificateResource(certData certstore.CertMap, logger log.Logge
 		_ = level.Error(logger).Log("err", err)
 		return
 	}
-	certFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".crt"
+	certFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertFileExt
 
 	certBytes := []byte(certData.Cert)
 	err = os.WriteFile(certFilePath, certBytes, config.Common.CertFilePerm)
@@ -322,7 +322,7 @@ func createLocalCertificateResource(certData certstore.CertMap, logger log.Logge
 }
 
 func deleteLocalCertificateResource(certData certstore.CertMap, logger log.Logger) {
-	certFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + ".crt"
+	certFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertFileExt
 
 	err := os.Remove(certFilePath)
 	if err != nil {
