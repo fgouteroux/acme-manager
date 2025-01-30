@@ -68,6 +68,7 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 		certFileExists := utils.FileExists(certFilePath)
 
 		if !certFileExists {
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Certificate file %s doesn't exists", certFilePath))
 			hasChange = true
 			certificate, err := acmeClient.ReadCertificate(certData)
 			if err != nil {
@@ -76,15 +77,10 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 			}
 			createLocalCertificateResource(certificate, logger)
 		} else {
-
 			var currentCertBytes []byte
-			if certFileExists {
-				currentCertBytes, err = os.ReadFile(filepath.Clean(certFilePath))
-				if err != nil {
-					_ = level.Error(logger).Log("err", err)
-				}
-			} else {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Certificate file %s doesn't exists", certFilePath))
+			currentCertBytes, err = os.ReadFile(filepath.Clean(certFilePath))
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
 			}
 
 			idx := slices.IndexFunc(certificates, func(c certstore.Certificate) bool {
@@ -243,7 +239,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("Updated private key %s", keyFilePath))
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Created new private key %s", keyFilePath))
 
 			certData.CSR = string(csr)
 		}
@@ -386,6 +382,14 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 			var toRecreate bool
 
 			var tmp certstore.Certificate
+
+			certKeyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
+			certKeyFileExists := utils.FileExists(certKeyFilePath)
+
+			if !certKeyFileExists {
+				toRecreate = true
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate key file '%s' doesn't exists. Recreation needed.", certKeyFilePath))
+			}
 
 			if certData.SAN != old[idx].SAN {
 				toRecreate = true
