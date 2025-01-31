@@ -429,7 +429,14 @@ certificate:
 
 acme-manager support DNS and HTTP challenge (thanks to lego lib).
 
-There is a custom HTTP Challenge based on kvring, that allow http domain validation with the embedded http endpoint in acme manager.
+#### HTTP Challenge
+
+- [memcached](https://github.com/go-acme/lego/blob/master/providers/http/memcached/memcached.go)
+- [s3](https://github.com/go-acme/lego/blob/master/providers/http/s3/s3.go)
+- [webroot](https://github.com/go-acme/lego/blob/master/providers/http/webroot/webroot.go)
+- [acme-manager kvring](https://github.com/fgouteroux/acme-manager/blob/main/certstore/http_challenge.go)
+
+The acme-manager `kvring` challenge, allow HTTP domain validation with the embedded HTTP endpoint in acme manager.
 
 Setting the `http_challenge: kvring`, will store the challenge token in kvring and it could be retrieved with a call like:
 ```
@@ -438,6 +445,27 @@ curl http://testfgx01.example.com/.well-known/acme-challenge/NClsmGOVJqV9jx8xBLO
 
 Once the domain is validated, the challenge token value is removed from kvring.
 
+#### DNS Challenge
+
+All DNS Providers from lego lib.
+
+For environment vars available for each DNS provider, check the [lego page](https://go-acme.github.io/lego/dns/).
+
+Example for [NS1](https://go-acme.github.io/lego/dns/ns1/):
+
+- `NS1_API_KEY="secretapikey"`
+- `NS1_TTL="120"`
+- `NS1_HTTP_TIMEOUT="10"`
+- `NS1_POLLING_INTERVAL="2"`
+- `NS1_PROPAGATION_TIMEOUT="60"`
+
+Environment vars available to customize the dns check:
+
+- `ACME_MANAGER_DNS_PROPAGATIONDISABLEANS`: By setting this var to true, disables the need to await propagation of the TXT record to all authoritative name servers.
+- `ACME_MANAGER_DNS_PROPAGATIONRNS`: By setting this var to true, use all the recursive nameservers to check the propagation of the TXT record.
+- `ACME_MANAGER_DNS_PROPAGATIONWAIT`: By setting this var, disables all the propagation checks of the TXT record and uses a wait duration instead.
+- `ACME_MANAGER_DNS_RESOLVERS`: Set the resolvers to use for performing DNS requests, by default it is the authoritative DNS server
+- `ACME_MANAGER_DNS_TIMEOUT`: the DNS timeout value in seconds when performing authoritative name server queries, (default: "10").
 
 ### Managed certificate web UI
 

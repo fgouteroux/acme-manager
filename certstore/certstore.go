@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
+	"github.com/go-acme/lego/v4/challenge/dns01"
+	"github.com/go-acme/lego/v4/platform/config/env"
 	"github.com/go-acme/lego/v4/providers/dns"
 
 	"github.com/fgouteroux/acme_manager/config"
@@ -143,7 +146,42 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 			return certData, err
 		}
 
-		err = issuerAcmeClient.Challenge.SetDNS01Provider(dnsProvider)
+		dnsResolvers := os.Getenv("ACME_MANAGER_DNS_RESOLVERS")
+		dnsPropagationDisableANS := env.GetOrDefaultBool("ACME_MANAGER_DNS_PROPAGATIONDISABLEANS", false)
+		dnsPropagationRNS := env.GetOrDefaultBool("ACME_MANAGER_DNS_PROPAGATIONRNS", false)
+		dnsPropagationWait := env.GetOrDefaultInt("ACME_MANAGER_DNS_PROPAGATIONWAIT", 0)
+		dnsTimeout := env.GetOrDefaultInt("ACME_MANAGER_DNS_TIMEOUT", 10)
+
+		wait := time.Duration(dnsPropagationWait) * time.Second
+		if wait < 0 {
+			err := fmt.Errorf("env var'ACME_MANAGER_DNS_PROPAGATIONWAIT' cannot be negative")
+			_ = level.Error(logger).Log("err", err)
+			return certData, err
+		}
+
+		err = checkPropagationExclusiveOptions(dnsPropagationDisableANS, dnsPropagationRNS, wait)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			return certData, err
+		}
+
+		err = issuerAcmeClient.Challenge.SetDNS01Provider(dnsProvider,
+			dns01.CondOption(dnsResolvers != "",
+				dns01.AddRecursiveNameservers(dns01.ParseNameservers(strings.Split(dnsResolvers, ","))),
+			),
+			dns01.CondOption(dnsPropagationDisableANS,
+				dns01.DisableAuthoritativeNssPropagationRequirement(),
+			),
+			dns01.CondOption(wait > 0,
+				dns01.PropagationWait(wait, true),
+			),
+			dns01.CondOption(dnsPropagationRNS,
+				dns01.RecursiveNSsPropagationRequirement(),
+			),
+			dns01.CondOption(dnsTimeout > 0,
+				dns01.AddDNSTimeout(time.Duration(dnsTimeout)*time.Second),
+			),
+		)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			return certData, err
@@ -283,4 +321,15 @@ func MapInterfaceToCertMap(data map[string]interface{}) CertMap {
 	var result CertMap
 	_ = json.Unmarshal(val, &result)
 	return result
+}
+
+func checkPropagationExclusiveOptions(dnsPropagationDisableANS, dnsPropagationRNS bool, dnsPropagationWait time.Duration) error {
+	if dnsPropagationDisableANS && dnsPropagationWait > 0 {
+		return fmt.Errorf("env var 'ACME_MANAGER_DNS_PROPAGATIONDISABLEANS' and 'ACME_MANAGER_DNS_PROPAGATIONWAIT' are mutually exclusive")
+	}
+
+	if dnsPropagationRNS && dnsPropagationWait > 0 {
+		return fmt.Errorf("env var 'ACME_MANAGER_DNS_PROPAGATIONRNS' and 'ACME_MANAGER_DNS_PROPAGATIONWAIT' are mutually exclusive")
+	}
+	return nil
 }
