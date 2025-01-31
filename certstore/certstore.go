@@ -71,13 +71,13 @@ type Token struct {
 
 func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resource) {
 	domain := utils.SanitizedDomain(logger, certRes.Domain)
-	err := os.WriteFile(filepath+domain+".crt", certRes.Certificate, 0640)
+	err := os.WriteFile(filepath+domain+".crt", certRes.Certificate, 0600)
 	if err != nil {
 		_ = level.Error(logger).Log("err", "Unable to save Certificate for domain %s\n\t%v", err)
 	}
 
 	if certRes.IssuerCertificate != nil {
-		err = os.WriteFile(filepath+domain+".issuer.crt", certRes.IssuerCertificate, 0640)
+		err = os.WriteFile(filepath+domain+".issuer.crt", certRes.IssuerCertificate, 0600)
 		if err != nil {
 			_ = level.Error(logger).Log("err", "Unable to save IssuerCertificate for domain %s\n\t%v", err)
 		}

@@ -100,7 +100,7 @@ func Setup(logger log.Logger, cfg config.Config, version string) error {
 		}
 		privateKeyPath := fmt.Sprintf("%s/%s/private_key.pem", cfg.Common.RootPathAccount, issuer)
 
-		privateKeyBytes, err := os.ReadFile(privateKeyPath)
+		privateKeyBytes, err := os.ReadFile(filepath.Clean(privateKeyPath))
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			return err

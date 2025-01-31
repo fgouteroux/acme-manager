@@ -146,7 +146,7 @@ func WatchIssuerHealth(logger log.Logger, interval time.Duration, version string
 			issuerError := 1.0
 			privateKeyPath := fmt.Sprintf("%s/%s/private_key.pem", config.GlobalConfig.Common.RootPathAccount, issuer)
 
-			privateKeyBytes, err := os.ReadFile(privateKeyPath)
+			privateKeyBytes, err := os.ReadFile(filepath.Clean(privateKeyPath))
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 				metrics.SetIssuerConfigError(issuer, issuerError)
