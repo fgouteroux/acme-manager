@@ -322,13 +322,14 @@ func createLocalCertificateResource(certData certstore.CertMap, logger log.Logge
 
 func deleteLocalCertificateResource(certData certstore.CertMap, logger log.Logger) {
 	certFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertFileExt
-
-	err := os.Remove(certFilePath)
-	if err != nil {
-		_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to delete certificate file %s", certFilePath), "err", err)
-	} else {
-		_ = level.Info(logger).Log("msg", fmt.Sprintf("Removed certificate %s", certFilePath))
-		metrics.IncDeletedLocalCertificate(certData.Issuer)
+	if utils.FileExists((certFilePath){
+		err := os.Remove(certFilePath)
+		if err != nil {
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to delete certificate file %s", certFilePath), "err", err)
+		} else {
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Removed certificate %s", certFilePath))
+			metrics.IncDeletedLocalCertificate(certData.Issuer)
+		}
 	}
 }
 
