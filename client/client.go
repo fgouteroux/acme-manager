@@ -81,6 +81,7 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 			currentCertBytes, err = os.ReadFile(filepath.Clean(certFilePath))
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
+				continue
 			}
 
 			idx := slices.IndexFunc(certificates, func(c certstore.Certificate) bool {
