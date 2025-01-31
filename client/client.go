@@ -75,7 +75,12 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 				_ = level.Error(logger).Log("err", err)
 				continue
 			}
-			createLocalCertificateResource(certificate, logger)
+			err = createLocalCertificateFile(certificate)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+			metrics.IncCreatedLocalCertificate(certData.Issuer)
 		} else {
 			var currentCertBytes []byte
 			currentCertBytes, err = os.ReadFile(filepath.Clean(certFilePath))
@@ -205,23 +210,32 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			continue
 		}
 
-		err = os.WriteFile(keyFilePath, privateKey, config.Common.CertKeyFilePerm)
-		if err != nil {
-			hasErrors = true
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
-			continue
-		}
-		_ = level.Info(logger).Log("msg", fmt.Sprintf("private key '%s' created", keyFilePath))
-
-		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' created", newCert.Domain))
-
 		if config.Common.CertDeploy {
-			createLocalCertificateResource(newCert, logger)
+			err := utils.CreateNonExistingFolder(config.Common.CertDir+certData.Issuer, config.Common.CertDirPerm)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+			err = createLocalPrivateKeyFile(keyFilePath, privateKey)
+			if err != nil {
+				hasErrors = true
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("private key '%s' created", keyFilePath))
+
+			err = createLocalCertificateFile(newCert)
+			if err != nil {
+				hasErrors = true
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' created", newCert.Domain))
+			metrics.IncCreatedLocalCertificate(certData.Issuer)
 		}
 	}
 
 	for _, certData := range diff.Update {
-
 		var privateKey []byte
 		keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
 		if certData.CSR == "" {
@@ -259,18 +273,28 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			continue
 		}
 
-		err = os.WriteFile(keyFilePath, privateKey, config.Common.CertKeyFilePerm)
-		if err != nil {
-			hasErrors = true
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save private key file %s", keyFilePath), "err", err)
-			continue
-		}
-		_ = level.Info(logger).Log("msg", fmt.Sprintf("new private key '%s' created", keyFilePath))
-
-		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' updated", newCert.Domain))
 		if config.Common.CertDeploy {
-			deleteLocalCertificateResource(newCert, logger)
-			createLocalCertificateResource(newCert, logger)
+			err := utils.CreateNonExistingFolder(config.Common.CertDir+newCert.Issuer, config.Common.CertDirPerm)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+			err = createLocalPrivateKeyFile(keyFilePath, privateKey)
+			if err != nil {
+				hasErrors = true
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("private key '%s' updated", keyFilePath))
+
+			err = createLocalCertificateFile(newCert)
+			if err != nil {
+				hasErrors = true
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' updated", newCert.Domain))
+			metrics.IncCreatedLocalCertificate(certData.Issuer)
 		}
 	}
 
@@ -289,7 +313,23 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' deleted", certData.Domain))
 
 		if config.Common.CertDeploy {
-			deleteLocalCertificateResource(certstore.CertMap{Certificate: certData}, logger)
+			keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
+			err := deleteLocalPrivateKeyFile(keyFilePath)
+			if err != nil {
+				hasErrors = true
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("private key '%s' deleted", keyFilePath))
+
+			err = deleteLocalCertificateFile(certData.Issuer, certData.Domain)
+			if err != nil {
+				hasErrors = true
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' deleted", certData.Domain))
+			metrics.IncDeletedLocalCertificate(certData.Issuer)
 		}
 	}
 
@@ -301,36 +341,49 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 	}
 }
 
-func createLocalCertificateResource(certData certstore.CertMap, logger log.Logger) {
+func createLocalCertificateFile(certData certstore.CertMap) error {
 	folderPath := config.Common.CertDir + certData.Issuer
 	err := utils.CreateNonExistingFolder(folderPath, config.Common.CertDirPerm)
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
-		return
+		return err
 	}
 	certFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertFileExt
 
 	certBytes := []byte(certData.Cert)
 	err = os.WriteFile(certFilePath, certBytes, config.Common.CertFilePerm)
 	if err != nil {
-		_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err)
-	} else {
-		_ = level.Info(logger).Log("msg", fmt.Sprintf("Deployed certificate %s", certFilePath))
-		metrics.IncCreatedLocalCertificate(certData.Issuer)
+		return fmt.Errorf("Unable to save certificate file %s", certFilePath)
 	}
+	return nil
 }
 
-func deleteLocalCertificateResource(certData certstore.CertMap, logger log.Logger) {
-	certFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertFileExt
-	if utils.FileExists((certFilePath){
+func deleteLocalCertificateFile(issuer, domain string) error {
+	certFilePath := config.Common.CertDir + issuer + "/" + domain + config.Common.CertFileExt
+	if utils.FileExists(certFilePath) {
 		err := os.Remove(certFilePath)
 		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to delete certificate file %s", certFilePath), "err", err)
-		} else {
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("Removed certificate %s", certFilePath))
-			metrics.IncDeletedLocalCertificate(certData.Issuer)
+			return fmt.Errorf("Unable to delete certificate file %s", certFilePath)
 		}
 	}
+	return nil
+}
+
+func createLocalPrivateKeyFile(keyFilePath string, privateKey []byte) error {
+	err := os.WriteFile(keyFilePath, privateKey, config.Common.CertKeyFilePerm)
+	if err != nil {
+		return fmt.Errorf("Unable to save private key file %s", keyFilePath)
+	}
+	return nil
+}
+
+func deleteLocalPrivateKeyFile(keyFilePath string) error {
+	if utils.FileExists(keyFilePath) {
+		err := os.Remove(keyFilePath)
+		if err != nil {
+			return fmt.Errorf("Unable to delete private key file %s", keyFilePath)
+		}
+	}
+	return nil
 }
 
 func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclient.Client) {
