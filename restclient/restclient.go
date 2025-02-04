@@ -112,17 +112,19 @@ func (c *Client) GetAllCertificateMetadata() ([]certstore.Certificate, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	baseErrMsg := "error getting all certificate metadata"
+
 	resp, err := c.doRequest(ctx, "GET", "/certificate/metadata", headers, nil)
 	if err != nil {
-		return certificate, err
+		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return certificate, fmt.Errorf("error getting all certificate metadata: %s", resp.Status)
+		return certificate, fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return certificate, err
+		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
 	}
 
 	return certificate, nil
@@ -142,17 +144,19 @@ func (c *Client) GetCertificateMetadata(issuer, domain string) (certstore.Certif
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	baseErrMsg := "error getting certificate metadata"
+
 	resp, err := c.doRequest(ctx, "GET", path, headers, nil)
 	if err != nil {
-		return certificate, err
+		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return certificate, fmt.Errorf("error getting certificate metadata: %s", resp.Status)
+		return certificate, fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return certificate, err
+		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
 	}
 
 	return certificate, nil
@@ -171,21 +175,23 @@ func (c *Client) ReadCertificate(data certstore.Certificate) (certstore.CertMap,
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	baseErrMsg := fmt.Sprintf("error reading certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
+
 	resp, err := c.doRequest(ctx, "GET", fmt.Sprintf("/certificate/%s/%s", data.Issuer, data.Domain), headers, bytes.NewReader(reqBody))
 	if err != nil {
-		return certificate, err
+		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return certificate, err
+			return certificate, fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
 		}
-		return certificate, fmt.Errorf("error reading certificate with issuer '%s' and domain '%s': %s - %s", data.Issuer, data.Domain, resp.Status, string(respBody))
+		return certificate, fmt.Errorf("%s: %s - %s", baseErrMsg, resp.Status, string(respBody))
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return certificate, err
+		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
 	}
 
 	return certificate, nil
@@ -204,21 +210,23 @@ func (c *Client) CreateCertificate(data api.CertificateParams) (certstore.CertMa
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 
+	baseErrMsg := fmt.Sprintf("error creating certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
+
 	resp, err := c.doRequest(ctx, "POST", "/certificate", headers, bytes.NewReader(reqBody))
 	if err != nil {
-		return certificate, err
+		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
 	}
 
 	if resp.StatusCode != http.StatusCreated {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return certificate, err
+			return certificate, fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
 		}
-		return certificate, fmt.Errorf("error creating certificate with issuer '%s' and domain '%s': %s - %s", data.Issuer, data.Domain, resp.Status, string(respBody))
+		return certificate, fmt.Errorf("%s: %s - %s", baseErrMsg, resp.Status, string(respBody))
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return certificate, err
+		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
 	}
 
 	return certificate, nil
@@ -237,21 +245,23 @@ func (c *Client) UpdateCertificate(data api.CertificateParams) (certstore.CertMa
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 
+	baseErrMsg := fmt.Sprintf("error updating certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
+
 	resp, err := c.doRequest(ctx, "PUT", "/certificate", headers, bytes.NewReader(reqBody))
 	if err != nil {
-		return certificate, err
+		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return certificate, err
+			return certificate, fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
 		}
-		return certificate, fmt.Errorf("error updating certificate with issuer '%s' and domain '%s': %s - %s", data.Issuer, data.Domain, resp.Status, string(respBody))
+		return certificate, fmt.Errorf("%s: %s - %s", baseErrMsg, resp.Status, string(respBody))
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return certificate, err
+		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
 	}
 
 	return certificate, nil
@@ -264,17 +274,19 @@ func (c *Client) DeleteCertificate(issuer, domain string, revoke bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	baseErrMsg := fmt.Sprintf("error deleting certificate with issuer '%s' and domain '%s':", issuer, domain)
+
 	resp, err := c.doRequest(ctx, "DELETE", fmt.Sprintf("/certificate/%s/%s?revoke=%v", issuer, domain, revoke), headers, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("%s - %v", baseErrMsg, err)
 	}
 
 	if resp.StatusCode != http.StatusNoContent {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return err
+			return fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
 		}
-		return fmt.Errorf("error deleting certificate with issuer '%s' and domain '%s': %s - %s", issuer, domain, resp.Status, string(respBody))
+		return fmt.Errorf("%s: %s - %s", baseErrMsg, resp.Status, string(respBody))
 	}
 
 	return nil
