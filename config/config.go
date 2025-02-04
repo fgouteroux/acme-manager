@@ -26,13 +26,17 @@ type Common struct {
 }
 
 type Issuer struct {
-	CADirURL         string `yaml:"ca_dir_url"`
-	EAB              bool   `yaml:"eab"`
-	KID              string `yaml:"kid,omitempty"`
-	HMAC             string `yaml:"hmac,omitempty"`
-	DNSChallenge     string `yaml:"dns_challenge"`
-	HTTPChallenge    string `yaml:"http_challenge"`
-	HTTPChallengeCfg string `yaml:"http_challenge_config"`
+	Contact             string `yaml:"contact"`
+	CADirURL            string `yaml:"ca_dir_url"`
+	EAB                 bool   `yaml:"eab"`
+	KID                 string `yaml:"kid,omitempty"`
+	HMAC                string `yaml:"hmac,omitempty"`
+	DNSChallenge        string `yaml:"dns_challenge"`
+	HTTPChallenge       string `yaml:"http_challenge"`
+	HTTPChallengeCfg    string `yaml:"http_challenge_config"`
+	OverallRequestLimit int    `yaml:"overall_request_limit"`
+	CertificateTimeout  int    `yaml:"certificate_timeout"`
+	Unregister          bool   `yaml:"unregister"`
 }
 
 // Storage represents storage config.
@@ -69,6 +73,14 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 		if issuerConf.DNSChallenge == "" && issuerConf.HTTPChallenge == "" {
 			return fmt.Errorf("Invalid config in '%s' issuer, 'dns_challenge' or 'http_challenge' must be set", issuer)
+		}
+
+		if issuerConf.OverallRequestLimit == 0 {
+			issuerConf.OverallRequestLimit = 18
+		}
+
+		if issuerConf.CertificateTimeout == 0 {
+			issuerConf.CertificateTimeout = 30
 		}
 	}
 

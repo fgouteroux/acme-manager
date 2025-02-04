@@ -160,7 +160,7 @@ func WatchIssuerHealth(logger log.Logger, interval time.Duration, version string
 			}
 
 			userAgent := fmt.Sprintf("acme-manager/%s", version)
-			_, _, err = tryRecoverRegistration(privateKeyPEM, issuerConf.CADirURL, userAgent)
+			_, _, err = tryRecoverRegistration(privateKeyPEM, issuerConf.Contact, issuerConf.CADirURL, userAgent)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Errorf("Unable to recover registration account for private key '%s'", privateKeyPath), "err", err)
 			}

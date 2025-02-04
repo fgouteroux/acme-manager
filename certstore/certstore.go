@@ -15,6 +15,7 @@ import (
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/challenge/dns01"
+	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/platform/config/env"
 	"github.com/go-acme/lego/v4/providers/dns"
 
@@ -113,7 +114,11 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 		request.NotAfter = time.Now().Add(time.Duration(certData.Days) * 24 * time.Hour)
 	}
 
-	issuerAcmeClient := AcmeClient[certData.Issuer]
+	var issuerAcmeClient *lego.Client
+	var issuerFound bool
+	if issuerAcmeClient, issuerFound = AcmeClient[certData.Issuer]; !issuerFound {
+		return certData, fmt.Errorf("Could not create certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
+	}
 
 	var dnsChallenge, httpChallenge string
 	if certData.DNSChallenge != "" {
@@ -251,7 +256,13 @@ func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) er
 	}
 
 	if certBytes, ok := data["cert"]; ok {
-		err = AcmeClient[certData.Issuer].Certificate.Revoke([]byte(certBytes.(string)))
+		var issuerAcmeClient *lego.Client
+		var issuerFound bool
+		if issuerAcmeClient, issuerFound = AcmeClient[certData.Issuer]; !issuerFound {
+			return fmt.Errorf("Could not delete certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
+		}
+
+		err = issuerAcmeClient.Certificate.Revoke([]byte(certBytes.(string)))
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			return err

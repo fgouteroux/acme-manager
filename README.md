@@ -145,6 +145,10 @@ Optional Issuer parameters:
 - **hmac** (string): MAC key from External CA. Should be in Base64 URL Encoding without padding format. Used for External Account Binding.
 - **http_challenge** (string): http challenge name to use for domain validation
 - **dns_challenge** (string): dns challenge name to use for domain validation
+- **contact** (string): email used for registration and recovery contact
+- **overall_request_limit** (int): ACME overall requests limit
+- **certificate_timeout** (int): set the certificate timeout value in seconds when obtaining a certificate
+- **unregister** (bool): deletes the account registration from issuer. ACME does not provide a way to reactivate a deactivated account. If you want to register an account you must use a new private key.
 
 ### Server Mode
 
