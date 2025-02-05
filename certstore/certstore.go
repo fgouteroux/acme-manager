@@ -53,6 +53,7 @@ type Certificate struct {
 	Fingerprint   string `json:"fingerprint" example:"3c7bccea1992d5095e7ab8c38f247352cd75ff26cdb95972d34ad54ebcef36af"`
 	Owner         string `json:"owner" example:"testfgx"`
 	CSR           string `json:"csr"`
+	Labels        string `json:"labels"`
 }
 
 type CertMap struct {
@@ -317,7 +318,7 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger, isLeader bool) e
 			if err != nil {
 				return err
 			}
-			metrics.IncRenewedCertificate(certData.Issuer, certData.Owner)
+			metrics.IncRenewedCertificate(cert.Issuer, cert.Owner)
 			dataCopy[i] = cert
 		}
 	}

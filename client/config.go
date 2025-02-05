@@ -5,6 +5,7 @@ import (
 	"io/fs"
 
 	"github.com/fgouteroux/acme_manager/certstore"
+	"github.com/fgouteroux/acme_manager/utils"
 )
 
 // Config represents certificate config.
@@ -72,6 +73,15 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			return fmt.Errorf("found multiple certificate config with issuer '%s' and domain '%s'", cert.Issuer, cert.Domain)
 		}
 		domains[k] = struct{}{}
+	}
+
+	for _, cert := range s.Certificate {
+		if cert.Labels != "" {
+			err := utils.ValidateLabels(cert.Labels)
+			if len(err) != 0 {
+				return fmt.Errorf("%s", err)
+			}
+		}
 	}
 
 	return nil

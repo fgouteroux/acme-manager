@@ -17,7 +17,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -28,6 +30,8 @@ import (
 
 	"golang.org/x/net/idna"
 )
+
+var labelNameRegexp = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // SanitizedDomain Make sure no funny chars are in the cert names (like wildcards ;)).
 func SanitizedDomain(logger log.Logger, domain string) string {
@@ -153,4 +157,23 @@ func GenerateCSRAndPrivateKey(domain string, SAN []string) (string, []byte, erro
 	csr64 := base64.StdEncoding.EncodeToString(csrPEM)
 
 	return csr64, certcrypto.PEMEncode(privateKey), nil
+}
+
+func ValidateLabels(labels string) (errors []error) {
+	for _, item := range strings.Split(labels, ",") {
+		label := strings.Split(item, "=")
+
+		if len(label) == 2 {
+			if !labelNameRegexp.MatchString(label[0]) {
+				errors = append(errors, fmt.Errorf(
+					"Invalid Label Name '%s'. Must match the regex '%s'", label[0], labelNameRegexp))
+			}
+
+			if !utf8.ValidString(label[1]) {
+				errors = append(errors, fmt.Errorf(
+					"Invalid Label Value '%s': not a valid UTF8 string", label[1]))
+			}
+		}
+	}
+	return
 }

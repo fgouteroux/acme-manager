@@ -9,6 +9,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
 	"github.com/fgouteroux/acme_manager/queue"
@@ -23,6 +25,7 @@ var (
 )
 
 func OnStartup(logger log.Logger) error {
+	_ = prometheus.Register(NewCertificateCollector(logger))
 
 	// init queues
 	CertificateQueue = queue.NewQueue("certificate")

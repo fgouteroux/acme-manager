@@ -127,6 +127,8 @@ func main() {
 			_ = level.Error(logger).Log("err", err)
 			os.Exit(1)
 		}
+		_ = prometheus.Register(client.NewCertificateCollector())
+
 		// On startup compare and create/update certificate from config file to remote server
 		client.CheckCertificate(logger, *clientConfigPath, acmeClient)
 

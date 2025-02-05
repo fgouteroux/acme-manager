@@ -25,7 +25,8 @@ import (
 )
 
 var (
-	config Config
+	config       Config
+	certificates []certstore.Certificate
 )
 
 type MapDiff struct {
@@ -40,19 +41,11 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 	}
 
 	_ = level.Info(logger).Log("msg", "Checking local certificates with remote server")
-	certificates, err := acmeClient.GetAllCertificateMetadata()
+	var err error
+	certificates, err = acmeClient.GetAllCertificateMetadata()
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return
-	}
-
-	certStat := make(map[string]float64)
-	for _, certificate := range certificates {
-		certStat[certificate.Issuer] += 1.0
-	}
-
-	for issuer, count := range certStat {
-		metrics.SetManagedCertificate(issuer, "", count)
 	}
 
 	var hasChange bool
@@ -175,7 +168,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		}
 	}
 
-	var hasErrors bool
+	var hasErrors, hasChange bool
 	for _, certData := range diff.Create {
 
 		keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
@@ -211,6 +204,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		}
 
 		if config.Common.CertDeploy {
+			hasChange = true
 			err := utils.CreateNonExistingFolder(config.Common.CertDir+certData.Issuer, config.Common.CertDirPerm)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -273,7 +267,8 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			continue
 		}
 
-		if config.Common.CertDeploy {
+		if config.Common.CertDeploy && certData.CSR == "" {
+			hasChange = true
 			err := utils.CreateNonExistingFolder(config.Common.CertDir+newCert.Issuer, config.Common.CertDirPerm)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -313,6 +308,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' deleted", certData.Domain))
 
 		if config.Common.CertDeploy {
+			hasChange = true
 			keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
 			err := deleteLocalPrivateKeyFile(keyFilePath)
 			if err != nil {
@@ -333,7 +329,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		}
 	}
 
-	if !hasErrors && config.Common.CmdEnabled {
+	if !hasErrors && hasChange && config.Common.CmdEnabled {
 		err := executeCommand(logger, config.Common, false)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -406,7 +402,6 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 	_ = level.Info(logger).Log("msg", "Checking certificates from config file with remote server")
 
 	old, err := acmeClient.GetAllCertificateMetadata()
-
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return
@@ -511,6 +506,21 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 					certData.Domain,
 					old[idx].RenewalDays,
 					certData.RenewalDays,
+				))
+			}
+			if certData.Labels != old[idx].Labels {
+				toUpdate = true
+
+				if !toRecreate {
+					tmp = old[idx]
+					tmp.Labels = certData.Labels
+				}
+				_ = level.Info(logger).Log("msg", fmt.Sprintf(
+					"Certificate issuer '%s' for domain '%s' labels changed from '%s' to '%s'.",
+					certData.Issuer,
+					certData.Domain,
+					old[idx].Labels,
+					certData.Labels,
 				))
 			}
 

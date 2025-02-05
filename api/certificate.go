@@ -45,6 +45,7 @@ type CertificateParams struct {
 	DNSChallenge  string `json:"dns_challenge,omitempty" example:"ns1"`
 	HTTPChallenge string `json:"http_challenge,omitempty" example:""`
 	Revoke        bool   `json:"revoke"`
+	Labels        string `json:"labels"`
 }
 
 func responseJSON(w http.ResponseWriter, data interface{}, err error, statusCode int) {
@@ -300,6 +301,14 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
+		if certParams.Labels != "" {
+			err := utils.ValidateLabels(certParams.Labels)
+			if len(err) != 0 {
+				responseJSON(w, nil, fmt.Errorf("%s", err), http.StatusBadRequest)
+				return
+			}
+		}
+
 		err = checkCSR(certParams)
 		if err != nil {
 			responseJSON(w, nil, err, http.StatusBadRequest)
@@ -468,6 +477,14 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
+		if certParams.Labels != "" {
+			err := utils.ValidateLabels(certParams.Labels)
+			if len(err) != 0 {
+				responseJSON(w, nil, fmt.Errorf("%s", err), http.StatusBadRequest)
+				return
+			}
+		}
+
 		err = checkCSR(certParams)
 		if err != nil {
 			responseJSON(w, nil, err, http.StatusBadRequest)
@@ -583,6 +600,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				return
 			}
 			secret["renewal_days"] = certData.RenewalDays
+			secret["labels"] = certData.Labels
 			err = vault.GlobalClient.PutSecretWithAppRole(secretKeyPath, utils.StructToMapInterface(secret))
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -606,6 +624,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				data = append(data, newCert)
 			} else {
 				data[idx].RenewalDays = certData.RenewalDays
+				data[idx].Labels = certData.Labels
 			}
 
 			// udpate kv store
