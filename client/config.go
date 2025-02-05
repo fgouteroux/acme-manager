@@ -1,8 +1,10 @@
 package client
 
 import (
-	"github.com/fgouteroux/acme_manager/certstore"
+	"fmt"
 	"io/fs"
+
+	"github.com/fgouteroux/acme_manager/certstore"
 )
 
 // Config represents certificate config.
@@ -60,6 +62,16 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	if s.Common.CertKeyFileExt == "" {
 		s.Common.CertKeyFileExt = ".key"
+	}
+
+	// Validate unique issuer/domain name.
+	domains := map[string]struct{}{}
+	for _, cert := range s.Certificate {
+		k := cert.Issuer + "/" + cert.Domain
+		if _, ok := domains[k]; ok {
+			return fmt.Errorf("found multiple certificate config with issuer '%s' and domain '%s'", cert.Issuer, cert.Domain)
+		}
+		domains[k] = struct{}{}
 	}
 
 	return nil
