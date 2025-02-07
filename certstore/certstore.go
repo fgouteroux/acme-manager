@@ -211,10 +211,11 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(request)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
+		metrics.SetCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
 		return certData, err
 	}
 
-	metrics.IncCreatedCertificate(certData.Issuer, certData.Owner)
+	metrics.SetCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain, 1)
 
 	// save in local in case of vault failure
 	SaveResource(logger, baseCertificateFilePath, resource)
@@ -266,10 +267,11 @@ func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) er
 		err = issuerAcmeClient.Certificate.Revoke([]byte(certBytes.(string)))
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
+			metrics.SetRevokedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
 			return err
 		}
 
-		metrics.IncRevokedCertificate(certData.Issuer, certData.Owner)
+		metrics.SetRevokedCertificate(certData.Issuer, certData.Owner, certData.Domain, 1)
 
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate domain %s for %s issuer revoked", certData.Domain, certData.Issuer))
 		err = vault.GlobalClient.DeleteSecretWithAppRole(vaultSecretPath)
@@ -298,14 +300,15 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger, isLeader bool) e
 		layout := "2006-01-02 15:04:05 -0700 MST"
 		t, err := time.Parse(layout, certData.Expires)
 		if err != nil {
-			return err
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to parse date for certificate owner '%s', issuer '%s' and domain '%s'", certData.Owner, certData.Issuer, certData.Domain))
+			continue
 		}
 
 		// This is just meant to be informal for the user.
 		timeLeft := t.Sub(time.Now().UTC())
 
 		daysLeft := int(timeLeft.Hours()) / 24
-		_ = level.Info(logger).Log("msg", fmt.Sprintf("[%s] acme: %d days remaining", certData.Domain, daysLeft))
+		_ = level.Debug(logger).Log("msg", fmt.Sprintf("%d days remaining for certificate owner '%s', issuer '%s' and domain '%s'", daysLeft, certData.Owner, certData.Issuer, certData.Domain))
 
 		renewalDays := config.GlobalConfig.Common.CertDaysRenewal
 		if certData.RenewalDays != 0 {
@@ -313,12 +316,14 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger, isLeader bool) e
 		}
 		if daysLeft < renewalDays {
 			hasChange = true
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("[%s] acme: Trying renewal with %d days remaining", certData.Domain, daysLeft))
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Trying renewal with %d days remaining for certificate owner '%s', issuer '%s' and domain '%s'", daysLeft, certData.Owner, certData.Issuer, certData.Domain))
 			cert, err := CreateRemoteCertificateResource(certData, logger)
 			if err != nil {
-				return err
+				metrics.SetRenewedCertificate(cert.Issuer, cert.Owner, cert.Domain, 0)
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to renew certificate owner '%s', issuer '%s' and domain '%s'", certData.Owner, certData.Issuer, certData.Domain), "err", err)
+				continue
 			}
-			metrics.IncRenewedCertificate(cert.Issuer, cert.Owner)
+			metrics.SetRenewedCertificate(cert.Issuer, cert.Owner, cert.Domain, 1)
 			dataCopy[i] = cert
 		}
 	}
