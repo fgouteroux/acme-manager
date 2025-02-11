@@ -110,6 +110,30 @@ func main() {
 	logger = promlog.New(promlogConfig)
 
 	if *clientMode {
+
+		configBytes, err := os.ReadFile(*clientConfigPath)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
+
+		var cfg client.Config
+		err = yaml.Unmarshal(configBytes, &cfg)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
+
+		client.GlobalConfig = cfg
+
+		if cfg.Common.CertBackup {
+			vault.GlobalClient, err = vault.InitClient(cfg.Storage.Vault)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				os.Exit(1)
+			}
+		}
+
 		if *clientManagerToken == "" {
 			_ = level.Error(logger).Log("err", "Missing client manager token, please set '--client.manager-token' or env var 'ACME_MANAGER_TOKEN'")
 			os.Exit(1)
@@ -127,13 +151,21 @@ func main() {
 			_ = level.Error(logger).Log("err", err)
 			os.Exit(1)
 		}
-		_ = prometheus.Register(client.NewCertificateCollector())
 
-		// On startup compare and create/update certificate from config file to remote server
-		client.CheckCertificate(logger, *clientConfigPath, acmeClient)
+		token, err := acmeClient.GetSelfToken()
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
+		client.Owner = token.Username
+
+		_ = prometheus.Register(client.NewCertificateCollector())
 
 		// on startup check local certificate are up-to-date
 		client.CheckAndDeployLocalCertificate(logger, acmeClient)
+
+		// On startup compare and create/update certificate from config file to remote server
+		client.CheckCertificate(logger, *clientConfigPath, acmeClient)
 
 		// periodically check local certificate are up-to-date
 		go client.WatchCertificateChange(logger, *clientCheckConfigInterval, *clientConfigPath, acmeClient)

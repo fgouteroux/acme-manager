@@ -291,3 +291,29 @@ func (c *Client) DeleteCertificate(issuer, domain string, revoke bool) error {
 
 	return nil
 }
+
+func (c *Client) GetSelfToken() (certstore.Token, error) {
+	var token certstore.Token
+	headers := make(map[string]string, 1)
+	headers["Authorization"] = "Bearer " + c.Token
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	baseErrMsg := "error getting self token"
+
+	resp, err := c.doRequest(ctx, "GET", "/token/self", headers, nil)
+	if err != nil {
+		return token, fmt.Errorf("%s - %v", baseErrMsg, err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return token, fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
+	}
+
+	if err := c.decodeJSON(resp, &token); err != nil {
+		return token, fmt.Errorf("%s - %v", baseErrMsg, err)
+	}
+
+	return token, nil
+}

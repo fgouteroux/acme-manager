@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -137,15 +138,29 @@ func SetTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Confi
 }
 
 // GenerateCSRAndPrivateKey generates a Certificate Signing Request (CSR) and a private key.
-func GenerateCSRAndPrivateKey(domain string, SAN []string) (string, []byte, error) {
-	// Generate a new ECDSA key pair using the P-256 curve
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return "", nil, err
+func GenerateCSRAndPrivateKey(privateKey, domain string, SAN []string) (string, []byte, error) {
+	var pKey crypto.PrivateKey
+	var err error
+	if privateKey == "" {
+		// Generate a new ECDSA key pair using the P-256 curve
+		pKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return "", nil, err
+		}
+	} else {
+		privateKeyBytes, err := os.ReadFile(privateKey)
+		if err != nil {
+			return "", nil, err
+		}
+
+		pKey, err = certcrypto.ParsePEMPrivateKey(privateKeyBytes)
+		if err != nil {
+			return "", nil, err
+		}
 	}
 
 	// Create and sign the CSR using the private key
-	csrBytes, err := certcrypto.GenerateCSR(privateKey, domain, SAN, false)
+	csrBytes, err := certcrypto.GenerateCSR(pKey, domain, SAN, false)
 	if err != nil {
 		return "", nil, err
 	}
@@ -156,7 +171,7 @@ func GenerateCSRAndPrivateKey(domain string, SAN []string) (string, []byte, erro
 	// Encode the CSR PEM to bas64
 	csr64 := base64.StdEncoding.EncodeToString(csrPEM)
 
-	return csr64, certcrypto.PEMEncode(privateKey), nil
+	return csr64, certcrypto.PEMEncode(pKey), nil
 }
 
 func ValidateLabels(labels string) (errors []error) {
