@@ -5,6 +5,7 @@ import (
 	"io/fs"
 
 	"github.com/fgouteroux/acme_manager/certstore"
+	cfg "github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/utils"
 )
 
@@ -12,12 +13,14 @@ import (
 type Config struct {
 	Common      Common                  `yaml:"common"`
 	Certificate []certstore.Certificate `yaml:"certificate"`
+	Storage     cfg.Storage             `yaml:"storage"`
 }
 
 // Common represents common config.
 type Common struct {
 	CertDays        int         `yaml:"cert_days"`
 	CertDaysRenewal int         `yaml:"cert_days_renewal"`
+	CertBackup      bool        `yaml:"certificate_backup"`
 	CertDeploy      bool        `yaml:"certificate_deploy"`
 	CertDir         string      `yaml:"certificate_dir"`
 	CertDirPerm     fs.FileMode `yaml:"certificate_dir_perm"`

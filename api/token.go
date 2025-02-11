@@ -71,6 +71,18 @@ type TokenResponseGet struct {
 // @security APIKeyAuth
 func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		if r.Header.Get("Authorization") != "" && r.PathValue("id") == "self" {
+			tokenData, err := checkAuth(r)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				responseJSON(w, nil, err, http.StatusUnauthorized)
+				return
+			}
+			responseJSON(w, tokenData, nil, http.StatusOK)
+			return
+		}
+
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
 			responseJSON(w, nil, fmt.Errorf("X-API-Key Header is missing or empty"), http.StatusUnauthorized)

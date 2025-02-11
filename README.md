@@ -125,7 +125,6 @@ storage:
     secret_id: "secret_id_value"
     url: " https://vault.example.com"
     secret_engine: "myengine"
-    secret_prefix: "acme"
     certificate_prefix: "certificates"
     token_prefix: "tokens"
     mount_path: "login/approle"
@@ -389,6 +388,7 @@ ts=2025-01-10T10:18:49.174Z caller=main.go:271 level=info msg="TLS is disabled."
 
 Optional Common parameters:
 - **certificate_deploy** (bool): If set to true, deploy certificate and private key in given `certificate_dir`
+- **certificate_backup** (bool): If set to true, backup certificate and private key in given storage `vault` config
 - **certificate_dir** (string): Directory in which to deploy issuers certificates and private keys
 - **certificate_dir_perm** (uint32): Unix permission for certificate directory in octal format (default: 0700)
 - **certificate_file_perm** (uint32): Unix permission for certificate file in octal format (default: 0600)
@@ -412,15 +412,25 @@ Optional Certificate parameters:
 - **dns_challenge** (string): dns challenge name to use for domain validation
 - **labels** (key=value string, comma separated): labels to attach to the certificate, used by the metric `acme_manager_certificate_info`
 
+
 ```
 common:
   certificate_deploy: true
+  certificate_backup: true
   certificate_dir: /etc/myapp/ssl/
 
   cmd_enabled: true
   post_cmd_run: /usr/bin/systemcl reload myapp
   post_cmd_timeout: 30
 
+storage:
+  vault:
+    role_id: "role_id_value"
+    secret_id: "secret_id_value"
+    url: " https://vault.example.com"
+    secret_engine: "myengine"
+    certificate_prefix: "backup/certificates"
+    mount_path: "login/approle"
 
 certificate:
   - domain: testfgx01.example.com

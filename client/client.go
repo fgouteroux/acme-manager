@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -19,13 +20,15 @@ import (
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/metrics"
 	"github.com/fgouteroux/acme_manager/restclient"
+	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
 
 	"gopkg.in/yaml.v3"
 )
 
 var (
-	config       Config
+	Owner        string
+	GlobalConfig Config
 	certificates []certstore.Certificate
 )
 
@@ -35,8 +38,13 @@ type MapDiff struct {
 	Delete []certstore.Certificate `json:"delete"`
 }
 
+type CertBackup struct {
+	Cert string `json:"cert" example:"-----BEGIN CERTIFICATE-----\n..."`
+	Key  string `json:"key" example:"-----BEGIN PRIVATE KEY-----\n..."`
+}
+
 func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Client) {
-	if !config.Common.CertDeploy {
+	if !GlobalConfig.Common.CertDeploy {
 		return
 	}
 
@@ -49,20 +57,19 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 	}
 
 	var hasChange bool
-	for _, certData := range config.Certificate {
+	for _, certData := range GlobalConfig.Certificate {
 
-		err := utils.CreateNonExistingFolder(config.Common.CertDir+certData.Issuer, config.Common.CertDirPerm)
+		err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			continue
 		}
 
-		certFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertFileExt
+		certFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertFileExt
 		certFileExists := utils.FileExists(certFilePath)
 
 		if !certFileExists {
 			_ = level.Error(logger).Log("msg", fmt.Sprintf("Certificate file %s doesn't exists", certFilePath))
-			hasChange = true
 			certificate, err := acmeClient.ReadCertificate(certData)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -73,6 +80,7 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 				_ = level.Error(logger).Log("err", err)
 				continue
 			}
+			_ = level.Warn(logger).Log("msg", fmt.Sprintf("Certificate file %s was not found. Restoring it.", certFilePath))
 			metrics.IncCreatedLocalCertificate(certData.Issuer)
 		} else {
 			var currentCertBytes []byte
@@ -102,7 +110,7 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 					continue
 				}
 
-				err = os.WriteFile(certFilePath, []byte(certificate.Cert), config.Common.CertFilePerm)
+				err = os.WriteFile(certFilePath, []byte(certificate.Cert), GlobalConfig.Common.CertFilePerm)
 				if err != nil {
 					_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save certificate file %s", certFilePath), "err", err)
 				} else {
@@ -113,8 +121,8 @@ func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Cl
 		}
 	}
 
-	if hasChange && config.Common.CmdEnabled {
-		err = executeCommand(logger, config.Common, false)
+	if hasChange && GlobalConfig.Common.CmdEnabled {
+		err = executeCommand(logger, GlobalConfig.Common, false)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 		}
@@ -160,8 +168,8 @@ func checkCertDiff(old, newCertList []certstore.Certificate, logger log.Logger) 
 
 func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger log.Logger) {
 
-	if config.Common.CmdEnabled {
-		err := executeCommand(logger, config.Common, true)
+	if GlobalConfig.Common.CmdEnabled {
+		err := executeCommand(logger, GlobalConfig.Common, true)
 		if err != nil {
 			_ = level.Error(logger).Log("msg", "Skipping changes because pre_cmd failed", "err", err)
 			return
@@ -171,7 +179,13 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 	var hasErrors, hasChange bool
 	for _, certData := range diff.Create {
 
-		keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
+		keyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
+
+		var privateKeyPath string
+		if utils.FileExists(keyFilePath) {
+			privateKeyPath = keyFilePath
+		}
+
 		var san []string
 		if certData.SAN != "" {
 			san = strings.Split(certData.SAN, ",")
@@ -179,7 +193,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 
 		var privateKey []byte
 		var err error
-		certData.CSR, privateKey, err = utils.GenerateCSRAndPrivateKey(certData.Domain, san)
+		certData.CSR, privateKey, err = utils.GenerateCSRAndPrivateKey(privateKeyPath, certData.Domain, san)
 		if err != nil {
 			hasErrors = true
 			_ = level.Error(logger).Log("err", err)
@@ -203,9 +217,18 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			continue
 		}
 
-		if config.Common.CertDeploy {
+		if GlobalConfig.Common.CertBackup {
+			data := CertBackup{Cert: newCert.Cert, Key: string(privateKey)}
+			vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", GlobalConfig.Storage.Vault.CertPrefix, newCert.Owner, newCert.Issuer, newCert.Domain)
+			err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
+			if err != nil {
+				_ = level.Error(logger).Log("msg", "failed to backup certificate", "err", err)
+			}
+		}
+
+		if GlobalConfig.Common.CertDeploy {
 			hasChange = true
-			err := utils.CreateNonExistingFolder(config.Common.CertDir+certData.Issuer, config.Common.CertDirPerm)
+			err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 				continue
@@ -231,14 +254,20 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 
 	for _, certData := range diff.Update {
 		var privateKey []byte
-		keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
-		if certData.CSR == "" {
+		keyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
+
+		var privateKeyPath string
+		if utils.FileExists(keyFilePath) {
+			privateKeyPath = keyFilePath
+		}
+
+		if certData.CSR == "" || privateKeyPath == "" {
 			var san []string
 			if certData.SAN != "" {
 				san = strings.Split(certData.SAN, ",")
 			}
 			var err error
-			certData.CSR, privateKey, err = utils.GenerateCSRAndPrivateKey(certData.Domain, san)
+			certData.CSR, privateKey, err = utils.GenerateCSRAndPrivateKey(privateKeyPath, certData.Domain, san)
 			if err != nil {
 				hasErrors = true
 				_ = level.Error(logger).Log("err", err)
@@ -256,7 +285,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			continue
 		}
 
-		if config.Common.RevokeOnUpdate {
+		if GlobalConfig.Common.RevokeOnUpdate {
 			certParams.Revoke = true
 		}
 
@@ -267,9 +296,18 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			continue
 		}
 
-		if config.Common.CertDeploy && certData.CSR == "" {
+		if GlobalConfig.Common.CertBackup {
+			data := CertBackup{Cert: newCert.Cert, Key: string(privateKey)}
+			vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", GlobalConfig.Storage.Vault.CertPrefix, newCert.Owner, newCert.Issuer, newCert.Domain)
+			err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
+			if err != nil {
+				_ = level.Error(logger).Log("msg", "failed to backup certificate", "err", err)
+			}
+		}
+
+		if (GlobalConfig.Common.CertDeploy && certData.CSR == "") || privateKeyPath == "" {
 			hasChange = true
-			err := utils.CreateNonExistingFolder(config.Common.CertDir+newCert.Issuer, config.Common.CertDirPerm)
+			err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+newCert.Issuer, GlobalConfig.Common.CertDirPerm)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 				continue
@@ -295,7 +333,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 
 	for _, certData := range diff.Delete {
 		var revoke bool
-		if config.Common.RevokeOnDelete {
+		if GlobalConfig.Common.RevokeOnDelete {
 			revoke = true
 		}
 
@@ -307,9 +345,9 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		}
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' deleted", certData.Domain))
 
-		if config.Common.CertDeploy {
+		if GlobalConfig.Common.CertDeploy {
 			hasChange = true
-			keyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
+			keyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
 			err := deleteLocalPrivateKeyFile(keyFilePath)
 			if err != nil {
 				hasErrors = true
@@ -329,8 +367,8 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		}
 	}
 
-	if !hasErrors && hasChange && config.Common.CmdEnabled {
-		err := executeCommand(logger, config.Common, false)
+	if !hasErrors && hasChange && GlobalConfig.Common.CmdEnabled {
+		err := executeCommand(logger, GlobalConfig.Common, false)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 		}
@@ -338,15 +376,15 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 }
 
 func createLocalCertificateFile(certData certstore.CertMap) error {
-	folderPath := config.Common.CertDir + certData.Issuer
-	err := utils.CreateNonExistingFolder(folderPath, config.Common.CertDirPerm)
+	folderPath := GlobalConfig.Common.CertDir + certData.Issuer
+	err := utils.CreateNonExistingFolder(folderPath, GlobalConfig.Common.CertDirPerm)
 	if err != nil {
 		return err
 	}
-	certFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertFileExt
+	certFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertFileExt
 
 	certBytes := []byte(certData.Cert)
-	err = os.WriteFile(certFilePath, certBytes, config.Common.CertFilePerm)
+	err = os.WriteFile(certFilePath, certBytes, GlobalConfig.Common.CertFilePerm)
 	if err != nil {
 		return fmt.Errorf("Unable to save certificate file %s", certFilePath)
 	}
@@ -354,7 +392,7 @@ func createLocalCertificateFile(certData certstore.CertMap) error {
 }
 
 func deleteLocalCertificateFile(issuer, domain string) error {
-	certFilePath := config.Common.CertDir + issuer + "/" + domain + config.Common.CertFileExt
+	certFilePath := GlobalConfig.Common.CertDir + issuer + "/" + domain + GlobalConfig.Common.CertFileExt
 	if utils.FileExists(certFilePath) {
 		err := os.Remove(certFilePath)
 		if err != nil {
@@ -365,7 +403,7 @@ func deleteLocalCertificateFile(issuer, domain string) error {
 }
 
 func createLocalPrivateKeyFile(keyFilePath string, privateKey []byte) error {
-	err := os.WriteFile(keyFilePath, privateKey, config.Common.CertKeyFilePerm)
+	err := os.WriteFile(keyFilePath, privateKey, GlobalConfig.Common.CertKeyFilePerm)
 	if err != nil {
 		return fmt.Errorf("Unable to save private key file %s", keyFilePath)
 	}
@@ -382,21 +420,21 @@ func deleteLocalPrivateKeyFile(keyFilePath string) error {
 	return nil
 }
 
-func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclient.Client) {
-	newConfigBytes, err := os.ReadFile(filepath.Clean(configPath))
+func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *restclient.Client) {
+	newConfigBytes, err := os.ReadFile(filepath.Clean(GlobalConfigPath))
 	if err != nil {
-		_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to read file %s", configPath), "err", err)
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to read file %s", GlobalConfigPath), "err", err)
 		metrics.SetCertificateConfigError(1)
 		return
 	}
 	var cfg Config
 	err = yaml.Unmarshal(newConfigBytes, &cfg)
 	if err != nil {
-		_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring file changes %s because of error", configPath), "err", err)
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring file changes %s because of error", GlobalConfigPath), "err", err)
 		metrics.SetCertificateConfigError(1)
 		return
 	}
-	config = cfg
+	GlobalConfig = cfg
 	metrics.SetCertificateConfigError(0)
 
 	_ = level.Info(logger).Log("msg", "Checking certificates from config file with remote server")
@@ -409,9 +447,9 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 
 	var newCertList []certstore.Certificate
 
-	for _, certData := range cfg.Certificate {
+	for _, certData := range GlobalConfig.Certificate {
 
-		err := utils.CreateNonExistingFolder(config.Common.CertDir+certData.Issuer, config.Common.CertDirPerm)
+		err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			continue
@@ -419,7 +457,7 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 
 		// Setting default days
 		if certData.Days == 0 {
-			certData.Days = cfg.Common.CertDays
+			certData.Days = GlobalConfig.Common.CertDays
 		}
 
 		idx := slices.IndexFunc(old, func(c certstore.Certificate) bool {
@@ -435,10 +473,46 @@ func CheckCertificate(logger log.Logger, configPath string, acmeClient *restclie
 
 			var tmp certstore.Certificate
 
-			certKeyFilePath := config.Common.CertDir + certData.Issuer + "/" + certData.Domain + config.Common.CertKeyFileExt
+			certKeyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
 			certKeyFileExists := utils.FileExists(certKeyFilePath)
 
-			if !certKeyFileExists {
+			if !certKeyFileExists && GlobalConfig.Common.CertBackup {
+				secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", GlobalConfig.Storage.Vault.CertPrefix, Owner, certData.Issuer, certData.Domain)
+				secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
+				if err != nil {
+					_ = level.Error(logger).Log("err", err)
+					continue
+				}
+				data := MapInterfaceToCertBackup(secret)
+
+				if data.Key != "" {
+					err := createLocalPrivateKeyFile(certKeyFilePath, []byte(data.Key))
+					if err != nil {
+						toRecreate = true
+						_ = level.Error(logger).Log("err", err)
+						continue
+					}
+
+					certFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertFileExt
+					certBytes, err := os.ReadFile(certFilePath)
+					if err != nil {
+						toRecreate = true
+						_ = level.Error(logger).Log("err", err)
+						continue
+					}
+
+					_, err = tls.X509KeyPair(certBytes, []byte(data.Key))
+					if err != nil {
+						toRecreate = true
+						_ = level.Error(logger).Log("msg", fmt.Sprintf("Private key file '%s' and certificate file '%s' error. Recreation needed.", certKeyFilePath, certFilePath), "err", err)
+					} else {
+						_ = level.Warn(logger).Log("msg", fmt.Sprintf("Private key file '%s' was not found. Restoring it.", certKeyFilePath))
+					}
+				} else {
+					toRecreate = true
+					_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate key file '%s' doesn't exists. Recreation needed.", certKeyFilePath))
+				}
+			} else if !certKeyFileExists {
 				toRecreate = true
 				_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate key file '%s' doesn't exists. Recreation needed.", certKeyFilePath))
 			}
@@ -585,4 +659,11 @@ func executeCommand(logger log.Logger, cfg Common, preCmd bool) error {
 		metrics.IncRunSuccessLocalCmd()
 	}
 	return nil
+}
+
+func MapInterfaceToCertBackup(data map[string]interface{}) CertBackup {
+	val, _ := json.Marshal(data)
+	var result CertBackup
+	_ = json.Unmarshal(val, &result)
+	return result
 }
