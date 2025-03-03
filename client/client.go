@@ -43,92 +43,6 @@ type CertBackup struct {
 	Key  string `json:"key" example:"-----BEGIN PRIVATE KEY-----\n..."`
 }
 
-func CheckAndDeployLocalCertificate(logger log.Logger, acmeClient *restclient.Client) {
-	if !GlobalConfig.Common.CertDeploy {
-		return
-	}
-
-	_ = level.Info(logger).Log("msg", "Checking local certificates with remote server")
-	var err error
-	certificates, err = acmeClient.GetAllCertificateMetadata()
-	if err != nil {
-		_ = level.Error(logger).Log("err", err)
-		return
-	}
-
-	var hasChange bool
-	for _, certData := range GlobalConfig.Certificate {
-
-		err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			continue
-		}
-
-		certFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertFileExt
-		certFileExists := utils.FileExists(certFilePath)
-
-		if !certFileExists {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("Local certificate file '%s' doesn't exists", certFilePath))
-			certificate, err := acmeClient.ReadCertificate(certData)
-			if err != nil {
-				_ = level.Error(logger).Log("err", err)
-				continue
-			}
-			err = createLocalCertificateFile(certificate)
-			if err != nil {
-				_ = level.Error(logger).Log("err", err)
-				continue
-			}
-			_ = level.Warn(logger).Log("msg", fmt.Sprintf("Local certificate file '%s' restored.", certFilePath))
-			metrics.IncCreatedLocalCertificate(certData.Issuer)
-		} else {
-			var currentCertBytes []byte
-			currentCertBytes, err = os.ReadFile(filepath.Clean(certFilePath))
-			if err != nil {
-				_ = level.Error(logger).Log("err", err)
-				continue
-			}
-
-			idx := slices.IndexFunc(certificates, func(c certstore.Certificate) bool {
-				return c.Domain == certData.Domain && c.Issuer == certData.Issuer
-			})
-
-			if idx == -1 {
-				_ = level.Info(logger).Log("msg", fmt.Errorf("Certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer))
-				continue
-			}
-
-			var err error
-			var certificate certstore.CertMap
-
-			if utils.GenerateFingerprint(currentCertBytes) != certificates[idx].Fingerprint {
-				hasChange = true
-				certificate, err = acmeClient.ReadCertificate(certData)
-				if err != nil {
-					_ = level.Error(logger).Log("err", err)
-					continue
-				}
-
-				err = os.WriteFile(certFilePath, []byte(certificate.Cert), GlobalConfig.Common.CertFilePerm)
-				if err != nil {
-					_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save local certificate file %s", certFilePath), "err", err)
-				} else {
-					_ = level.Info(logger).Log("msg", fmt.Sprintf("Deployed local certificate %s", certFilePath))
-					metrics.IncCreatedLocalCertificate(certData.Issuer)
-				}
-			}
-		}
-	}
-
-	if hasChange && GlobalConfig.Common.CmdEnabled {
-		err = executeCommand(logger, GlobalConfig.Common, false)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-		}
-	}
-}
-
 func checkCertDiff(old, newCertList []certstore.Certificate, logger log.Logger) (MapDiff, bool) {
 	var hasChange bool
 	var diff MapDiff
@@ -450,6 +364,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 	}
 
 	var newCertList []certstore.Certificate
+	var hasChange bool
 
 	for _, certData := range GlobalConfig.Certificate {
 
@@ -477,47 +392,88 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 
 			var tmp certstore.Certificate
 
-			certKeyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
-			certKeyFileExists := utils.FileExists(certKeyFilePath)
+			certFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertFileExt
+			certFileExists := utils.FileExists(certFilePath)
 
-			if !certKeyFileExists && GlobalConfig.Common.CertBackup {
-				secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", GlobalConfig.Storage.Vault.CertPrefix, Owner, certData.Issuer, certData.Domain)
-				secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
+			if !certFileExists {
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Local certificate file '%s' doesn't exists", certFilePath))
+				certificate, err := acmeClient.ReadCertificate(certData)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
 					continue
 				}
-				data := MapInterfaceToCertBackup(secret)
+				err = createLocalCertificateFile(certificate)
+				if err != nil {
+					_ = level.Error(logger).Log("err", err)
+					continue
+				}
+				hasChange = true
+				_ = level.Warn(logger).Log("msg", fmt.Sprintf("Local certificate file '%s' restored.", certFilePath))
+				metrics.IncCreatedLocalCertificate(certData.Issuer)
+			} else {
+				var currentCertBytes []byte
+				currentCertBytes, err = os.ReadFile(filepath.Clean(certFilePath))
+				if err != nil {
+					_ = level.Error(logger).Log("err", err)
+					continue
+				}
 
-				if data.Key != "" {
-					certFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertFileExt
-					certBytes, err := os.ReadFile(certFilePath)
+				var err error
+				var certificate certstore.CertMap
+
+				if utils.GenerateFingerprint(currentCertBytes) != old[idx].Fingerprint {
+
+					certificate, err = acmeClient.ReadCertificate(certData)
 					if err != nil {
-						toRecreate = true
 						_ = level.Error(logger).Log("err", err)
 						continue
 					}
 
-					_, err = tls.X509KeyPair(certBytes, []byte(data.Key))
+					err = os.WriteFile(certFilePath, []byte(certificate.Cert), GlobalConfig.Common.CertFilePerm)
 					if err != nil {
-						toRecreate = true
-						_ = level.Error(logger).Log("msg", fmt.Sprintf("Private key file '%s' and certificate file '%s' error. Recreation needed.", certKeyFilePath, certFilePath), "err", err)
+						_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save local certificate file %s", certFilePath), "err", err)
 					} else {
-						err := createLocalPrivateKeyFile(certKeyFilePath, []byte(data.Key))
-						if err != nil {
-							toRecreate = true
-							_ = level.Error(logger).Log("err", err)
-							continue
-						}
-						_ = level.Warn(logger).Log("msg", fmt.Sprintf("Private key file '%s' restored.", certKeyFilePath))
+						hasChange = true
+						_ = level.Info(logger).Log("msg", fmt.Sprintf("Deployed local certificate %s", certFilePath))
+						metrics.IncCreatedLocalCertificate(certData.Issuer)
 					}
-				} else {
-					toRecreate = true
-					_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate key file '%s' doesn't exists. Recreation needed.", certKeyFilePath))
 				}
+			}
+
+			certKeyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
+			certKeyFileExists := utils.FileExists(certKeyFilePath)
+
+			if !certKeyFileExists && GlobalConfig.Common.CertBackup {
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Local certificate key file '%s' doesn't exists", certKeyFilePath))
+				toRecreate, hasChange = getPrivateKeyFromVault(logger, certKeyFilePath, certFilePath, certData.Issuer, certData.Domain)
 			} else if !certKeyFileExists {
 				toRecreate = true
 				_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate key file '%s' doesn't exists. Recreation needed.", certKeyFilePath))
+			} else {
+				certBytes, err := os.ReadFile(certFilePath)
+				if err != nil {
+					toRecreate = true
+					_ = level.Error(logger).Log("err", err)
+					continue
+				}
+
+				certKeyBytes, err := os.ReadFile(certKeyFilePath)
+				if err != nil {
+					toRecreate = true
+					_ = level.Error(logger).Log("err", err)
+					continue
+				}
+
+				_, err = tls.X509KeyPair(certBytes, certKeyBytes)
+				if err != nil {
+					if GlobalConfig.Common.CertBackup {
+						_ = level.Error(logger).Log("msg", fmt.Sprintf("Private key file '%s' and certificate file '%s' error. Restoration needed.", certKeyFilePath, certFilePath), "err", err)
+						toRecreate, hasChange = getPrivateKeyFromVault(logger, certKeyFilePath, certFilePath, certData.Issuer, certData.Domain)
+					} else {
+						toRecreate = true
+						_ = level.Error(logger).Log("msg", fmt.Sprintf("Private key file '%s' and certificate file '%s' error. Recreation needed.", certKeyFilePath, certFilePath), "err", err)
+					}
+				}
 			}
 
 			if certData.SAN != old[idx].SAN {
@@ -615,6 +571,11 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 
 	if hasChanged {
 		applyCertFileChanges(acmeClient, diff, logger)
+	} else if hasChange && GlobalConfig.Common.CmdEnabled {
+		err := executeCommand(logger, GlobalConfig.Common, false)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+		}
 	}
 }
 
@@ -669,4 +630,37 @@ func MapInterfaceToCertBackup(data map[string]interface{}) CertBackup {
 	var result CertBackup
 	_ = json.Unmarshal(val, &result)
 	return result
+}
+
+func getPrivateKeyFromVault(logger log.Logger, certKeyFilePath, certFilePath, issuer, domain string) (bool, bool) {
+	secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", GlobalConfig.Storage.Vault.CertPrefix, Owner, issuer, domain)
+	secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
+	if err != nil {
+		_ = level.Error(logger).Log("err", err)
+		return false, false
+	}
+	data := MapInterfaceToCertBackup(secret)
+
+	if data.Key != "" {
+		certBytes, err := os.ReadFile(certFilePath)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			return true, false
+		}
+
+		_, err = tls.X509KeyPair(certBytes, []byte(data.Key))
+		if err != nil {
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Private key file '%s' and certificate file '%s' error. Recreation needed.", certKeyFilePath, certFilePath), "err", err)
+			return true, false
+		}
+		err = createLocalPrivateKeyFile(certKeyFilePath, []byte(data.Key))
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			return true, false
+		}
+		_ = level.Warn(logger).Log("msg", fmt.Sprintf("Private key file '%s' restored.", certKeyFilePath))
+		return false, true
+	}
+	_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate key file '%s' doesn't exists. Recreation needed.", certKeyFilePath))
+	return true, false
 }

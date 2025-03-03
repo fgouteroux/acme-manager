@@ -23,9 +23,6 @@ func WatchCertificateChange(logger log.Logger, interval time.Duration, configPat
 
 		// Compare and create/update certificate from config file to remote server
 		CheckCertificate(logger, configPath, acmeClient)
-
-		// check local certificate are up-to-date
-		CheckAndDeployLocalCertificate(logger, acmeClient)
 	}
 }
 
@@ -61,9 +58,6 @@ func WatchCertificateEventChange(logger log.Logger, configPath string, acmeClien
 
 				// Compare and create/update certificate from config file to remote server
 				CheckCertificate(logger, configPath, acmeClient)
-
-				// check local certificate are up-to-date
-				CheckAndDeployLocalCertificate(logger, acmeClient)
 			}
 		case err := <-watcher.Errors:
 			_ = level.Error(logger).Log("err", err)

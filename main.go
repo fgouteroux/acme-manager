@@ -161,9 +161,6 @@ func main() {
 
 		_ = prometheus.Register(client.NewCertificateCollector())
 
-		// on startup check local certificate are up-to-date
-		client.CheckAndDeployLocalCertificate(logger, acmeClient)
-
 		// On startup compare and create/update certificate from config file to remote server
 		client.CheckCertificate(logger, *clientConfigPath, acmeClient)
 
