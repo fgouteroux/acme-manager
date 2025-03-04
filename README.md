@@ -395,6 +395,7 @@ Optional Common parameters:
 - **certificate_keyfile_perm** (uint32): Unix permission for certificate key file in octal format (default: 0600)
 - **certificate_file_ext** (string): certificate file extension (default: ".crt")
 - **certificate_keyfile_ext** (string): certificate key file extension (default: ".key")
+- **certificate_keyfile_no_generate** (bool): It set to true, don't auto generate private key, use provided file (default: false)
 - **cmd_enabled** (bool): If set to true, allow running pre and post command.
 - **pre_cmd_run** (string): Pre Command to run before executing certificate changes.
 - **pre_cmd_timeout** (int): Pre Command timeout (default: 60)

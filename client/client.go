@@ -81,7 +81,6 @@ func checkCertDiff(old, newCertList []certstore.Certificate, logger log.Logger) 
 }
 
 func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger log.Logger) {
-
 	if GlobalConfig.Common.CmdEnabled {
 		err := executeCommand(logger, GlobalConfig.Common, true)
 		if err != nil {
@@ -92,11 +91,15 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 
 	var hasErrors, hasChange bool
 	for _, certData := range diff.Create {
-
 		keyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
 
 		var privateKeyPath string
-		if utils.FileExists(keyFilePath) {
+		if GlobalConfig.Common.CertKeyFileNoGen {
+			if !utils.FileExists(keyFilePath) {
+				hasErrors = true
+				_ = level.Error(logger).Log("err", fmt.Errorf("local private key file '%s' doesn't exists", keyFilePath))
+				continue
+			}
 			privateKeyPath = keyFilePath
 		}
 
@@ -173,7 +176,12 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		keyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
 
 		var privateKeyPath string
-		if utils.FileExists(keyFilePath) {
+		if GlobalConfig.Common.CertKeyFileNoGen {
+			if !utils.FileExists(keyFilePath) {
+				hasErrors = true
+				_ = level.Error(logger).Log("err", fmt.Errorf("local private key file '%s' doesn't exists", keyFilePath))
+				continue
+			}
 			privateKeyPath = keyFilePath
 		}
 
