@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io/fs"
 
+	"github.com/prometheus/common/model"
+
 	"github.com/fgouteroux/acme_manager/certstore"
 	cfg "github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -18,24 +20,25 @@ type Config struct {
 
 // Common represents common config.
 type Common struct {
-	CertDays         int         `yaml:"cert_days"`
-	CertDaysRenewal  int         `yaml:"cert_days_renewal"`
-	CertBackup       bool        `yaml:"certificate_backup"`
-	CertDeploy       bool        `yaml:"certificate_deploy"`
-	CertDir          string      `yaml:"certificate_dir"`
-	CertDirPerm      fs.FileMode `yaml:"certificate_dir_perm"`
-	CertFilePerm     fs.FileMode `yaml:"certificate_file_perm"`
-	CertKeyFilePerm  fs.FileMode `yaml:"certificate_keyfile_perm"`
-	CertFileExt      string      `yaml:"certificate_file_ext"`
-	CertKeyFileExt   string      `yaml:"certificate_keyfile_ext"`
-	CertKeyFileNoGen bool        `yaml:"certificate_keyfile_no_generate"`
-	CmdEnabled       bool        `yaml:"cmd_enabled"`
-	PreCmdRun        string      `yaml:"pre_cmd_run"`
-	PreCmdTimeout    int         `yaml:"pre_cmd_timeout"`
-	PostCmdRun       string      `yaml:"post_cmd_run"`
-	PostCmdTimeout   int         `yaml:"post_cmd_timeout"`
-	RevokeOnUpdate   bool        `yaml:"revoke_on_update"`
-	RevokeOnDelete   bool        `yaml:"revoke_on_delete"`
+	CertDays          int         `yaml:"cert_days"`
+	CertDaysRenewal   int         `yaml:"cert_days_renewal"`
+	CertBackup        bool        `yaml:"certificate_backup"`
+	CertDeploy        bool        `yaml:"certificate_deploy"`
+	CertDir           string      `yaml:"certificate_dir"`
+	CertDirPerm       fs.FileMode `yaml:"certificate_dir_perm"`
+	CertFilePerm      fs.FileMode `yaml:"certificate_file_perm"`
+	CertKeyFilePerm   fs.FileMode `yaml:"certificate_keyfile_perm"`
+	CertFileExt       string      `yaml:"certificate_file_ext"`
+	CertKeyFileExt    string      `yaml:"certificate_keyfile_ext"`
+	CertKeyFileNoGen  bool        `yaml:"certificate_keyfile_no_generate"`
+	CmdEnabled        bool        `yaml:"cmd_enabled"`
+	PreCmdRun         string      `yaml:"pre_cmd_run"`
+	PreCmdTimeout     int         `yaml:"pre_cmd_timeout"`
+	PostCmdRun        string      `yaml:"post_cmd_run"`
+	PostCmdTimeout    int         `yaml:"post_cmd_timeout"`
+	RevokeOnUpdate    bool        `yaml:"revoke_on_update"`
+	RevokeOnDelete    bool        `yaml:"revoke_on_delete"`
+	DelayBeforeDelete string      `yaml:"delay_before_delete"`
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
@@ -67,6 +70,12 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	if s.Common.CertKeyFileExt == "" {
 		s.Common.CertKeyFileExt = ".key"
+	}
+
+	if s.Common.DelayBeforeDelete != "" {
+		if _, err := model.ParseDuration(s.Common.DelayBeforeDelete); err != nil {
+			return fmt.Errorf("invalid duration in 'delay_before_delete': %v", err)
+		}
 	}
 
 	// Validate unique issuer/domain name.

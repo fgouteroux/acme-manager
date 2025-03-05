@@ -18,6 +18,7 @@ import (
 
 	"github.com/fgouteroux/acme_manager/api"
 	"github.com/fgouteroux/acme_manager/certstore"
+	"github.com/fgouteroux/acme_manager/memcache"
 	"github.com/fgouteroux/acme_manager/metrics"
 	"github.com/fgouteroux/acme_manager/restclient"
 	"github.com/fgouteroux/acme_manager/storage/vault"
@@ -30,6 +31,8 @@ var (
 	Owner        string
 	GlobalConfig Config
 	certificates []certstore.Certificate
+
+	localCache = memcache.NewLocalCache()
 )
 
 type MapDiff struct {
@@ -258,6 +261,26 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 	}
 
 	for _, certData := range diff.Delete {
+		var cacheKey string
+		if GlobalConfig.Common.DelayBeforeDelete != "" {
+			duration, _ := time.ParseDuration(GlobalConfig.Common.DelayBeforeDelete)
+			cacheKey = certData.Issuer + "/" + certData.Domain
+			if cached, found := localCache.Get(cacheKey); found {
+				delay := cached.Value.(time.Time)
+				now := time.Now()
+				if now.Before(delay) {
+					delta := delay.Sub(now).String()
+					_ = level.Info(logger).Log("msg", fmt.Sprintf("Scheduled deletion for %s in %s", cacheKey, delta))
+					continue
+				}
+			} else {
+				delay := time.Now().Add(duration)
+				localCache.Set(cacheKey, delay)
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("Scheduled deletion for %s in %s", cacheKey, GlobalConfig.Common.DelayBeforeDelete))
+				continue
+			}
+		}
+
 		var revoke bool
 		if GlobalConfig.Common.RevokeOnDelete {
 			revoke = true
@@ -268,6 +291,9 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			hasErrors = true
 			_ = level.Error(logger).Log("err", err)
 			continue
+		}
+		if GlobalConfig.Common.DelayBeforeDelete != "" {
+			localCache.Del(cacheKey)
 		}
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate '%s' deleted", certData.Domain))
 

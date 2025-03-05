@@ -403,6 +403,7 @@ Optional Common parameters:
 - **post_cmd_timeout** (int): Post Command timeout (default: 60)
 - **revoke_on_update** (bool): If set to true, revoke the old certificate on update (default: false)
 - **revoke_on_delete** (bool): If set to true, revoke the certificate on delete (default: false)
+- **delay_before_delete** (string): If set, define a duration to wait before deleting certificate
  
 Optional Certificate parameters:
 - **bundle** (bool): if true, add the issuers certificate to the new certificate
