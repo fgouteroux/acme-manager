@@ -3,6 +3,7 @@ acme_manager
 cover.out
 certificate.yml
 client-config.yml
+client-config-pull.yml
 config.yml
 config.yml.local
 config.yml.local*

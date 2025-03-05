@@ -20,9 +20,19 @@ func WatchCertificateChange(logger log.Logger, interval time.Duration, configPat
 
 	// start the ticker
 	for range tk.C {
-
 		// Compare and create/update certificate from config file to remote server
 		CheckCertificate(logger, configPath, acmeClient)
+	}
+}
+
+func WatchCertificateFromRing(logger log.Logger, interval time.Duration, configPath string, acmeClient *restclient.Client) {
+	// create a new Ticker
+	tk := time.NewTicker(interval)
+
+	// start the ticker
+	for range tk.C {
+		// Compare and create/update certificate from config file to remote server
+		PullAndCheckCertificateFromRing(logger, configPath, acmeClient)
 	}
 }
 

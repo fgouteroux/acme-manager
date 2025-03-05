@@ -50,6 +50,8 @@ Flags:
       --check-config-interval=30s  
                                  Time interval to check if config file changes
       --check-token-interval=1m  Time interval to check if tokens expired
+      --check-issuer-interval=10m  
+                                 Time interval to check issuer health
       --ring.instance-id=RING.INSTANCE-ID  
                                  Instance ID to register in the ring.
       --ring.instance-addr=RING.INSTANCE-ADDR  
@@ -60,6 +62,7 @@ Flags:
       --ring.join-members=RING.JOIN-MEMBERS  
                                  Other cluster members to join.
       --[no-]client              Enables client mode.
+      --[no-]client.pull-only    Set client in pull mode. Manage local certificate files based on remote server changes.
       --client.manager-url="http://localhost:8989/api/v1"  
                                  Client manager URL ($ACME_MANAGER_URL)
       --client.manager-token=CLIENT.MANAGER-TOKEN  

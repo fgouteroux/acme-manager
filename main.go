@@ -61,6 +61,7 @@ var (
 	ringJoinMembers            = kingpin.Flag("ring.join-members", "Other cluster members to join.").String()
 
 	clientMode                 = kingpin.Flag("client", "Enables client mode.").Bool()
+	clientPullOnly             = kingpin.Flag("client.pull-only", "Set client in pull mode. Manage local certificate files based on remote server changes.").Bool()
 	clientManagerURL           = kingpin.Flag("client.manager-url", "Client manager URL").Default("http://localhost:8989/api/v1").Envar("ACME_MANAGER_URL").String()
 	clientManagerToken         = kingpin.Flag("client.manager-token", "Client manager token").Envar("ACME_MANAGER_TOKEN").String()
 	clientManagerTLSCAFile     = kingpin.Flag("client.tls-ca-file", "Client manager tls ca certificate file").String()
@@ -126,7 +127,7 @@ func main() {
 
 		client.GlobalConfig = cfg
 
-		if cfg.Common.CertBackup {
+		if cfg.Common.CertBackup || *clientPullOnly {
 			vault.GlobalClient, err = vault.InitClient(cfg.Storage.Vault)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -161,14 +162,22 @@ func main() {
 
 		_ = prometheus.Register(client.NewCertificateCollector())
 
-		// On startup compare and create/update certificate from config file to remote server
-		client.CheckCertificate(logger, *clientConfigPath, acmeClient)
+		if *clientPullOnly {
+			// On startup get certificates from remote server
+			client.PullAndCheckCertificateFromRing(logger, *clientConfigPath, acmeClient)
 
-		// periodically check local certificate are up-to-date
-		go client.WatchCertificateChange(logger, *clientCheckConfigInterval, *clientConfigPath, acmeClient)
+			// periodically check local certificate are up-to-date
+			go client.WatchCertificateFromRing(logger, *clientCheckConfigInterval, *clientConfigPath, acmeClient)
+		} else {
+			// On startup compare and create/update certificate from config file to remote server
+			client.CheckCertificate(logger, *clientConfigPath, acmeClient)
 
-		// listen for config file event change
-		go client.WatchCertificateEventChange(logger, *clientConfigPath, acmeClient)
+			// periodically check local certificate are up-to-date
+			go client.WatchCertificateChange(logger, *clientCheckConfigInterval, *clientConfigPath, acmeClient)
+
+			// listen for config file event change
+			go client.WatchCertificateEventChange(logger, *clientConfigPath, acmeClient)
+		}
 
 		http.Handle("/metrics", promhttp.Handler())
 

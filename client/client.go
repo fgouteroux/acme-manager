@@ -178,23 +178,13 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		var privateKey []byte
 		keyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
 
-		var privateKeyPath string
-		if GlobalConfig.Common.CertKeyFileNoGen {
-			if !utils.FileExists(keyFilePath) {
-				hasErrors = true
-				_ = level.Error(logger).Log("err", fmt.Errorf("local private key file '%s' doesn't exists", keyFilePath))
-				continue
-			}
-			privateKeyPath = keyFilePath
-		}
-
-		if certData.CSR == "" || privateKeyPath == "" {
+		if certData.CSR == "" {
 			var san []string
 			if certData.SAN != "" {
 				san = strings.Split(certData.SAN, ",")
 			}
 			var err error
-			certData.CSR, privateKey, err = utils.GenerateCSRAndPrivateKey(privateKeyPath, certData.Domain, san)
+			certData.CSR, privateKey, err = utils.GenerateCSRAndPrivateKey(keyFilePath, certData.Domain, san)
 			if err != nil {
 				hasErrors = true
 				_ = level.Error(logger).Log("err", err)
@@ -234,7 +224,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate and private key for domain '%s' backed up in vault", newCert.Domain))
 		}
 
-		if (GlobalConfig.Common.CertDeploy && certData.CSR == "") || privateKeyPath == "" {
+		if GlobalConfig.Common.CertDeploy && certData.CSR == "" {
 			hasChange = true
 			err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+newCert.Issuer, GlobalConfig.Common.CertDirPerm)
 			if err != nil {
@@ -389,7 +379,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 	GlobalConfig = cfg
 	metrics.SetCertificateConfigError(0)
 
-	_ = level.Info(logger).Log("msg", "Checking certificates from config file with remote server")
+	_ = level.Info(logger).Log("msg", "Check certificates from config file and compare with remote server")
 
 	old, err := acmeClient.GetAllCertificateMetadata()
 	if err != nil {
@@ -613,6 +603,131 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 	}
 }
 
+func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string, acmeClient *restclient.Client) {
+	newConfigBytes, err := os.ReadFile(filepath.Clean(GlobalConfigPath))
+	if err != nil {
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to read file %s", GlobalConfigPath), "err", err)
+		metrics.SetCertificateConfigError(1)
+		return
+	}
+	var cfg Config
+	err = yaml.Unmarshal(newConfigBytes, &cfg)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring file changes %s because of error", GlobalConfigPath), "err", err)
+		metrics.SetCertificateConfigError(1)
+		return
+	}
+	GlobalConfig = cfg
+	metrics.SetCertificateConfigError(0)
+
+	_ = level.Info(logger).Log("msg", "Pull and check certificates from remote server")
+
+	allCert, err := acmeClient.GetAllCertificateMetadata()
+	if err != nil {
+		_ = level.Error(logger).Log("err", err)
+		return
+	}
+
+	var hasChange bool
+	var patterns []string
+	for _, certData := range allCert {
+
+		patterns = append(patterns, certData.Issuer+"/"+certData.Domain)
+
+		err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			continue
+		}
+
+		certFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertFileExt
+		certFileExists := utils.FileExists(certFilePath)
+
+		if !certFileExists {
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Local certificate file '%s' doesn't exists", certFilePath))
+			certificate, err := acmeClient.ReadCertificate(certData)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+			err = createLocalCertificateFile(certificate)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+			hasChange = true
+			_ = level.Warn(logger).Log("msg", fmt.Sprintf("Local certificate file '%s' restored.", certFilePath))
+			metrics.IncCreatedLocalCertificate(certData.Issuer)
+		} else {
+			var currentCertBytes []byte
+			currentCertBytes, err = os.ReadFile(filepath.Clean(certFilePath))
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+
+			var err error
+			var certificate certstore.CertMap
+
+			if utils.GenerateFingerprint(currentCertBytes) != certData.Fingerprint {
+
+				certificate, err = acmeClient.ReadCertificate(certData)
+				if err != nil {
+					_ = level.Error(logger).Log("err", err)
+					continue
+				}
+
+				err = os.WriteFile(certFilePath, []byte(certificate.Cert), GlobalConfig.Common.CertFilePerm)
+				if err != nil {
+					_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to save local certificate file %s", certFilePath), "err", err)
+				} else {
+					hasChange = true
+					_ = level.Info(logger).Log("msg", fmt.Sprintf("Deployed local certificate %s", certFilePath))
+					metrics.IncCreatedLocalCertificate(certData.Issuer)
+				}
+			}
+		}
+
+		certKeyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
+		certKeyFileExists := utils.FileExists(certKeyFilePath)
+
+		if !certKeyFileExists {
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Local certificate key file '%s' doesn't exists", certKeyFilePath))
+			_, hasChange = getPrivateKeyFromVault(logger, certKeyFilePath, certFilePath, certData.Issuer, certData.Domain)
+		} else {
+			certBytes, err := os.ReadFile(certFilePath)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+
+			certKeyBytes, err := os.ReadFile(certKeyFilePath)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
+
+			_, err = tls.X509KeyPair(certBytes, certKeyBytes)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Private key file '%s' and certificate file '%s' error. Restoration needed.", certKeyFilePath, certFilePath), "err", err)
+				_, hasChange = getPrivateKeyFromVault(logger, certKeyFilePath, certFilePath, certData.Issuer, certData.Domain)
+			}
+		}
+	}
+
+	hasDelete, err := listAndDeleteFiles(logger, patterns)
+	if err != nil {
+		_ = level.Error(logger).Log("err", err)
+	}
+
+	if (hasChange || hasDelete) && GlobalConfig.Common.CmdEnabled {
+		err := executeCommand(logger, GlobalConfig.Common, false)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+		}
+	}
+}
+
 func executeCommand(logger log.Logger, cfg Common, preCmd bool) error {
 	var cmdRun string
 	var cmdTimeout int
@@ -697,4 +812,34 @@ func getPrivateKeyFromVault(logger log.Logger, certKeyFilePath, certFilePath, is
 	}
 	_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate key file '%s' doesn't exists. Recreation needed.", certKeyFilePath))
 	return true, false
+}
+
+// listAndDeleteFiles recursively lists directories and deletes files matching the pattern
+func listAndDeleteFiles(logger log.Logger, patterns []string) (bool, error) {
+	var hasDelete bool
+	err := filepath.Walk(GlobalConfig.Common.CertDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			var pattern string
+			if strings.HasSuffix(path, GlobalConfig.Common.CertFileExt) {
+				pattern = strings.TrimPrefix(strings.TrimSuffix(path, GlobalConfig.Common.CertFileExt), GlobalConfig.Common.CertDir)
+			}
+			if strings.HasSuffix(path, GlobalConfig.Common.CertKeyFileExt) {
+				pattern = strings.TrimPrefix(strings.TrimSuffix(path, GlobalConfig.Common.CertKeyFileExt), GlobalConfig.Common.CertDir)
+			}
+
+			if !slices.Contains(patterns, pattern) {
+				// Delete the file if it matches the pattern
+				if err := os.Remove(path); err != nil {
+					_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to delete file '%s'", path), "err", err)
+				}
+				hasDelete = true
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("deleted file '%s'", path))
+			}
+		}
+		return nil
+	})
+	return hasDelete, err
 }
