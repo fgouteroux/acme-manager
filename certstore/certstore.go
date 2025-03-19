@@ -54,6 +54,8 @@ type Certificate struct {
 	Owner         string `json:"owner" example:"testfgx"`
 	CSR           string `json:"csr"`
 	Labels        string `json:"labels"`
+	Encryption    string `json:"encryption"`
+	Serial        string `json:"serial"`
 }
 
 type CertMap struct {
@@ -225,6 +227,9 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 		_ = level.Error(logger).Log("err", err)
 		return certData, err
 	}
+
+	certData.Encryption = x509Cert.SignatureAlgorithm.String()
+	certData.Serial = x509Cert.SerialNumber.Text(16)
 	certData.Expires = x509Cert.NotAfter.String()
 	certData.Fingerprint = utils.GenerateFingerprint(resource.Certificate)
 

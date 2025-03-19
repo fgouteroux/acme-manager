@@ -1,7 +1,9 @@
 package certstore
 
 import (
+	"math"
 	"strings"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -23,10 +25,12 @@ func (c *CertificateCollector) Collect(ch chan<- prometheus.Metric) {
 
 	for _, cert := range data {
 		labels := prometheus.Labels{
-			"issuer":  cert.Issuer,
-			"owner":   cert.Owner,
-			"domain":  cert.Domain,
-			"expires": cert.Expires,
+			"issuer":     cert.Issuer,
+			"owner":      cert.Owner,
+			"domain":     cert.Domain,
+			"expires":    cert.Expires,
+			"encryption": cert.Encryption,
+			"serial":     cert.Serial,
 		}
 
 		for _, item := range strings.Split(cert.Labels, ",") {
@@ -36,14 +40,22 @@ func (c *CertificateCollector) Collect(ch chan<- prometheus.Metric) {
 			}
 		}
 
-		value := 1.0
+		// Define the layout for the date string
+		layout := "2006-01-02 15:04:05 -0700 MST"
+
+		// Parse the string into a time.Time object
+		notAfter, _ := time.Parse(layout, cert.Expires)
+
+		// Calculate the number of days until expiration
+		daysUntilExpiration := float64(math.Round(time.Until(notAfter).Hours() / 24))
+
 		ch <- prometheus.MustNewConstMetric(
 			prometheus.NewDesc(
-				"acme_manager_certificate_info",
-				"Certificate info with issuer, owner, domain", nil, labels,
+				"acme_manager_certificate_expiry",
+				"Certificate expiry with issuer, owner, domain", nil, labels,
 			),
 			prometheus.GaugeValue,
-			value,
+			daysUntilExpiration,
 		)
 	}
 }
