@@ -41,7 +41,7 @@ type CertificateParams struct {
 	SAN           string `json:"san,omitempty" example:""`
 	CSR           string `json:"csr,omitempty"`
 	Days          int    `json:"days,omitempty" example:"90"`
-	RenewalDays   int    `json:"renewal_days,omitempty" example:"30"`
+	RenewalDays   string `json:"renewal_days,omitempty" example:"30"`
 	DNSChallenge  string `json:"dns_challenge,omitempty" example:"ns1"`
 	HTTPChallenge string `json:"http_challenge,omitempty" example:""`
 	Revoke        bool   `json:"revoke"`
@@ -291,8 +291,14 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		if certParams.Days != 0 && certParams.RenewalDays >= certParams.Days {
-			responseJSON(w, nil, fmt.Errorf("'renewal_days' (%d) should be lower than 'days' (%d)", certParams.RenewalDays, certParams.Days), http.StatusBadRequest)
+		certRenewalMinDays, certRenewalMaxDays, err := utils.ValidateRenewalDays(certParams.RenewalDays)
+		if err != nil {
+			responseJSON(w, nil, fmt.Errorf("%s", err), http.StatusBadRequest)
+			return
+		}
+
+		if certParams.Days != 0 && (certRenewalMinDays >= certParams.Days || certRenewalMaxDays >= certParams.Days) {
+			responseJSON(w, nil, fmt.Errorf("'renewal_days' (%s) should be lower than 'days' (%d)", certParams.RenewalDays, certParams.Days), http.StatusBadRequest)
 			return
 		}
 
@@ -467,9 +473,19 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		if certParams.Days != 0 && certParams.RenewalDays >= certParams.Days {
-			responseJSON(w, nil, fmt.Errorf("'renewal_days' (%d) should be lower than 'days' (%d)", certParams.RenewalDays, certParams.Days), http.StatusBadRequest)
+		var certRenewalMinDays int
+		var certRenewalMaxDays int
+		certRenewalMinDays, certRenewalMaxDays, err = utils.ValidateRenewalDays(certParams.RenewalDays)
+		if err != nil {
+			responseJSON(w, nil, fmt.Errorf("%s", err), http.StatusBadRequest)
 			return
+		}
+
+		if certParams.Days != 0 {
+			if certRenewalMinDays >= certParams.Days || certRenewalMaxDays >= certParams.Days {
+				responseJSON(w, nil, fmt.Errorf("'renewal_days' (%s) should be lower than 'days' (%d)", certParams.RenewalDays, certParams.Days), http.StatusBadRequest)
+				return
+			}
 		}
 
 		if certParams.DNSChallenge != "" && certParams.HTTPChallenge != "" {
@@ -576,6 +592,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		var newCert certstore.Certificate
+		var renewalDate string
 		if recreateCert {
 			if certParams.Revoke {
 				err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
@@ -599,6 +616,12 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
+
+			expiresDate, _ := time.Parse("2006-01-02 15:04:05 -0700 MST", secret["expires"].(string))
+			renewalDate = utils.RandomWeekdayBeforeExpiration(expiresDate, certRenewalMinDays, certRenewalMaxDays).String()
+			fmt.Println(renewalDate)
+
+			secret["renewal_date"] = renewalDate
 			secret["renewal_days"] = certData.RenewalDays
 			secret["labels"] = certData.Labels
 			err = vault.GlobalClient.PutSecretWithAppRole(secretKeyPath, utils.StructToMapInterface(secret))
@@ -623,6 +646,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				data = slices.Delete(data, idx, idx+1)
 				data = append(data, newCert)
 			} else {
+				data[idx].RenewalDate = renewalDate
 				data[idx].RenewalDays = certData.RenewalDays
 				data[idx].Labels = certData.Labels
 			}

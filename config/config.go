@@ -2,6 +2,9 @@ package config
 
 import (
 	"fmt"
+
+	"github.com/fgouteroux/acme_manager/utils"
+
 	"golang.org/x/exp/maps"
 )
 
@@ -20,7 +23,7 @@ type Config struct {
 // Common represents common config.
 type Common struct {
 	APIKeyHash          string `yaml:"api_key_hash"`
-	CertDaysRenewal     int    `yaml:"cert_days_renewal"`
+	CertDaysRenewal     string `yaml:"cert_days_renewal"`
 	RootPathAccount     string `yaml:"rootpath_account"`
 	RootPathCertificate string `yaml:"rootpath_certificate"`
 }
@@ -62,8 +65,10 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 
-	if s.Common.CertDaysRenewal == 0 {
-		s.Common.CertDaysRenewal = 30
+	if s.Common.CertDaysRenewal == "" {
+		s.Common.CertDaysRenewal = "20-30"
+	} else if _, _, err := utils.ValidateRenewalDays(s.Common.CertDaysRenewal); err != nil {
+		return err
 	}
 
 	for issuer, issuerConf := range s.Issuer {

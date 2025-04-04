@@ -10,5 +10,6 @@ config.yml.local*
 etc
 accounts
 .env
+.run
 certificates
 TODO

@@ -17,7 +17,7 @@ type Data struct {
 // Merge implements the memberlist.Mergeable interface.
 // It allow to merge the content of two different data.
 // We dont need to compare values to know if a change is requested as the leader only could send a message
-func (c *Data) Merge(mergeable memberlist.Mergeable, _ bool) (change memberlist.Mergeable, error error) {
+func (c *Data) Merge(mergeable memberlist.Mergeable, _ bool) (memberlist.Mergeable, error) {
 	if mergeable == nil {
 		return nil, nil
 	}

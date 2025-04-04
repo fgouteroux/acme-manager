@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -46,7 +47,8 @@ type Certificate struct {
 	Bundle        bool   `json:"bundle" yaml:"bundle" example:"false"`
 	SAN           string `json:"san,omitempty" yaml:"san,omitempty" example:""`
 	Days          int    `json:"days,omitempty" yaml:"days,omitempty" example:"90"`
-	RenewalDays   int    `json:"renewal_days,omitempty" yaml:"renewal_days,omitempty" example:"30"`
+	RenewalDays   string `json:"renewal_days,omitempty" yaml:"renewal_days,omitempty" example:"30"`
+	RenewalDate   string `json:"renewal_date,omitempty"`
 	DNSChallenge  string `json:"dns_challenge,omitempty" yaml:"dns_challenge,omitempty" example:"ns1"`
 	HTTPChallenge string `json:"http_challenge,omitempty" yaml:"http_challenge,omitempty" example:""`
 	Expires       string `json:"expires" example:"2025-04-09 09:56:34 +0000 UTC"`
@@ -233,6 +235,22 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 	certData.Expires = x509Cert.NotAfter.String()
 	certData.Fingerprint = utils.GenerateFingerprint(resource.Certificate)
 
+	renewalDays := config.GlobalConfig.Common.CertDaysRenewal
+	if certData.RenewalDays != "" {
+		renewalDays = certData.RenewalDays
+	}
+	certRenewalDays := strings.Split(renewalDays, "-")
+	var certRenewalMinDays, certRenewalMaxDays int
+	if len(certRenewalDays) != 2 {
+		certRenewalMinDays, _ = strconv.Atoi(certRenewalDays[0])
+		certRenewalMaxDays, _ = strconv.Atoi(certRenewalDays[0])
+	} else {
+		certRenewalMinDays, _ = strconv.Atoi(certRenewalDays[0])
+		certRenewalMaxDays, _ = strconv.Atoi(certRenewalDays[1])
+	}
+
+	certData.RenewalDate = utils.RandomWeekdayBeforeExpiration(x509Cert.NotAfter, certRenewalMinDays, certRenewalMaxDays).String()
+
 	data := CertMap{
 		Certificate: certData,
 		Cert:        string(resource.Certificate),
@@ -303,25 +321,16 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger, isLeader bool) e
 	var hasChange bool
 	for i, certData := range data {
 		layout := "2006-01-02 15:04:05 -0700 MST"
-		t, err := time.Parse(layout, certData.Expires)
+		renewalDate, err := time.Parse(layout, certData.RenewalDate)
 		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to parse date for certificate owner '%s', issuer '%s' and domain '%s'", certData.Owner, certData.Issuer, certData.Domain))
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to parse renewal date for certificate owner '%s', issuer '%s' and domain '%s'", certData.Owner, certData.Issuer, certData.Domain))
 			continue
 		}
 
-		// This is just meant to be informal for the user.
-		timeLeft := t.Sub(time.Now().UTC())
-
-		daysLeft := int(timeLeft.Hours()) / 24
-		_ = level.Debug(logger).Log("msg", fmt.Sprintf("%d days remaining for certificate owner '%s', issuer '%s' and domain '%s'", daysLeft, certData.Owner, certData.Issuer, certData.Domain))
-
-		renewalDays := config.GlobalConfig.Common.CertDaysRenewal
-		if certData.RenewalDays != 0 {
-			renewalDays = certData.RenewalDays
-		}
-		if daysLeft < renewalDays {
+		currentDate := time.Now()
+		if currentDate.After(renewalDate) || currentDate.Equal(renewalDate) {
 			hasChange = true
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("Trying renewal with %d days remaining for certificate owner '%s', issuer '%s' and domain '%s'", daysLeft, certData.Owner, certData.Issuer, certData.Domain))
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Trying renewal certificate owner '%s', issuer '%s' and domain '%s'", certData.Owner, certData.Issuer, certData.Domain))
 			cert, err := CreateRemoteCertificateResource(certData, logger)
 			if err != nil {
 				metrics.SetRenewedCertificate(cert.Issuer, cert.Owner, cert.Domain, 0)
