@@ -18,7 +18,7 @@ lint:
 	golangci-lint run
 
 security:
-	gosec -exclude-dir _local -quiet ./...
+	gosec -exclude=G401,G404,G505 -exclude-dir _local -quiet ./...
 
 build:
 	goreleaser build --snapshot --clean

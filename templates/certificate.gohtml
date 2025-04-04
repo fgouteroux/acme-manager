@@ -38,6 +38,7 @@
         <th>SAN</th>
         <th>Duration</th>
         <th>Renew days</th>
+        <th>Renewal date</th>
         <th>Labels</th>
       </tr>
     </thead>
@@ -60,11 +61,12 @@
         {{ else }}
         <td id="days">{{ $cert.Days }}d</td>
         {{ end }}
-        {{ if eq $cert.RenewalDays 0 }}
-        <td id="renewal_days">30d</td>
+        {{ if $cert.RenewalDays }}
+        <td id="renewal_days">{{ $cert.RenewalDays }}</td>
         {{ else }}
-        <td id="renewal_days">{{ $cert.RenewalDays }}d</td>
+        <td id="renewal_days">20-30</td>
         {{ end }}
+        <td id="renewal">{{ $cert.RenewalDate }}</td>
         {{ if $cert.Labels }}
         <td id="labels">{{ range $item := Split $cert.Labels "," }}{{ $item }}<br>{{ end }}</td>
         {{ end }}

@@ -481,7 +481,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 					continue
 				}
 
-				certKeyBytes, err := os.ReadFile(certKeyFilePath)
+				certKeyBytes, err := os.ReadFile(filepath.Clean(certKeyFilePath))
 				if err != nil {
 					toRecreate = true
 					_ = level.Error(logger).Log("err", err)
@@ -551,6 +551,12 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 				))
 			}
 			if certData.RenewalDays != old[idx].RenewalDays {
+
+				if _, _, err := utils.ValidateRenewalDays(certData.RenewalDays); err != nil {
+					_ = level.Error(logger).Log("err", err)
+					continue
+				}
+
 				toUpdate = true
 
 				if !toRecreate {
@@ -558,7 +564,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 					tmp.RenewalDays = certData.RenewalDays
 				}
 				_ = level.Info(logger).Log("msg", fmt.Sprintf(
-					"Certificate issuer '%s' for domain '%s' renewal_days changed from '%d' to '%d'.",
+					"Certificate issuer '%s' for domain '%s' renewal_days changed from '%s' to '%s'.",
 					certData.Issuer,
 					certData.Domain,
 					old[idx].RenewalDays,
@@ -695,13 +701,13 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 			_ = level.Error(logger).Log("msg", fmt.Sprintf("Local certificate key file '%s' doesn't exists", certKeyFilePath))
 			_, hasChange = getPrivateKeyFromVault(logger, certKeyFilePath, certFilePath, certData.Issuer, certData.Domain)
 		} else {
-			certBytes, err := os.ReadFile(certFilePath)
+			certBytes, err := os.ReadFile(filepath.Clean(certFilePath))
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 				continue
 			}
 
-			certKeyBytes, err := os.ReadFile(certKeyFilePath)
+			certKeyBytes, err := os.ReadFile(filepath.Clean(certKeyFilePath))
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 				continue
@@ -791,7 +797,7 @@ func getPrivateKeyFromVault(logger log.Logger, certKeyFilePath, certFilePath, is
 	data := MapInterfaceToCertBackup(secret)
 
 	if data.Key != "" {
-		certBytes, err := os.ReadFile(certFilePath)
+		certBytes, err := os.ReadFile(filepath.Clean(certFilePath))
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			return true, false

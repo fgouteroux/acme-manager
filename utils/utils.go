@@ -14,12 +14,16 @@ import (
 	"encoding/json"
 	"encoding/pem"
 
+	mathRand "math/rand"
+
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/go-kit/log"
@@ -148,7 +152,7 @@ func GenerateCSRAndPrivateKey(privateKey, domain string, SAN []string) (string, 
 			return "", nil, err
 		}
 	} else {
-		privateKeyBytes, err := os.ReadFile(privateKey)
+		privateKeyBytes, err := os.ReadFile(filepath.Clean(privateKey))
 		if err != nil {
 			return "", nil, err
 		}
@@ -191,4 +195,68 @@ func ValidateLabels(labels string) (errors []error) {
 		}
 	}
 	return
+}
+
+// Function to generate a random weekday within a given range before an expiration date
+func RandomWeekdayBeforeExpiration(expiration time.Time, minDays, maxDays int) time.Time {
+	// Calculate the start and end dates for the range
+	startDate := expiration.AddDate(0, 0, -maxDays)
+	endDate := expiration.AddDate(0, 0, -minDays)
+
+	// Calculate the number of weekdays in the range
+	weekdays := 0
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		if d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
+			weekdays++
+		}
+	}
+
+	// Select a random weekday within the range
+	randomIndex := mathRand.Intn(weekdays)
+	randomDate := startDate
+	for i := 0; i <= randomIndex; randomDate = randomDate.AddDate(0, 0, 1) {
+		if randomDate.Weekday() != time.Saturday && randomDate.Weekday() != time.Sunday {
+			i++
+		}
+	}
+
+	// Generate random hours and minutes
+	randomHour := mathRand.Intn(24)
+	randomMinute := mathRand.Intn(60)
+
+	// Combine the random date and time
+	return time.Date(randomDate.Year(), randomDate.Month(), randomDate.Day(), randomHour, randomMinute, 0, 0, randomDate.Location())
+}
+
+func ValidateRenewalDays(value string) (int, int, error) {
+	var certRenewalMinDays, certRenewalMaxDays int
+	var err error
+	certRenewalDays := strings.Split(value, "-")
+	if len(certRenewalDays) > 2 {
+		return certRenewalMinDays, certRenewalMaxDays, fmt.Errorf("invalid value in 'cert_days_renewal': it should (min-days)-(max-days)' or 'days'")
+	}
+
+	if len(certRenewalDays) != 2 {
+		certRenewalMinDays, err = strconv.Atoi(certRenewalDays[0])
+		certRenewalMaxDays = certRenewalMinDays
+		if err != nil {
+			return certRenewalMinDays, certRenewalMaxDays, fmt.Errorf("invalid value in 'cert_days_renewal': %v", err)
+		}
+	} else {
+		certRenewalMinDays, err = strconv.Atoi(certRenewalDays[0])
+		if err != nil {
+			return certRenewalMinDays, certRenewalMaxDays, fmt.Errorf("invalid value in 'cert_days_renewal': %v", err)
+		}
+		certRenewalMaxDays, err = strconv.Atoi(certRenewalDays[1])
+		if err != nil {
+			return certRenewalMinDays, certRenewalMaxDays, fmt.Errorf("invalid value in 'cert_days_renewal': %v", err)
+		}
+		if certRenewalMinDays > certRenewalMaxDays {
+			return certRenewalMinDays, certRenewalMaxDays, fmt.Errorf("invalid value in 'cert_days_renewal': 'min-days' could not be higher than 'max-days'")
+		}
+		if certRenewalMaxDays < certRenewalMinDays {
+			return certRenewalMinDays, certRenewalMaxDays, fmt.Errorf("invalid value in 'cert_days_renewal': 'max-days' could not be lower than 'min-days'")
+		}
+	}
+	return certRenewalMinDays, certRenewalMaxDays, nil
 }

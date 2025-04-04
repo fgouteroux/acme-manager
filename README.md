@@ -268,7 +268,7 @@ Required parameters:
 
 Optional parameters:
 - **bundle** (bool): if true, add the issuers certificate to the new certificate
-- **renewal_days** (int): number of days before automatic certificate renewal
+- **renewal_days** (string): number of days or interval of days before automatic certificate renewal
 - **days** (int): number of days before certificate expiration
 - **san** (string, comma separated): DNS domain names to add to certificate
 - **http_challenge** (string): http challenge name to use for domain validation
@@ -305,7 +305,7 @@ curl -X 'POST' \
   "dns_challenge": "ns1",
   "domain": "testfgx01.example.com",
   "issuer": "letsencrypt",
-  "renewal_days": 30,
+  "renewal_days": "30",
   "csr": "LS0..."
 }'
 
@@ -332,7 +332,7 @@ curl -X 'PUT' \
   "dns_challenge": "ns1",
   "domain": "testfgx01.example.com",
   "issuer": "letsencrypt",
-  "renewal_days": 30,
+  "renewal_days": "30",
   "san": "testfgx02.example.com",
   "csr": "LS0..."
 }'
@@ -410,7 +410,7 @@ Optional Common parameters:
  
 Optional Certificate parameters:
 - **bundle** (bool): if true, add the issuers certificate to the new certificate
-- **renewal_days** (int): number of days before automatic certificate renewal
+- **renewal_days** (string): number of days or interval of days before automatic certificate renewal
 - **days** (int): number of days before certificate expiration
 - **san** (string, comma separated): DNS domain names to add to certificate
 - **http_challenge** (string): http challenge name to use for domain validation

@@ -21,7 +21,7 @@ type Config struct {
 // Common represents common config.
 type Common struct {
 	CertDays          int         `yaml:"cert_days"`
-	CertDaysRenewal   int         `yaml:"cert_days_renewal"`
+	CertDaysRenewal   string      `yaml:"cert_days_renewal"`
 	CertBackup        bool        `yaml:"certificate_backup"`
 	CertDeploy        bool        `yaml:"certificate_deploy"`
 	CertDir           string      `yaml:"certificate_dir"`
@@ -48,8 +48,10 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 
-	if s.Common.CertDaysRenewal == 0 {
-		s.Common.CertDaysRenewal = 30
+	if s.Common.CertDaysRenewal == "" {
+		s.Common.CertDaysRenewal = "20-30"
+	} else if _, _, err := utils.ValidateRenewalDays(s.Common.CertDaysRenewal); err != nil {
+		return err
 	}
 
 	if s.Common.CertDirPerm == 0 {
