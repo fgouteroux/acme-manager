@@ -291,7 +291,14 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		certRenewalMinDays, certRenewalMaxDays, err := utils.ValidateRenewalDays(certParams.RenewalDays)
+		var renewalDays string
+		if certParams.RenewalDays != "" {
+			renewalDays = certParams.RenewalDays
+		} else {
+			renewalDays = config.GlobalConfig.Common.CertDaysRenewal
+		}
+
+		certRenewalMinDays, certRenewalMaxDays, err := utils.ValidateRenewalDays(renewalDays)
 		if err != nil {
 			responseJSON(w, nil, fmt.Errorf("%s", err), http.StatusBadRequest)
 			return
@@ -475,7 +482,14 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		var certRenewalMinDays int
 		var certRenewalMaxDays int
-		certRenewalMinDays, certRenewalMaxDays, err = utils.ValidateRenewalDays(certParams.RenewalDays)
+		var renewalDays string
+		if certParams.RenewalDays != "" {
+			renewalDays = certParams.RenewalDays
+		} else {
+			renewalDays = config.GlobalConfig.Common.CertDaysRenewal
+		}
+
+		certRenewalMinDays, certRenewalMaxDays, err = utils.ValidateRenewalDays(renewalDays)
 		if err != nil {
 			responseJSON(w, nil, fmt.Errorf("%s", err), http.StatusBadRequest)
 			return
@@ -619,7 +633,6 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 			expiresDate, _ := time.Parse("2006-01-02 15:04:05 -0700 MST", secret["expires"].(string))
 			renewalDate = utils.RandomWeekdayBeforeExpiration(expiresDate, certRenewalMinDays, certRenewalMaxDays).String()
-			fmt.Println(renewalDate)
 
 			secret["renewal_date"] = renewalDate
 			secret["renewal_days"] = certData.RenewalDays
