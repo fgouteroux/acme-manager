@@ -17,6 +17,7 @@ import (
 	"github.com/grafana/dskit/services"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	versioncollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/common/promlog/flag"
 	"github.com/prometheus/common/version"
@@ -205,7 +206,7 @@ func main() {
 
 	config.GlobalConfig = cfg
 
-	err = prometheus.Register(version.NewCollector("acme_manager"))
+	err = prometheus.Register(versioncollector.NewCollector("acme_manager"))
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "Error registering version collector", "err", err)
 	}

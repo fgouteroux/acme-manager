@@ -24,7 +24,7 @@ build:
 	goreleaser build --snapshot --clean
 
 test:
-	go test -v -timeout 30s -coverprofile=cover.out -cover $(TEST)
+	LEGO_CA_CERTIFICATES=/home/fgouteroux/Downloads/pebble-linux-amd64/linux/amd64/test/certs/pebble.minica.pem go test -v -timeout 30s -coverprofile=cover.out -cover $(TEST)
 	go tool cover -func=cover.out
 
 release:
