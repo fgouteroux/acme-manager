@@ -135,7 +135,7 @@ func (c *Client) GetCertificateMetadata(issuer, domain string) (certstore.Certif
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
-	if issuer != "" && domain != "" {
+	if issuer == "" && domain == "" {
 		return certificate, fmt.Errorf("missing or empty 'issuer' and 'domain' query parameters")
 	}
 
