@@ -1,4 +1,3 @@
-version: "3"
 services:
   pebble:
     image: ghcr.io/letsencrypt/pebble:latest
@@ -6,3 +5,5 @@ services:
     ports:
       - 14000:14000 # HTTPS ACME API
       - 15000:15000 # HTTPS Management API
+    environment:
+      PEBBLE_VA_ALWAYS_VALID: 1

@@ -30,9 +30,13 @@ jobs:
       uses: golangci/golangci-lint-action@v6
       with:
         version: v1.60
+        args: --timeout 10m
 
     - name: Format
-      run: if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then exit 1; fi
+      run: make fmt
+
+    - name: Run tests
+      run: make test
 
     -
       name: Run GoReleaser
