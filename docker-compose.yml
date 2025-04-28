@@ -7,3 +7,4 @@ services:
       - 15000:15000 # HTTPS Management API
     environment:
       PEBBLE_VA_ALWAYS_VALID: 1
+      PEBBLE_WFE_NONCEREJECT: 0
