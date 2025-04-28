@@ -85,7 +85,6 @@ func TestGetCertificateMetadata(t *testing.T) {
 	assert.Equal(t, "domain1", certificate.Domain)
 }
 
-
 func TestReadCertificate(t *testing.T) {
 	mockClient := &MockHTTPClient{}
 	client := &Client{

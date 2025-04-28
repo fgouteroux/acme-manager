@@ -1,8 +1,8 @@
 package memcache
 
 import (
-	"testing"
 	"sync"
+	"testing"
 )
 
 func TestMemCache(t *testing.T) {

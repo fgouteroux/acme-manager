@@ -9,7 +9,6 @@ import (
 	"github.com/go-kit/log"
 )
 
-
 func TestQueue_WorkerProcessing(t *testing.T) {
 	var mu sync.Mutex
 	var calledJobs []string

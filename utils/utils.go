@@ -163,8 +163,13 @@ func GenerateCSRAndPrivateKey(privateKey, domain string, SAN []string) (string, 
 		}
 	}
 
+	opts := certcrypto.CSROptions{
+		Domain: domain,
+		SAN:    SAN,
+	}
+
 	// Create and sign the CSR using the private key
-	csrBytes, err := certcrypto.GenerateCSR(pKey, domain, SAN, false)
+	csrBytes, err := certcrypto.CreateCSR(pKey, opts)
 	if err != nil {
 		return "", nil, err
 	}
