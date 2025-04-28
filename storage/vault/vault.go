@@ -18,7 +18,7 @@ var (
 
 type Client struct {
 	APIClient *vaultApi.Client
-	config    config.Vault
+	Config    config.Vault
 }
 
 func InitClient(cfg config.Vault) (*Client, error) {
@@ -30,16 +30,16 @@ func InitClient(cfg config.Vault) (*Client, error) {
 		return client, fmt.Errorf("unable to initialize Vault client: %w", err)
 	}
 	client.APIClient = c
-	client.config = cfg
+	client.Config = cfg
 
 	return client, nil
 }
 
 func vaultAppRoleLogin(client *Client) error {
 	appRoleAuth, err := auth.NewAppRoleAuth(
-		client.config.RoleID,
-		&auth.SecretID{FromString: client.config.SecretID},
-		auth.WithMountPath(client.config.MountPath),
+		client.Config.RoleID,
+		&auth.SecretID{FromString: client.Config.SecretID},
+		auth.WithMountPath(client.Config.MountPath),
 	)
 	if err != nil {
 		return fmt.Errorf("unable to initialize AppRole auth method: %w", err)
@@ -62,7 +62,7 @@ func (client *Client) ListSecretWithAppRole(secretPath string) ([]string, error)
 		return []string{}, err
 	}
 	var secretListPath []string
-	path := client.config.SecretEngine + "/metadata/" + secretPath
+	path := client.Config.SecretEngine + "/metadata/" + secretPath
 	secrets, err := recursiveListSecret(client, path, secretListPath)
 	if err != nil {
 		return secrets, fmt.Errorf("unable to list secrets: %w", err)
@@ -79,7 +79,7 @@ func (client *Client) GetSecretWithAppRole(secretPath string) (map[string]interf
 		return data, err
 	}
 
-	secret, err := client.APIClient.KVv2(client.config.SecretEngine).Get(context.Background(), secretPath)
+	secret, err := client.APIClient.KVv2(client.Config.SecretEngine).Get(context.Background(), secretPath)
 	if err != nil {
 		metrics.IncGetFailedVaultSecret()
 		return data, err
@@ -97,7 +97,7 @@ func (client *Client) PutSecretWithAppRole(secretPath string, data map[string]in
 		return err
 	}
 
-	_, err = client.APIClient.KVv2(client.config.SecretEngine).Put(context.Background(), secretPath, data)
+	_, err = client.APIClient.KVv2(client.Config.SecretEngine).Put(context.Background(), secretPath, data)
 	if err != nil {
 		metrics.IncPutFailedVaultSecret()
 		return err
@@ -114,7 +114,7 @@ func (client *Client) DeleteSecretWithAppRole(secretPath string) error {
 		return err
 	}
 
-	err = client.APIClient.KVv2(client.config.SecretEngine).Delete(context.Background(), secretPath)
+	err = client.APIClient.KVv2(client.Config.SecretEngine).Delete(context.Background(), secretPath)
 	if err != nil {
 		metrics.IncDeleteFailedVaultSecret()
 		return err
@@ -131,7 +131,7 @@ func (client *Client) DestroySecretWithAppRole(secretPath string) error {
 		return err
 	}
 
-	metaVersions, err := client.APIClient.KVv2(client.config.SecretEngine).GetVersionsAsList(context.Background(), secretPath)
+	metaVersions, err := client.APIClient.KVv2(client.Config.SecretEngine).GetVersionsAsList(context.Background(), secretPath)
 	if err != nil {
 		metrics.IncDeleteFailedVaultSecret()
 		return err
@@ -142,13 +142,13 @@ func (client *Client) DestroySecretWithAppRole(secretPath string) error {
 		versionList = append(versionList, meta.Version)
 	}
 
-	err = client.APIClient.KVv2(client.config.SecretEngine).Destroy(context.Background(), secretPath, versionList)
+	err = client.APIClient.KVv2(client.Config.SecretEngine).Destroy(context.Background(), secretPath, versionList)
 	if err != nil {
 		metrics.IncDeleteFailedVaultSecret()
 		return err
 	}
 
-	err = client.APIClient.KVv2(client.config.SecretEngine).DeleteMetadata(context.Background(), secretPath)
+	err = client.APIClient.KVv2(client.Config.SecretEngine).DeleteMetadata(context.Background(), secretPath)
 	if err != nil {
 		metrics.IncDeleteFailedVaultSecret()
 		return err
@@ -191,7 +191,7 @@ func recursiveListSecret(client *Client, path string, secretListPath []string) (
 				}
 			} else {
 				// remove secret engine + metadata path as it is implicit in GetSecretWithAppRole
-				secretPath := strings.Split(path, client.config.SecretEngine+"/metadata")[1] + secret.(string)
+				secretPath := strings.Split(path, client.Config.SecretEngine+"/metadata")[1] + secret.(string)
 				secretListPath = append(secretListPath, secretPath)
 			}
 		}

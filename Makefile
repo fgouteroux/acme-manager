@@ -23,9 +23,23 @@ security:
 build:
 	goreleaser build --snapshot --clean
 
-test:
-	go test -v -timeout 30s -coverprofile=cover.out -cover $(TEST)
+test: compose-up
+	rm -rf api/tests
+	mkdir -p api/tests/accounts/pebble
+	mkdir -p api/tests/certificates
+	openssl ecparam -name prime256v1 -genkey -noout -out api/tests/accounts/pebble/private_key.pem
+	[ ! -f /tmp/pebble.minica.pem ] && curl -s -L -o /tmp/pebble.minica.pem https://raw.githubusercontent.com/letsencrypt/pebble/main/test/certs/pebble.minica.pem  && echo "pebble.minica.pem downloaded." || echo "pebble.minica.pem already exists."
+	[ ! -f api/tests/accounts/pebble/private_key.pem ] && openssl ecparam -name prime256v1 -genkey -noout -out api/tests/accounts/pebble/private_key.pem && echo "private_key.pem generated." || echo "private_key.pem already exists."
+
+	LEGO_CA_CERTIFICATES=/tmp/pebble.minica.pem go test -v -timeout 60s -coverprofile=cover.out -cover $(TEST)
 	go tool cover -func=cover.out
+
+compose-up: compose-down
+	docker compose -f ./docker-compose.yml up -d
+	sleep 5  # Wait for containers to initialize
+
+compose-down:
+	docker compose -f ./docker-compose.yml stop
 
 release:
 	goreleaser release --skip-publish --rm-dist

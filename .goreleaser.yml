@@ -9,7 +9,6 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
-      - windows
       - darwin
     ldflags: |
       -X github.com/prometheus/common/version.Version={{.Version}}
@@ -23,9 +22,6 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end -}}
-    format_overrides:
-      - goos: windows
-        formats: ['zip']
 
 checksum:
   name_template: 'checksums.txt'
