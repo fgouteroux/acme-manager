@@ -1,7 +1,11 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/fgouteroux/acme_manager/utils"
 
@@ -11,6 +15,7 @@ import (
 var (
 	SupportedIssuers []string
 	GlobalConfig     Config
+	SecuredPlugins   []string
 )
 
 // Config represents config.
@@ -20,12 +25,22 @@ type Config struct {
 	Storage Storage           `yaml:"storage"`
 }
 
+// Plugin represents plugin.
+type Plugin struct {
+	Name     string            `yaml:"name"`
+	Path     string            `yaml:"path"`
+	Checksum string            `yaml:"checksum"`
+	Timeout  int               `yaml:"timeout"`
+	Env      map[string]string `yaml:"env"`
+}
+
 // Common represents common config.
 type Common struct {
-	APIKeyHash          string `yaml:"api_key_hash"`
-	CertDaysRenewal     string `yaml:"cert_days_renewal"`
-	RootPathAccount     string `yaml:"rootpath_account"`
-	RootPathCertificate string `yaml:"rootpath_certificate"`
+	APIKeyHash          string   `yaml:"api_key_hash"`
+	CertDaysRenewal     string   `yaml:"cert_days_renewal"`
+	RootPathAccount     string   `yaml:"rootpath_account"`
+	RootPathCertificate string   `yaml:"rootpath_certificate"`
+	Plugins             []Plugin `yaml:"plugins"`
 }
 
 type Issuer struct {
@@ -88,6 +103,38 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			issuerConf.CertificateTimeout = 30
 		}
 	}
+
+	var checkedPlugins []string
+	for _, item := range s.Common.Plugins {
+		if item.Checksum != "" {
+			// Open the file
+			file, err := os.Open(item.Path)
+			if err != nil {
+				return fmt.Errorf("error opening plugin '%s': %v", item.Name, err)
+			}
+			defer file.Close()
+
+			// Create a new SHA-256 hash
+			hash := sha256.New()
+
+			// Copy the file contents to the hash
+			if _, err := io.Copy(hash, file); err != nil {
+				return fmt.Errorf("error reading plugin '%s': %v", item.Name, err)
+			}
+
+			// Get the checksum as a byte slice
+			checksum := hash.Sum(nil)
+
+			// Convert the checksum to a hexadecimal string
+			checksumHex := hex.EncodeToString(checksum)
+
+			if item.Checksum != checksumHex {
+				return fmt.Errorf("plugin '%s' checksum '%s' doesn't match current config checksum '%s", item.Name, checksumHex, item.Checksum)
+			}
+			checkedPlugins = append(checkedPlugins, item.Name)
+		}
+	}
+	SecuredPlugins = checkedPlugins
 
 	SupportedIssuers = maps.Keys(s.Issuer)
 
