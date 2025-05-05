@@ -25,6 +25,8 @@ import (
 
 	httpSwagger "github.com/swaggo/http-swagger"
 
+	legoLog "github.com/go-acme/lego/v4/log"
+
 	"github.com/fgouteroux/acme_manager/api"
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/client"
@@ -87,27 +89,41 @@ var (
 // @in header
 // @name X-API-Key
 func main() {
-	log := logrus.New()
-	log.SetReportCaller(true)
-	log.SetFormatter(utils.UTCFormatter{Formatter: &logrus.JSONFormatter{
-		TimestampFormat: "2006-01-02T15:04:05.000Z",
-		FieldMap: logrus.FieldMap{
-			logrus.FieldKeyTime: "ts",
-			logrus.FieldKeyFile: "caller",
-		},
-		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
-			return "", fmt.Sprintf("%s:%d", utils.FormatFilePath(f.File), f.Line)
-		},
-	}})
-
 	promlogConfig := &promlog.Config{}
 	flag.AddFlags(kingpin.CommandLine, promlogConfig)
 	kingpin.Version(version.Print("acme-manager"))
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 
-	lvl, _ := logrus.ParseLevel(promlogConfig.Level.String())
-	log.SetLevel(lvl)
+	// set custom logger
+	logrusLogger := logrus.New()
+	logrusLogger.SetReportCaller(true)
+
+	logLevel, _ := logrus.ParseLevel(promlogConfig.Level.String())
+	logrusLogger.SetLevel(logLevel)
+
+	if promlogConfig.Format.String() == "json" {
+		logrusLogger.SetFormatter(utils.UTCFormatter{Formatter: &logrus.JSONFormatter{
+			TimestampFormat: "2006-01-02T15:04:05.000Z",
+			FieldMap: logrus.FieldMap{
+				logrus.FieldKeyTime: "ts",
+				logrus.FieldKeyFile: "caller",
+			},
+			CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+				return "", fmt.Sprintf("%s:%d", utils.FormatFilePath(f.File), f.Line)
+			},
+		}})
+	} else {
+		logrusLogger.SetFormatter(&CustomTextFormatter{
+			TimestampFormat: "2006-01-02T15:04:05.000Z",
+		})
+	}
+
+	// Override lego logger
+	legoLog.Logger = logrusLogger
+
+	// pass logrus logger to certstore to add metadata fields
+	certstore.LegoLogger = logrusLogger
 
 	logger = promlog.New(promlogConfig)
 
