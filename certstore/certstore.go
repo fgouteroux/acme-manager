@@ -1,10 +1,14 @@
 package certstore
 
 import (
+	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -212,6 +216,16 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 		}
 	}
 
+	// exec plugins
+	for _, plugin := range config.GlobalConfig.Common.Plugins {
+		if (plugin.Checksum != "" && slices.Contains(config.SecuredPlugins, plugin.Name)) || plugin.Checksum == "" {
+			err = executeCommand(logger, plugin.Path, []string{certData.Domain, certData.Issuer, challengeType}, plugin.Timeout, plugin.Env)
+			if err != nil {
+				return certData, err
+			}
+		}
+	}
+
 	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(request)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
@@ -362,5 +376,45 @@ func checkPropagationExclusiveOptions(dnsPropagationDisableANS, dnsPropagationRN
 	if dnsPropagationRNS && dnsPropagationWait > 0 {
 		return fmt.Errorf("env var 'ACME_MANAGER_DNS_PROPAGATIONRNS' and 'ACME_MANAGER_DNS_PROPAGATIONWAIT' are mutually exclusive")
 	}
+	return nil
+}
+
+func executeCommand(logger log.Logger, cmdPath string, cmdArgs []string, cmdTimeout int, envVars map[string]string) error {
+	if cmdPath == "" {
+		return fmt.Errorf("cmdPath is empty")
+	}
+
+	// Set default timeout
+	if cmdTimeout == 0 {
+		cmdTimeout = 60
+	}
+
+	run := func(cmdPath string, cmdArgs []string, cmdTimeout int, envVars map[string]string) (string, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cmdTimeout)*time.Second)
+		defer cancel()
+
+		var out bytes.Buffer
+
+		cmd := exec.CommandContext(ctx, cmdPath, cmdArgs...)
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+
+		// Set environment variables
+		cmd.Env = cmd.Environ() // Inherit the current process environment
+		for key, value := range envVars {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
+		}
+
+		err := cmd.Run()
+		return out.String(), err
+	}
+
+	out, err := run(cmdPath, cmdArgs, cmdTimeout, envVars)
+	if err != nil {
+		return fmt.Errorf("Command '%s %s' failed: %s. Error: %s", cmdPath, strings.Join(cmdArgs, " "), out, err.Error())
+	}
+	_ = level.Info(logger).Log("msg", fmt.Sprintf("Command '%s %s' successfully executed", cmdPath, strings.Join(cmdArgs, " ")))
+	_ = level.Debug(logger).Log("msg", "Command output", "output", out)
+
 	return nil
 }

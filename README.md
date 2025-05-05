@@ -84,9 +84,9 @@ Flags:
       --[no-]version             Show application version.
 ```
 
-### Cluster Mode
+### High availability with clustering
 
-Acme Manager run in cluster mode with the memberlist protocol.
+Acme Manager run in cluster with the memberlist protocol.
 
 ![Memberlist](img/memberlist.png)
 
@@ -139,7 +139,13 @@ Required Common parameters:
 - **rootpath_certificate** (string): path to temporary store certificate file before storing in vault.
 
 Optional Common parameters:
-- **cert_days_renewal** (int): Number of days before certificate should be renewed (default: 30).
+- **cert_days_renewal** (int): Number of days before certificate should be renewed (default: 20-30).
+- **plugins** (array of hash):
+    - **name** (required, string): the name of the plugin
+    - **path** (required, string): the path of the plugin
+    - **checksum** (optional, string): the checksum of the plugin to prevent execution if not match
+    - **timeout** (optional, int): the timeout for the plugin execution before kill process
+    - **env** (optional, string): the environment vars for the plugin execution
 
 Optional Issuer parameters:
 - **eab** (bool): Use External Account Binding for account registration. Requires `kid` and `hmac`.
@@ -151,6 +157,10 @@ Optional Issuer parameters:
 - **overall_request_limit** (int): ACME overall requests limit
 - **certificate_timeout** (int): set the certificate timeout value in seconds when obtaining a certificate
 - **unregister** (bool): deletes the account registration from issuer. ACME does not provide a way to reactivate a deactivated account. If you want to register an account you must use a new private key.
+
+### Plugins
+
+Acme Manager supports plugins execution before creating certificates. This allow to perform some action like creating DNS CAA record, or any necessary actions before requesting certificate. A plugin could be a binary or any executable file, and require to support cmd argument in this order: domain, issuer, challenge. Example: /my-plugin-path/dns-acme-manager-plugin testfgx.example.com letsencrypt dns
 
 ### Server Mode
 

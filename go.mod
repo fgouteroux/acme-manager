@@ -1,8 +1,6 @@
 module github.com/fgouteroux/acme_manager
 
-go 1.23.6
-
-toolchain go1.23.8
+go 1.23.8
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
@@ -28,6 +26,7 @@ require (
 	github.com/swaggo/swag v1.16.4
 	golang.org/x/exp v0.0.0-20241210194714-1829a127f884
 	golang.org/x/net v0.38.0
+	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -422,7 +421,6 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/ns1/ns1-go.v2 v2.13.0 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/api v0.32.1 // indirect
 	k8s.io/apimachinery v0.32.1 // indirect
 	k8s.io/client-go v0.32.1 // indirect
