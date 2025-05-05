@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -24,6 +26,8 @@ import (
 	"github.com/sirupsen/logrus"
 
 	httpSwagger "github.com/swaggo/http-swagger"
+
+	legoLog "github.com/go-acme/lego/v4/log"
 
 	"github.com/fgouteroux/acme_manager/api"
 	"github.com/fgouteroux/acme_manager/certstore"
@@ -87,27 +91,38 @@ var (
 // @in header
 // @name X-API-Key
 func main() {
-	log := logrus.New()
-	log.SetReportCaller(true)
-	log.SetFormatter(utils.UTCFormatter{Formatter: &logrus.JSONFormatter{
-		TimestampFormat: "2006-01-02T15:04:05.000Z",
-		FieldMap: logrus.FieldMap{
-			logrus.FieldKeyTime: "ts",
-			logrus.FieldKeyFile: "caller",
-		},
-		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
-			return "", fmt.Sprintf("%s:%d", utils.FormatFilePath(f.File), f.Line)
-		},
-	}})
-
 	promlogConfig := &promlog.Config{}
 	flag.AddFlags(kingpin.CommandLine, promlogConfig)
 	kingpin.Version(version.Print("acme-manager"))
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 
-	lvl, _ := logrus.ParseLevel(promlogConfig.Level.String())
-	log.SetLevel(lvl)
+	// set custom logger
+	logrusLogger := logrus.New()
+	logrusLogger.SetReportCaller(true)
+
+	logLevel, _ := logrus.ParseLevel(promlogConfig.Level.String())
+	logrusLogger.SetLevel(logLevel)
+
+	if promlogConfig.Format.String() == "json" {
+		logrusLogger.SetFormatter(utils.UTCFormatter{Formatter: &logrus.JSONFormatter{
+			TimestampFormat: "2006-01-02T15:04:05.000Z",
+			FieldMap: logrus.FieldMap{
+				logrus.FieldKeyTime: "ts",
+				logrus.FieldKeyFile: "caller",
+			},
+			CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+				return "", fmt.Sprintf("%s:%d", utils.FormatFilePath(f.File), f.Line)
+			},
+		}})
+	} else {
+		logrusLogger.SetFormatter(&CustomTextFormatter{
+			TimestampFormat: "2006-01-02T15:04:05.000Z",
+		})
+	}
+
+	// Override lego logger
+	legoLog.Logger = logrusLogger
 
 	logger = promlog.New(promlogConfig)
 
@@ -355,4 +370,37 @@ func runHTTPServer(listenAddress, certFile, keyFile string, readTimeout, readHea
 			os.Exit(1)
 		}
 	}
+}
+
+// CustomTextFormatter is a custom logrus formatter
+type CustomTextFormatter struct {
+	TimestampFormat  string
+	CallerPrettyfier func(*runtime.Frame) (string, string)
+}
+
+// Format implements the logrus.Formatter interface
+func (f *CustomTextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	var b *bytes.Buffer
+	if entry.Buffer != nil {
+		b = entry.Buffer
+	} else {
+		b = &bytes.Buffer{}
+	}
+
+	timestamp := entry.Time.Format(f.TimestampFormat)
+	b.WriteString(fmt.Sprintf("ts=%s ", timestamp))
+
+	if entry.HasCaller() {
+		b.WriteString(fmt.Sprintf("caller=%s:%d ", utils.FormatFilePath(entry.Caller.File), entry.Caller.Line))
+	}
+
+	cleanedMsg := strings.TrimPrefix(entry.Message, fmt.Sprintf("[%s] ", strings.ToUpper(entry.Level.String())))
+	b.WriteString(fmt.Sprintf("level=%s msg=%s", entry.Level, cleanedMsg))
+
+	for key, value := range entry.Data {
+		b.WriteString(fmt.Sprintf(" %s=%v", key, value))
+	}
+
+	b.WriteByte('\n')
+	return b.Bytes(), nil
 }
