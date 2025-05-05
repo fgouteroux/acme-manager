@@ -17,6 +17,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/challenge/dns01"
@@ -36,6 +38,7 @@ var (
 	AmChallengeRingKey   = "collectors/challenge"
 	AmTokenRingKey       = "collectors/token"
 	AmStore              *CertStore
+	LegoLogger           *logrus.Logger
 )
 
 type CertStore struct {
@@ -226,6 +229,13 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 		}
 	}
 
+	// Add the custom hook to the lego logger to add fields
+	LegoLogger.AddHook(&CustomLogrusHookMetadata{
+		Domain:   certData.Domain,
+		Issuer:   certData.Issuer,
+		Username: certData.Owner,
+	})
+
 	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(request)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
@@ -300,6 +310,13 @@ func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) er
 		if issuerAcmeClient, issuerFound = AcmeClient[certData.Issuer]; !issuerFound {
 			return fmt.Errorf("Could not delete certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
 		}
+
+		// Add the custom hook to the lego logger to add fields
+		LegoLogger.AddHook(&CustomLogrusHookMetadata{
+			Domain:   certData.Domain,
+			Issuer:   certData.Issuer,
+			Username: certData.Owner,
+		})
 
 		err = issuerAcmeClient.Certificate.Revoke([]byte(certBytes.(string)))
 		if err != nil {
@@ -416,5 +433,25 @@ func executeCommand(logger log.Logger, cmdPath string, cmdArgs []string, cmdTime
 	_ = level.Info(logger).Log("msg", fmt.Sprintf("Command '%s %s' successfully executed", cmdPath, strings.Join(cmdArgs, " ")))
 	_ = level.Debug(logger).Log("msg", "Command output", "output", out)
 
+	return nil
+}
+
+// CustomLogrusHookMetadata is a logrus hook to modify the msg field
+type CustomLogrusHookMetadata struct {
+	Domain   string
+	Issuer   string
+	Username string
+}
+
+// Levels implements logrus.Hook interface
+func (h *CustomLogrusHookMetadata) Levels() []logrus.Level {
+	return logrus.AllLevels
+}
+
+// Fire implements logrus.Hook interface
+func (h *CustomLogrusHookMetadata) Fire(entry *logrus.Entry) error {
+	entry.Data["domain"] = h.Domain
+	entry.Data["issuer"] = h.Issuer
+	entry.Data["username"] = h.Username
 	return nil
 }

@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -123,6 +121,9 @@ func main() {
 
 	// Override lego logger
 	legoLog.Logger = logrusLogger
+
+	// pass logrus logger to certstore to add metadata fields
+	certstore.LegoLogger = logrusLogger
 
 	logger = promlog.New(promlogConfig)
 
@@ -370,37 +371,4 @@ func runHTTPServer(listenAddress, certFile, keyFile string, readTimeout, readHea
 			os.Exit(1)
 		}
 	}
-}
-
-// CustomTextFormatter is a custom logrus formatter
-type CustomTextFormatter struct {
-	TimestampFormat  string
-	CallerPrettyfier func(*runtime.Frame) (string, string)
-}
-
-// Format implements the logrus.Formatter interface
-func (f *CustomTextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
-	var b *bytes.Buffer
-	if entry.Buffer != nil {
-		b = entry.Buffer
-	} else {
-		b = &bytes.Buffer{}
-	}
-
-	timestamp := entry.Time.Format(f.TimestampFormat)
-	b.WriteString(fmt.Sprintf("ts=%s ", timestamp))
-
-	if entry.HasCaller() {
-		b.WriteString(fmt.Sprintf("caller=%s:%d ", utils.FormatFilePath(entry.Caller.File), entry.Caller.Line))
-	}
-
-	cleanedMsg := strings.TrimPrefix(entry.Message, fmt.Sprintf("[%s] ", strings.ToUpper(entry.Level.String())))
-	b.WriteString(fmt.Sprintf("level=%s msg=%s", entry.Level, cleanedMsg))
-
-	for key, value := range entry.Data {
-		b.WriteString(fmt.Sprintf(" %s=%v", key, value))
-	}
-
-	b.WriteByte('\n')
-	return b.Bytes(), nil
 }
