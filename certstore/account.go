@@ -11,6 +11,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
+	"github.com/sirupsen/logrus"
+
 	"encoding/json"
 
 	"github.com/go-acme/lego/v4/certcrypto"
@@ -87,7 +89,12 @@ func tryRecoverRegistration(privateKey crypto.PrivateKey, email, caDirURL, userA
 }
 
 func Setup(logger log.Logger, cfg config.Config, version string) error {
+	defer LegoLogger.ReplaceHooks(make(logrus.LevelHooks))
 	for issuer, issuerConf := range cfg.Issuer {
+
+		// Add the custom hook to the lego logger to add fields
+		LegoLogger.AddHook(&CustomLogrusHookIssuerAccount{Issuer: issuer})
+
 		accountFilePath := fmt.Sprintf("%s/%s/account.json", cfg.Common.RootPathAccount, issuer)
 		accountBytes, err := os.ReadFile(filepath.Clean(accountFilePath))
 		if err != nil {
@@ -291,4 +298,20 @@ func NewHTTPChallengeProviderByName(name, config string, logger log.Logger) (cha
 	default:
 		return nil, fmt.Errorf("unrecognized HTTP provider: %s", name)
 	}
+}
+
+// CustomLogrusHookIssuerAccount is a logrus hook to modify the msg field
+type CustomLogrusHookIssuerAccount struct {
+	Issuer string
+}
+
+// Levels implements logrus.Hook interface
+func (h *CustomLogrusHookIssuerAccount) Levels() []logrus.Level {
+	return logrus.AllLevels
+}
+
+// Fire implements logrus.Hook interface
+func (h *CustomLogrusHookIssuerAccount) Fire(entry *logrus.Entry) error {
+	entry.Data["issuer"] = h.Issuer
+	return nil
 }

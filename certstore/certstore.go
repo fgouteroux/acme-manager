@@ -237,6 +237,9 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 	})
 
 	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(request)
+	// Remove the custom hook
+	LegoLogger.ReplaceHooks(make(logrus.LevelHooks))
+
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		metrics.SetCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
@@ -319,6 +322,9 @@ func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) er
 		})
 
 		err = issuerAcmeClient.Certificate.Revoke([]byte(certBytes.(string)))
+		// Remove the custom hook
+		LegoLogger.ReplaceHooks(make(logrus.LevelHooks))
+
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			metrics.SetRevokedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
