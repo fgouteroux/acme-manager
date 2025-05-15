@@ -389,8 +389,10 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 
 	var newCertList []certstore.Certificate
 	var hasChange bool
+	var patterns []string
 
 	for _, certData := range GlobalConfig.Certificate {
+		patterns = append(patterns, certData.Issuer+"/"+certData.Domain)
 
 		err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
 		if err != nil {
@@ -607,6 +609,11 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 			_ = level.Error(logger).Log("err", err)
 		}
 	}
+	// delete files that don't match patterns
+	_, err = listAndDeleteFiles(logger, patterns)
+	if err != nil {
+		_ = level.Error(logger).Log("err", err)
+	}
 }
 
 func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string, acmeClient *restclient.Client) {
@@ -721,6 +728,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 		}
 	}
 
+	// delete files that don't match patterns
 	hasDelete, err := listAndDeleteFiles(logger, patterns)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
@@ -837,7 +845,7 @@ func listAndDeleteFiles(logger log.Logger, patterns []string) (bool, error) {
 			}
 
 			if !slices.Contains(patterns, pattern) {
-				// Delete the file if it matches the pattern
+				// Delete the file if it don't match the pattern
 				if err := os.Remove(path); err != nil {
 					_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to delete file '%s'", path), "err", err)
 				}
