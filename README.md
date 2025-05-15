@@ -79,6 +79,10 @@ Flags:
                                  Client config path
       --client.check-config-interval=5m  
                                  Time interval to check if client config file changes and to update local certificate file
+      --[no-]cleanup             Enables cleanup in vault and CA Issuers.
+      --cleanup.interval=1h      Time interval to scan vault secret certificates and cleanup if needed
+      --cleanup.cert-expire-days=10
+                                 Number of days before old certificate expires to revoke and delete vault secret version
       --log.level=info           Only log messages with the given severity or above. One of: [debug, info, warn, error]
       --log.format=logfmt        Output format of log messages. One of: [logfmt, json]
       --[no-]version             Show application version.
