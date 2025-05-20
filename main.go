@@ -126,9 +126,6 @@ func main() {
 	// Override lego logger
 	legoLog.Logger = logrusLogger
 
-	// pass logrus logger to certstore to add metadata fields
-	certstore.LegoLogger = logrusLogger
-
 	logger = promlog.New(promlogConfig)
 
 	if *clientMode {
