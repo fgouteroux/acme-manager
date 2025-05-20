@@ -116,7 +116,7 @@ func (c *Client) GetAllCertificateMetadata() ([]certstore.Certificate, error) {
 
 	resp, err := c.doRequest(ctx, "GET", "/certificate/metadata", headers, nil)
 	if err != nil {
-		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
+		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -124,7 +124,7 @@ func (c *Client) GetAllCertificateMetadata() ([]certstore.Certificate, error) {
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
+		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
 
 	return certificate, nil
@@ -148,7 +148,7 @@ func (c *Client) GetCertificateMetadata(issuer, domain string) (certstore.Certif
 
 	resp, err := c.doRequest(ctx, "GET", path, headers, nil)
 	if err != nil {
-		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
+		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -156,7 +156,7 @@ func (c *Client) GetCertificateMetadata(issuer, domain string) (certstore.Certif
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
+		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
 
 	return certificate, nil
@@ -179,7 +179,7 @@ func (c *Client) ReadCertificate(data certstore.Certificate) (certstore.CertMap,
 
 	resp, err := c.doRequest(ctx, "GET", fmt.Sprintf("/certificate/%s/%s", data.Issuer, data.Domain), headers, bytes.NewReader(reqBody))
 	if err != nil {
-		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
+		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -191,7 +191,7 @@ func (c *Client) ReadCertificate(data certstore.Certificate) (certstore.CertMap,
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
+		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
 
 	return certificate, nil
@@ -214,7 +214,7 @@ func (c *Client) CreateCertificate(data api.CertificateParams) (certstore.CertMa
 
 	resp, err := c.doRequest(ctx, "POST", "/certificate", headers, bytes.NewReader(reqBody))
 	if err != nil {
-		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
+		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
 
 	if resp.StatusCode != http.StatusCreated {
@@ -226,7 +226,7 @@ func (c *Client) CreateCertificate(data api.CertificateParams) (certstore.CertMa
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
+		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
 
 	return certificate, nil
@@ -249,7 +249,7 @@ func (c *Client) UpdateCertificate(data api.CertificateParams) (certstore.CertMa
 
 	resp, err := c.doRequest(ctx, "PUT", "/certificate", headers, bytes.NewReader(reqBody))
 	if err != nil {
-		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
+		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -261,7 +261,7 @@ func (c *Client) UpdateCertificate(data api.CertificateParams) (certstore.CertMa
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return certificate, fmt.Errorf("%s - %v", baseErrMsg, err)
+		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
 
 	return certificate, nil
