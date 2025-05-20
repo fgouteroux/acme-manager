@@ -13,7 +13,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/sirupsen/logrus"
 
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/config"
@@ -56,7 +55,6 @@ func TestMain(m *testing.M) {
 
 	amRing := testhelper.GetTestRing(logger)
 
-	certstore.LegoLogger = logrus.New()
 	certstore.AmStore = &certstore.CertStore{
 		RingConfig: amRing,
 		Logger:     logger,

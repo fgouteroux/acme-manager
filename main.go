@@ -165,6 +165,7 @@ func main() {
 			*clientManagerTLSKeyFile,
 			*clientManagerTLSCAFile,
 			*clientManagerTLSSkipVerify,
+			logrusLogger,
 		)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)

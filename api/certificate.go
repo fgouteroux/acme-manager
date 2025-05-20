@@ -136,7 +136,7 @@ func CertificateMetadataHandler(logger log.Logger) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Username", tokenValue.Username)
+		w.Header().Set("user", tokenValue.Username)
 
 		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, false)
 		if err != nil {
@@ -196,7 +196,7 @@ func GetCertificateHandler(logger log.Logger) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Username", tokenValue.Username)
+		w.Header().Set("user", tokenValue.Username)
 
 		certData := &certstore.Certificate{
 			Domain: r.PathValue("domain"),
@@ -271,7 +271,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		w.Header().Set("Username", tokenValue.Username)
+		w.Header().Set("user", tokenValue.Username)
 
 		// validate the request body
 		var certParams CertificateParams
@@ -463,7 +463,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		w.Header().Set("Username", tokenValue.Username)
+		w.Header().Set("user", tokenValue.Username)
 
 		// validate the request body
 		var certParams CertificateParams
@@ -730,7 +730,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			revoke = true
 		}
 
-		w.Header().Set("Username", tokenValue.Username)
+		w.Header().Set("user", tokenValue.Username)
 
 		certData := certstore.Certificate{
 			Domain: r.PathValue("domain"),

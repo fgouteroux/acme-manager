@@ -14,10 +14,32 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
+	"github.com/sirupsen/logrus"
 
 	"github.com/fgouteroux/acme_manager/api"
 	"github.com/fgouteroux/acme_manager/certstore"
 )
+
+// LogrusAdapter implements the retryablehttp.Logger interface using logrus
+type LogrusAdapter struct {
+	Logger *logrus.Logger
+}
+
+func (l *LogrusAdapter) Printf(format string, args ...interface{}) {
+	l.Logger.Printf(format, args...)
+}
+
+func (l *LogrusAdapter) Errorf(format string, args ...interface{}) {
+	l.Logger.Errorf(format, args...)
+}
+
+func (l *LogrusAdapter) Debugf(format string, args ...interface{}) {
+	l.Logger.Debugf(format, args...)
+}
+
+func (l *LogrusAdapter) Warnf(format string, args ...interface{}) {
+	l.Logger.Warnf(format, args...)
+}
 
 type Client struct {
 	BaseURL    string
@@ -60,10 +82,32 @@ func setTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Confi
 	return tlsConfig, nil
 }
 
-func NewClient(baseURL, token, certFile, keyFile, caFile string, insecure bool) (*Client, error) {
+// ResponseLogHook logs the response status code and body
+func ResponseLogHook() retryablehttp.ResponseLogHook {
+	return func(logger retryablehttp.Logger, resp *http.Response) {
+		if resp.StatusCode >= 400 {
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				logger.Printf("Failed to read response body: %v", err)
+				return
+			}
+			logger.Printf("Request failed with status code %d: %s", resp.StatusCode, string(body))
+		}
+	}
+}
+
+func NewClient(baseURL, token, certFile, keyFile, caFile string, insecure bool, logger *logrus.Logger) (*Client, error) {
 	var client Client
 	retryClient := retryablehttp.NewClient()
-	retryClient.Logger = nil
+
+	// Set the custom logger
+	if logger != nil {
+		retryClient.Logger = &LogrusAdapter{Logger: logger}
+		// Set the response log hook
+		retryClient.ResponseLogHook = ResponseLogHook()
+	} else {
+		retryClient.Logger = nil
+	}
 
 	tlsConfig, err := setTLSConfig(certFile, keyFile, caFile, insecure)
 	if err != nil {
@@ -120,7 +164,7 @@ func (c *Client) GetAllCertificateMetadata() ([]certstore.Certificate, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return certificate, fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
+		return certificate, fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
@@ -152,7 +196,7 @@ func (c *Client) GetCertificateMetadata(issuer, domain string) (certstore.Certif
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return certificate, fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
+		return certificate, fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
@@ -185,7 +229,7 @@ func (c *Client) ReadCertificate(data certstore.Certificate) (certstore.CertMap,
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return certificate, fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
+			return certificate, fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
 		}
 		return certificate, fmt.Errorf("%s: %s - %s", baseErrMsg, resp.Status, string(respBody))
 	}
@@ -220,7 +264,7 @@ func (c *Client) CreateCertificate(data api.CertificateParams) (certstore.CertMa
 	if resp.StatusCode != http.StatusCreated {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return certificate, fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
+			return certificate, fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
 		}
 		return certificate, fmt.Errorf("%s: %s - %s", baseErrMsg, resp.Status, string(respBody))
 	}
@@ -255,7 +299,7 @@ func (c *Client) UpdateCertificate(data api.CertificateParams) (certstore.CertMa
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return certificate, fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
+			return certificate, fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
 		}
 		return certificate, fmt.Errorf("%s: %s - %s", baseErrMsg, resp.Status, string(respBody))
 	}
@@ -278,13 +322,13 @@ func (c *Client) DeleteCertificate(issuer, domain string, revoke bool) error {
 
 	resp, err := c.doRequest(ctx, "DELETE", fmt.Sprintf("/certificate/%s/%s?revoke=%v", issuer, domain, revoke), headers, nil)
 	if err != nil {
-		return fmt.Errorf("%s - %v", baseErrMsg, err)
+		return fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
 
 	if resp.StatusCode != http.StatusNoContent {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
+			return fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
 		}
 		return fmt.Errorf("%s: %s - %s", baseErrMsg, resp.Status, string(respBody))
 	}
@@ -308,7 +352,7 @@ func (c *Client) GetSelfToken() (certstore.Token, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return token, fmt.Errorf("%s: %s - %v", baseErrMsg, resp.Status, err)
+		return token, fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
 	}
 
 	if err := c.decodeJSON(resp, &token); err != nil {

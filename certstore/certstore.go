@@ -310,7 +310,6 @@ func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) er
 
 		metrics.SetRevokedCertificate(certData.Issuer, certData.Owner, certData.Domain, 1)
 
-		_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate domain %s for %s issuer revoked", certData.Domain, certData.Issuer))
 		err = vault.GlobalClient.DeleteSecretWithAppRole(vaultSecretPath)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)

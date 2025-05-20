@@ -2,16 +2,15 @@ package certstore
 
 import (
 	"crypto"
+	"encoding/json"
 	"fmt"
 	"os"
-	"encoding/json"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/challenge"
