@@ -172,7 +172,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		token, err := acmeClient.GetSelfToken()
+		token, err := acmeClient.GetSelfToken(30)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			os.Exit(1)

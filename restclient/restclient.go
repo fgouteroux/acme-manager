@@ -148,12 +148,12 @@ func (c *Client) decodeJSON(resp *http.Response, v interface{}) error {
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
-func (c *Client) GetAllCertificateMetadata() ([]certstore.Certificate, error) {
+func (c *Client) GetAllCertificateMetadata(timeout int) ([]certstore.Certificate, error) {
 	var certificate []certstore.Certificate
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
 	baseErrMsg := "error getting all certificate metadata"
@@ -174,7 +174,7 @@ func (c *Client) GetAllCertificateMetadata() ([]certstore.Certificate, error) {
 	return certificate, nil
 }
 
-func (c *Client) GetCertificateMetadata(issuer, domain string) (certstore.Certificate, error) {
+func (c *Client) GetCertificateMetadata(issuer, domain string, timeout int) (certstore.Certificate, error) {
 	var certificate certstore.Certificate
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
@@ -185,7 +185,7 @@ func (c *Client) GetCertificateMetadata(issuer, domain string) (certstore.Certif
 
 	path := fmt.Sprintf("/certificate/metadata?issuer=%s&domain=%s", issuer, domain)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
 	baseErrMsg := "error getting certificate metadata"
@@ -206,7 +206,7 @@ func (c *Client) GetCertificateMetadata(issuer, domain string) (certstore.Certif
 	return certificate, nil
 }
 
-func (c *Client) ReadCertificate(data certstore.Certificate) (certstore.CertMap, error) {
+func (c *Client) ReadCertificate(data certstore.Certificate, timeout int) (certstore.CertMap, error) {
 	var certificate certstore.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
@@ -216,7 +216,7 @@ func (c *Client) ReadCertificate(data certstore.Certificate) (certstore.CertMap,
 		return certificate, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
 	baseErrMsg := fmt.Sprintf("error reading certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
@@ -241,7 +241,7 @@ func (c *Client) ReadCertificate(data certstore.Certificate) (certstore.CertMap,
 	return certificate, nil
 }
 
-func (c *Client) CreateCertificate(data api.CertificateParams) (certstore.CertMap, error) {
+func (c *Client) CreateCertificate(data api.CertificateParams, timeout int) (certstore.CertMap, error) {
 	var certificate certstore.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
@@ -251,7 +251,7 @@ func (c *Client) CreateCertificate(data api.CertificateParams) (certstore.CertMa
 		return certificate, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
 	baseErrMsg := fmt.Sprintf("error creating certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
@@ -276,7 +276,7 @@ func (c *Client) CreateCertificate(data api.CertificateParams) (certstore.CertMa
 	return certificate, nil
 }
 
-func (c *Client) UpdateCertificate(data api.CertificateParams) (certstore.CertMap, error) {
+func (c *Client) UpdateCertificate(data api.CertificateParams, timeout int) (certstore.CertMap, error) {
 	var certificate certstore.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
@@ -286,7 +286,7 @@ func (c *Client) UpdateCertificate(data api.CertificateParams) (certstore.CertMa
 		return certificate, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
 	baseErrMsg := fmt.Sprintf("error updating certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
@@ -311,11 +311,11 @@ func (c *Client) UpdateCertificate(data api.CertificateParams) (certstore.CertMa
 	return certificate, nil
 }
 
-func (c *Client) DeleteCertificate(issuer, domain string, revoke bool) error {
+func (c *Client) DeleteCertificate(issuer, domain string, revoke bool, timeout int) error {
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
 	baseErrMsg := fmt.Sprintf("error deleting certificate with issuer '%s' and domain '%s':", issuer, domain)
@@ -336,12 +336,12 @@ func (c *Client) DeleteCertificate(issuer, domain string, revoke bool) error {
 	return nil
 }
 
-func (c *Client) GetSelfToken() (certstore.Token, error) {
+func (c *Client) GetSelfToken(timeout int) (certstore.Token, error) {
 	var token certstore.Token
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
 	baseErrMsg := "error getting self token"

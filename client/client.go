@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -31,6 +32,7 @@ var (
 	Owner        string
 	GlobalConfig Config
 	certificates []certstore.Certificate
+	certLockMap  sync.Map
 
 	localCache = memcache.NewLocalCache()
 )
@@ -94,6 +96,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 
 	var hasErrors, hasChange bool
 	for _, certData := range diff.Create {
+		_ = level.Info(logger).Log("msg", "creating certificate", "domain", certData.Domain, "issuer", certData.Issuer)
 		keyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
 
 		var privateKeyPath string
@@ -130,7 +133,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			continue
 		}
 
-		newCert, err := acmeClient.CreateCertificate(certParams)
+		newCert, err := acmeClient.CreateCertificate(certParams, GlobalConfig.Common.CertTimeout)
 		if err != nil {
 			hasErrors = true
 			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
@@ -175,6 +178,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 	}
 
 	for _, certData := range diff.Update {
+		_ = level.Info(logger).Log("msg", "updating certificate", "domain", certData.Domain, "issuer", certData.Issuer)
 		var privateKey []byte
 		keyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
 
@@ -206,7 +210,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			certParams.Revoke = true
 		}
 
-		newCert, err := acmeClient.UpdateCertificate(certParams)
+		newCert, err := acmeClient.UpdateCertificate(certParams, GlobalConfig.Common.CertTimeout)
 		if err != nil {
 			hasErrors = true
 			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
@@ -251,6 +255,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 	}
 
 	for _, certData := range diff.Delete {
+		_ = level.Info(logger).Log("msg", "deleting certificate", "domain", certData.Domain, "issuer", certData.Issuer)
 		var cacheKey string
 		if GlobalConfig.Common.DelayBeforeDelete != "" {
 			duration, _ := time.ParseDuration(GlobalConfig.Common.DelayBeforeDelete)
@@ -276,7 +281,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			revoke = true
 		}
 
-		err := acmeClient.DeleteCertificate(certData.Issuer, certData.Domain, revoke)
+		err := acmeClient.DeleteCertificate(certData.Issuer, certData.Domain, revoke, 60)
 		if err != nil {
 			hasErrors = true
 			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
@@ -381,7 +386,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 
 	_ = level.Info(logger).Log("msg", "check certificates from config file and compare with remote server")
 
-	old, err := acmeClient.GetAllCertificateMetadata()
+	old, err := acmeClient.GetAllCertificateMetadata(60)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return
@@ -423,7 +428,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 
 			if !certFileExists {
 				_ = level.Info(logger).Log("msg", fmt.Sprintf("local certificate file '%s' doesn't exists", certFilePath))
-				certificate, err := acmeClient.ReadCertificate(certData)
+				certificate, err := acmeClient.ReadCertificate(certData, 30)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
 					continue
@@ -449,7 +454,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 
 				if utils.GenerateFingerprint(currentCertBytes) != old[idx].Fingerprint {
 
-					certificate, err = acmeClient.ReadCertificate(certData)
+					certificate, err = acmeClient.ReadCertificate(certData, 30)
 					if err != nil {
 						_ = level.Error(logger).Log("err", err)
 						continue
@@ -635,7 +640,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 
 	_ = level.Info(logger).Log("msg", "pull and check certificates from remote server")
 
-	allCert, err := acmeClient.GetAllCertificateMetadata()
+	allCert, err := acmeClient.GetAllCertificateMetadata(60)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return
@@ -658,7 +663,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 
 		if !certFileExists {
 			_ = level.Error(logger).Log("msg", fmt.Sprintf("local certificate file '%s' doesn't exists", certFilePath))
-			certificate, err := acmeClient.ReadCertificate(certData)
+			certificate, err := acmeClient.ReadCertificate(certData, 30)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 				continue
@@ -684,7 +689,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 
 			if utils.GenerateFingerprint(currentCertBytes) != certData.Fingerprint {
 
-				certificate, err = acmeClient.ReadCertificate(certData)
+				certificate, err = acmeClient.ReadCertificate(certData, 30)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
 					continue
