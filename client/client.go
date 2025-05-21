@@ -778,8 +778,10 @@ func executeCommand(logger log.Logger, cfg Common, preCmd bool) error {
 
 			cmd := exec.CommandContext(ctx, cmdPath, cmdArgs...)
 			cmd.Stdout = &out
+			cmd.Stderr = &out
 
-			return out.String(), cmd.Run()
+			err := cmd.Run()
+			return out.String(), err
 		}
 
 		out, err := run(cmdPath, cmdArgs, cmdTimeout)
@@ -788,6 +790,7 @@ func executeCommand(logger log.Logger, cfg Common, preCmd bool) error {
 			return fmt.Errorf("command '%s %s' failed: %s. Error: %s", cmdPath, strings.Join(cmdArgs, " "), out, err.Error())
 		}
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("command '%s %s' successfully executed", cmdPath, strings.Join(cmdArgs, " ")))
+		_ = level.Debug(logger).Log("msg", "Command output", "output", out)
 		metrics.IncRunSuccessLocalCmd()
 	}
 	return nil
