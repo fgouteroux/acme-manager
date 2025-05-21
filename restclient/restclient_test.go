@@ -53,7 +53,7 @@ func TestGetAllCertificateMetadata(t *testing.T) {
 
 	mockClient.On("Do", mock.Anything).Return(response, nil)
 
-	certificates, err := client.GetAllCertificateMetadata()
+	certificates, err := client.GetAllCertificateMetadata(30)
 	assert.NoError(t, err)
 	assert.Len(t, certificates, 1)
 	assert.Equal(t, "issuer1", certificates[0].Issuer)
@@ -79,7 +79,7 @@ func TestGetCertificateMetadata(t *testing.T) {
 
 	mockClient.On("Do", mock.Anything).Return(response, nil)
 
-	certificate, err := client.GetCertificateMetadata("issuer1", "domain1")
+	certificate, err := client.GetCertificateMetadata("issuer1", "domain1", 30)
 	assert.NoError(t, err)
 	assert.Equal(t, "issuer1", certificate.Issuer)
 	assert.Equal(t, "domain1", certificate.Domain)
@@ -105,7 +105,7 @@ func TestReadCertificate(t *testing.T) {
 	mockClient.On("Do", mock.Anything).Return(response, nil)
 
 	certData := certstore.Certificate{Issuer: "issuer1", Domain: "domain1"}
-	certificate, err := client.ReadCertificate(certData)
+	certificate, err := client.ReadCertificate(certData, 30)
 	assert.NoError(t, err)
 	assert.Equal(t, "cert-value", certificate.Cert)
 	assert.Equal(t, "ca-issuer-value", certificate.CAIssuer)
@@ -131,7 +131,7 @@ func TestCreateCertificate(t *testing.T) {
 	mockClient.On("Do", mock.Anything).Return(response, nil)
 
 	certData := api.CertificateParams{Issuer: "issuer1", Domain: "domain1"}
-	certificate, err := client.CreateCertificate(certData)
+	certificate, err := client.CreateCertificate(certData, 30)
 	assert.NoError(t, err)
 	assert.Equal(t, "cert-value", certificate.Cert)
 	assert.Equal(t, "ca-issuer-value", certificate.CAIssuer)
@@ -157,7 +157,7 @@ func TestUpdateCertificate(t *testing.T) {
 	mockClient.On("Do", mock.Anything).Return(response, nil)
 
 	certData := api.CertificateParams{Issuer: "issuer1", Domain: "domain1"}
-	certificate, err := client.UpdateCertificate(certData)
+	certificate, err := client.UpdateCertificate(certData, 30)
 	assert.NoError(t, err)
 	assert.Equal(t, "cert-value", certificate.Cert)
 	assert.Equal(t, "ca-issuer-value", certificate.CAIssuer)
@@ -182,7 +182,7 @@ func TestDeleteCertificate(t *testing.T) {
 
 	mockClient.On("Do", mock.Anything).Return(response, nil)
 
-	err := client.DeleteCertificate("issuer1", "domain1", false)
+	err := client.DeleteCertificate("issuer1", "domain1", false, 30)
 	assert.NoError(t, err)
 }
 

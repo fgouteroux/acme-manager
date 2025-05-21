@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -32,7 +31,6 @@ var (
 	Owner        string
 	GlobalConfig Config
 	certificates []certstore.Certificate
-	certLockMap  sync.Map
 
 	localCache = memcache.NewLocalCache()
 )
