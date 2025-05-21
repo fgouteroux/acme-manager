@@ -136,7 +136,7 @@ func CertificateMetadataHandler(logger log.Logger) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Username", tokenValue.Username)
+		w.Header().Set("user", tokenValue.Username)
 
 		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, false)
 		if err != nil {
@@ -196,7 +196,7 @@ func GetCertificateHandler(logger log.Logger) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Username", tokenValue.Username)
+		w.Header().Set("user", tokenValue.Username)
 
 		certData := &certstore.Certificate{
 			Domain: r.PathValue("domain"),
@@ -271,7 +271,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		w.Header().Set("Username", tokenValue.Username)
+		w.Header().Set("user", tokenValue.Username)
 
 		// validate the request body
 		var certParams CertificateParams
@@ -377,6 +377,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
+			_ = level.Info(logger).Log("msg", "another create operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 			responseJSON(w, nil, fmt.Errorf("Another operation is in progress"), http.StatusTooManyRequests)
 			return
 		}
@@ -390,6 +391,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
+		_ = level.Info(logger).Log("msg", "creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 		newCert, err := certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -401,6 +403,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			responseJSON(w, nil, err, statusCode)
 			return
 		}
+		_ = level.Info(logger).Log("msg", "created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 		metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 
 		action := func() error {
@@ -460,7 +463,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		w.Header().Set("Username", tokenValue.Username)
+		w.Header().Set("user", tokenValue.Username)
 
 		// validate the request body
 		var certParams CertificateParams
@@ -570,6 +573,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
+			_ = level.Info(logger).Log("msg", "another update operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 			responseJSON(w, nil, fmt.Errorf("Another operation is in progress"), http.StatusTooManyRequests)
 			return
 		}
@@ -609,21 +613,26 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		var renewalDate string
 		if recreateCert {
 			if certParams.Revoke {
+				_ = level.Info(logger).Log("msg", "revoking certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 				err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
 					responseJSON(w, nil, err, http.StatusInternalServerError)
 					return
 				}
+				_ = level.Info(logger).Log("msg", "revoked certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 			}
 
+			_ = level.Info(logger).Log("msg", "re-creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 			newCert, err = certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
+			_ = level.Info(logger).Log("msg", "re-created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 		} else {
+			_ = level.Info(logger).Log("msg", "updating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 			secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -643,6 +652,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
+			_ = level.Info(logger).Log("msg", "updated certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 		}
 
 		action := func() error {
@@ -720,7 +730,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			revoke = true
 		}
 
-		w.Header().Set("Username", tokenValue.Username)
+		w.Header().Set("user", tokenValue.Username)
 
 		certData := certstore.Certificate{
 			Domain: r.PathValue("domain"),
@@ -770,6 +780,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
+			_ = level.Info(logger).Log("msg", "another delete operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 			responseJSON(w, nil, fmt.Errorf("Another operation is in progress"), http.StatusTooManyRequests)
 			return
 		}
@@ -784,13 +795,16 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		if revoke {
+			_ = level.Info(logger).Log("msg", "revoking certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 			err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
+			_ = level.Info(logger).Log("msg", "revoked certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 		} else {
+			_ = level.Info(logger).Log("msg", "deleting certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 			secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 			err = vault.GlobalClient.DeleteSecretWithAppRole(secretKeyPath)
 			if err != nil {
@@ -798,6 +812,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
+			_ = level.Info(logger).Log("msg", "deleted certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 		}
 		metrics.DecManagedCertificate(certData.Issuer, certData.Owner)
 

@@ -126,9 +126,6 @@ func main() {
 	// Override lego logger
 	legoLog.Logger = logrusLogger
 
-	// pass logrus logger to certstore to add metadata fields
-	certstore.LegoLogger = logrusLogger
-
 	logger = promlog.New(promlogConfig)
 
 	if *clientMode {
@@ -168,13 +165,14 @@ func main() {
 			*clientManagerTLSKeyFile,
 			*clientManagerTLSCAFile,
 			*clientManagerTLSSkipVerify,
+			logrusLogger,
 		)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			os.Exit(1)
 		}
 
-		token, err := acmeClient.GetSelfToken()
+		token, err := acmeClient.GetSelfToken(30)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			os.Exit(1)

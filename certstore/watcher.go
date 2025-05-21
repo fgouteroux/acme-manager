@@ -10,8 +10,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/go-acme/lego/v4/certcrypto"
 
 	"github.com/fgouteroux/acme_manager/config"
@@ -162,12 +160,7 @@ func WatchIssuerHealth(logger log.Logger, interval time.Duration, version string
 			}
 
 			userAgent := fmt.Sprintf("acme-manager/%s", version)
-
-			// Add the custom hook to the lego logger to add fields
-			LegoLogger.AddHook(&CustomLogrusHookIssuerAccount{Issuer: issuer})
 			_, _, err = tryRecoverRegistration(privateKeyPEM, issuerConf.Contact, issuerConf.CADirURL, userAgent)
-			// Remove the custom hook
-			LegoLogger.ReplaceHooks(make(logrus.LevelHooks))
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Errorf("Unable to recover registration account for private key '%s'", privateKeyPath), "err", err)
 			}

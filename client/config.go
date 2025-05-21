@@ -31,6 +31,7 @@ type Common struct {
 	CertFileExt       string      `yaml:"certificate_file_ext"`
 	CertKeyFileExt    string      `yaml:"certificate_keyfile_ext"`
 	CertKeyFileNoGen  bool        `yaml:"certificate_keyfile_no_generate"`
+	CertTimeout       int         `yaml:"certificate_timeout"`
 	CmdEnabled        bool        `yaml:"cmd_enabled"`
 	PreCmdRun         string      `yaml:"pre_cmd_run"`
 	PreCmdTimeout     int         `yaml:"pre_cmd_timeout"`
@@ -64,6 +65,10 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	if s.Common.CertKeyFilePerm == 0 {
 		s.Common.CertKeyFilePerm = 0600
+	}
+
+	if s.Common.CertTimeout == 0 {
+		s.Common.CertTimeout = 180
 	}
 
 	if s.Common.CertFileExt == "" {
