@@ -94,14 +94,14 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 
 	var hasErrors, hasChange bool
 	for _, certData := range diff.Create {
-		_ = level.Info(logger).Log("msg", "creating certificate", "domain", certData.Domain, "issuer", certData.Issuer)
+		_ = level.Info(logger).Log("msg", "creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 		keyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
 
 		var privateKeyPath string
 		if GlobalConfig.Common.CertKeyFileNoGen {
 			if !utils.FileExists(keyFilePath) {
 				hasErrors = true
-				_ = level.Error(logger).Log("err", fmt.Errorf("local private key file '%s' doesn't exists", keyFilePath), "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Error(logger).Log("err", fmt.Errorf("local private key file '%s' doesn't exists", keyFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				continue
 			}
 			privateKeyPath = keyFilePath
@@ -117,7 +117,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		certData.CSR, privateKey, err = utils.GenerateCSRAndPrivateKey(privateKeyPath, certData.Domain, san)
 		if err != nil {
 			hasErrors = true
-			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			continue
 		}
 
@@ -127,56 +127,56 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		err = json.Unmarshal(certDataBytes, &certParams)
 		if err != nil {
 			hasErrors = true
-			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			continue
 		}
 
 		newCert, err := acmeClient.CreateCertificate(certParams, GlobalConfig.Common.CertTimeout)
 		if err != nil {
 			hasErrors = true
-			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			continue
 		}
-		_ = level.Info(logger).Log("msg", "created certificate", "domain", certData.Domain, "issuer", certData.Issuer)
+		_ = level.Info(logger).Log("msg", "created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 
 		if GlobalConfig.Common.CertBackup {
 			data := CertBackup{Cert: newCert.Cert, Key: string(privateKey)}
 			vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", GlobalConfig.Storage.Vault.CertPrefix, newCert.Owner, newCert.Issuer, newCert.Domain)
 			err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
 			if err != nil {
-				_ = level.Error(logger).Log("msg", "failed to backup certificate", "err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Error(logger).Log("msg", "failed to backup certificate", "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			}
-			_ = level.Info(logger).Log("msg", "certificate and private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Info(logger).Log("msg", "certificate and private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 		}
 
 		if GlobalConfig.Common.CertDeploy {
 			hasChange = true
 			err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
 			if err != nil {
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				continue
 			}
 			err = createLocalPrivateKeyFile(keyFilePath, privateKey)
 			if err != nil {
 				hasErrors = true
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", "local private key file created", "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Info(logger).Log("msg", "local private key file created", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 
 			err = createLocalCertificateFile(newCert)
 			if err != nil {
 				hasErrors = true
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", "local certificate file created", "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Info(logger).Log("msg", "local certificate file created", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			metrics.IncCreatedLocalCertificate(certData.Issuer)
 		}
 	}
 
 	for _, certData := range diff.Update {
-		_ = level.Info(logger).Log("msg", "updating certificate", "domain", certData.Domain, "issuer", certData.Issuer)
+		_ = level.Info(logger).Log("msg", "updating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 		var privateKey []byte
 		keyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
 
@@ -189,7 +189,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			certData.CSR, privateKey, err = utils.GenerateCSRAndPrivateKey(keyFilePath, certData.Domain, san)
 			if err != nil {
 				hasErrors = true
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				continue
 			}
 		}
@@ -200,7 +200,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		err := json.Unmarshal(certDataBytes, &certParams)
 		if err != nil {
 			hasErrors = true
-			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			continue
 		}
 
@@ -211,49 +211,49 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		newCert, err := acmeClient.UpdateCertificate(certParams, GlobalConfig.Common.CertTimeout)
 		if err != nil {
 			hasErrors = true
-			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			continue
 		}
-		_ = level.Info(logger).Log("msg", "certificate updated", "domain", certData.Domain, "issuer", certData.Issuer)
+		_ = level.Info(logger).Log("msg", "certificate updated", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 
 		if GlobalConfig.Common.CertBackup {
 			data := CertBackup{Cert: newCert.Cert, Key: string(privateKey)}
 			vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", GlobalConfig.Storage.Vault.CertPrefix, newCert.Owner, newCert.Issuer, newCert.Domain)
 			err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
 			if err != nil {
-				_ = level.Error(logger).Log("msg", "failed to backup certificate", "err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Error(logger).Log("msg", "failed to backup certificate", "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			}
-			_ = level.Info(logger).Log("msg", "certificate and private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Info(logger).Log("msg", "certificate and private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 		}
 
 		if GlobalConfig.Common.CertDeploy && certData.CSR == "" {
 			hasChange = true
 			err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+newCert.Issuer, GlobalConfig.Common.CertDirPerm)
 			if err != nil {
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				continue
 			}
 			err = createLocalPrivateKeyFile(keyFilePath, privateKey)
 			if err != nil {
 				hasErrors = true
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", "local private key file updated", "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Info(logger).Log("msg", "local private key file updated", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 
 			err = createLocalCertificateFile(newCert)
 			if err != nil {
 				hasErrors = true
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", "local certificate file updated", "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Info(logger).Log("msg", "local certificate file updated", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			metrics.IncCreatedLocalCertificate(certData.Issuer)
 		}
 	}
 
 	for _, certData := range diff.Delete {
-		_ = level.Info(logger).Log("msg", "deleting certificate", "domain", certData.Domain, "issuer", certData.Issuer)
+		_ = level.Info(logger).Log("msg", "deleting certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 		var cacheKey string
 		if GlobalConfig.Common.DelayBeforeDelete != "" {
 			duration, _ := time.ParseDuration(GlobalConfig.Common.DelayBeforeDelete)
@@ -263,13 +263,13 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 				now := time.Now()
 				if now.Before(delay) {
 					delta := delay.Sub(now).String()
-					_ = level.Info(logger).Log("msg", fmt.Sprintf("scheduled deletion for %s in %s", cacheKey, delta), "domain", certData.Domain, "issuer", certData.Issuer)
+					_ = level.Info(logger).Log("msg", fmt.Sprintf("scheduled deletion for %s in %s", cacheKey, delta), "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 					continue
 				}
 			} else {
 				delay := time.Now().Add(duration)
 				localCache.Set(cacheKey, delay)
-				_ = level.Info(logger).Log("msg", fmt.Sprintf("scheduled deletion for %s in %s", cacheKey, GlobalConfig.Common.DelayBeforeDelete), "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("scheduled deletion for %s in %s", cacheKey, GlobalConfig.Common.DelayBeforeDelete), "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				continue
 			}
 		}
@@ -282,13 +282,13 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		err := acmeClient.DeleteCertificate(certData.Issuer, certData.Domain, revoke, 60)
 		if err != nil {
 			hasErrors = true
-			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			continue
 		}
 		if GlobalConfig.Common.DelayBeforeDelete != "" {
 			localCache.Del(cacheKey)
 		}
-		_ = level.Info(logger).Log("msg", "certificate deleted", "domain", certData.Domain, "issuer", certData.Issuer)
+		_ = level.Info(logger).Log("msg", "certificate deleted", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 
 		if GlobalConfig.Common.CertDeploy {
 			hasChange = true
@@ -296,18 +296,18 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			err := deleteLocalPrivateKeyFile(keyFilePath)
 			if err != nil {
 				hasErrors = true
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", "local private key file deleted", "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Info(logger).Log("msg", "local private key file deleted", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 
 			err = deleteLocalCertificateFile(certData.Issuer, certData.Domain)
 			if err != nil {
 				hasErrors = true
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer)
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", "local certificate file deleted", "domain", certData.Domain, "issuer", certData.Issuer)
+			_ = level.Info(logger).Log("msg", "local certificate file deleted", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			metrics.IncDeletedLocalCertificate(certData.Issuer)
 		}
 	}
@@ -660,7 +660,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 		certFileExists := utils.FileExists(certFilePath)
 
 		if !certFileExists {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("local certificate file '%s' doesn't exists", certFilePath))
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("local certificate file '%s' doesn't exists", certFilePath))
 			certificate, err := acmeClient.ReadCertificate(certData, 30)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -672,7 +672,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 				continue
 			}
 			hasChange = true
-			_ = level.Warn(logger).Log("msg", fmt.Sprintf("local certificate file '%s' restored.", certFilePath))
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("local certificate file '%s' restored.", certFilePath))
 			metrics.IncCreatedLocalCertificate(certData.Issuer)
 		} else {
 			var currentCertBytes []byte
