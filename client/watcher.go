@@ -60,8 +60,8 @@ func WatchCertificateEventChange(logger log.Logger, configPath string, acmeClien
 	for {
 		select {
 		case event := <-watcher.Events:
-			// only work on WRITE events of the original filename
-			if event.Op&fsnotify.Write == fsnotify.Write && event.Name == fileName {
+			// listen for CREATE/RENAME/WRITE events from original filename
+			if (event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create || event.Op&fsnotify.Rename == fsnotify.Rename) && event.Name == fileName {
 				_ = level.Info(logger).Log("msg", fmt.Sprintf("modified file: %s", configPath))
 
 				metrics.IncCertificateConfigReload()
