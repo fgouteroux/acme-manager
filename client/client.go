@@ -731,17 +731,16 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 		}
 	}
 
-	// delete files that don't match patterns
-	hasDelete, err := listAndDeleteFiles(logger, patterns)
-	if err != nil {
-		_ = level.Error(logger).Log("err", err)
-	}
-
-	if (hasChange || hasDelete) && GlobalConfig.Common.CmdEnabled {
+	if hasChange && GlobalConfig.Common.CmdEnabled {
 		err := executeCommand(logger, GlobalConfig.Common, false)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 		}
+	}
+	// delete files that don't match patterns
+	hasDelete, err := listAndDeleteFiles(logger, patterns)
+	if err != nil {
+		_ = level.Error(logger).Log("err", err)
 	}
 }
 
