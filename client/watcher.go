@@ -67,7 +67,7 @@ func WatchCertificateEventChange(logger log.Logger, configPath string, acmeClien
 				metrics.IncCertificateConfigReload()
 
 				// Compare and create/update certificate from config file to remote server
-				CheckCertificate(logger, configPath, acmeClient)
+				go CheckCertificate(logger, configPath, acmeClient)
 			}
 		case err := <-watcher.Errors:
 			_ = level.Error(logger).Log("err", err)

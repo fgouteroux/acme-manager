@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -28,9 +29,10 @@ import (
 )
 
 var (
-	Owner        string
-	GlobalConfig Config
-	certificates []certstore.Certificate
+	Owner         string
+	GlobalConfig  Config
+	certificates  []certstore.Certificate
+	checkCertLock sync.Mutex
 
 	localCache = memcache.NewLocalCache()
 )
@@ -366,6 +368,12 @@ func deleteLocalPrivateKeyFile(keyFilePath string) error {
 }
 
 func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *restclient.Client) {
+	if !checkCertLock.TryLock() {
+		_ = level.Info(logger).Log("msg", "skipping check certificates from config file because another run is in progress")
+		return
+	}
+	defer checkCertLock.Unlock()
+
 	newConfigBytes, err := os.ReadFile(filepath.Clean(GlobalConfigPath))
 	if err != nil {
 		_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to read file %s", GlobalConfigPath), "err", err)
@@ -617,6 +625,8 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 	}
+
+	_ = level.Info(logger).Log("msg", "check certificates from config file done")
 }
 
 func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string, acmeClient *restclient.Client) {
@@ -725,7 +735,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 
 			_, err = tls.X509KeyPair(certBytes, certKeyBytes)
 			if err != nil {
-				_ = level.Info(logger).Log("msg", fmt.Sprintf("private key file '%s' and certificate file '%s' error. Restoration needed.", certKeyFilePath, certFilePath), "err", err)
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("local private key file '%s' and certificate file '%s' error. Restoration needed.", certKeyFilePath, certFilePath), "err", err)
 				_, hasChange = getPrivateKeyFromVault(logger, certKeyFilePath, certFilePath, certData.Issuer, certData.Domain)
 			}
 		}
@@ -742,6 +752,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 	}
+	_ = level.Info(logger).Log("msg", "pull and check certificates done")
 }
 
 func executeCommand(logger log.Logger, cfg Common, preCmd bool) error {
@@ -818,7 +829,7 @@ func getPrivateKeyFromVault(logger log.Logger, certKeyFilePath, certFilePath, is
 
 		_, err = tls.X509KeyPair(certBytes, []byte(data.Key))
 		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("private key file '%s' and certificate file '%s' error. Recreation needed.", certKeyFilePath, certFilePath), "err", err)
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("local private key file '%s' and certificate file '%s' error. Recreation needed.", certKeyFilePath, certFilePath), "err", err)
 			return true, false
 		}
 		err = createLocalPrivateKeyFile(certKeyFilePath, []byte(data.Key))
@@ -826,10 +837,10 @@ func getPrivateKeyFromVault(logger log.Logger, certKeyFilePath, certFilePath, is
 			_ = level.Error(logger).Log("err", err)
 			return true, false
 		}
-		_ = level.Info(logger).Log("msg", fmt.Sprintf("private key file '%s' restored.", certKeyFilePath))
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("local private key file '%s' restored.", certKeyFilePath))
 		return false, true
 	}
-	_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate key file '%s' doesn't exists. Recreation needed.", certKeyFilePath))
+	_ = level.Info(logger).Log("msg", fmt.Sprintf("local private key file '%s' doesn't exists. Recreation needed.", certKeyFilePath))
 	return true, false
 }
 
