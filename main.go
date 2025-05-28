@@ -124,6 +124,9 @@ func main() {
 		})
 	}
 
+	logrusLogger.SetOutput(&CustomWriter{writer: os.Stdout})
+	logrusLogger.AddHook(&DebugLevelHook{Logger: logrusLogger})
+
 	// Override lego logger
 	legoLog.Logger = logrusLogger
 
