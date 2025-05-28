@@ -42,21 +42,23 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 			continue
 		}
 
-		// a secret must contain almost 2 versions
-		if len(versions) <= 1 && !cleanupCertRevokeLastVersion {
-			_ = level.Debug(logger).Log("msg", fmt.Sprintf("Skip secret %s containing less than 2 versions", secretPath))
-			continue
-		}
-
 		// Sort the versions by version number in descending order
 		sort.Slice(versions, func(i, j int) bool {
 			return versions[i].Version > versions[j].Version
 		})
 
-		// Exclude the latest version (first element) from the list
-		versionsExcludingLatest := versions[1:]
+		if !cleanupCertRevokeLastVersion {
+			// a secret must contain almost 2 versions
+			if len(versions) <= 1 {
+				_ = level.Debug(logger).Log("msg", fmt.Sprintf("Skip secret %s containing less than 2 versions", secretPath))
+				continue
+			}
 
-		for _, version := range versionsExcludingLatest {
+			// Exclude the latest version (first element) from the list
+			versions = versions[1:]
+		}
+
+		for _, version := range versions {
 			versionNumber := version.Version
 
 			_ = level.Debug(logger).Log("msg", fmt.Sprintf("Checking version %d of secret %s ", versionNumber, secretPath))
