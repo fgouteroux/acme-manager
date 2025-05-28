@@ -74,9 +74,10 @@ var (
 	clientConfigPath           = kingpin.Flag("client.config-path", "Client config path").Default("client-config.yml").String()
 	clientCheckConfigInterval  = kingpin.Flag("client.check-config-interval", "Time interval to check if client config file changes and to update local certificate file").Default("5m").Duration()
 
-	cleanup            = kingpin.Flag("cleanup", "Enables cleanup in vault and CA Issuers.").Bool()
-	cleanupInterval    = kingpin.Flag("cleanup.interval", "Time interval to scan vault secret certificates and cleanup if needed").Default("1h").Duration()
-	cleanupCertExpDays = kingpin.Flag("cleanup.cert-expire-days", "Number of days before old certificate expires to revoke and delete vault secret version").Default("10").Int()
+	cleanup                      = kingpin.Flag("cleanup", "Enables cleanup in vault and CA Issuers.").Bool()
+	cleanupInterval              = kingpin.Flag("cleanup.interval", "Time interval to scan vault secret certificates and cleanup if needed").Default("1h").Duration()
+	cleanupCertExpDays           = kingpin.Flag("cleanup.cert-expire-days", "Number of days before old certificate expires to revoke and delete vault secret version").Default("10").Int()
+	cleanupCertRevokeLastVersion = kingpin.Flag("cleanup.cert-revoke-last-version", "Revoke last certificate version and delete vault secret version").Bool()
 
 	logger log.Logger
 )

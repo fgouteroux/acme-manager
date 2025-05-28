@@ -15,23 +15,21 @@ import (
 	"github.com/fgouteroux/acme_manager/storage/vault"
 )
 
-func Cleanup(logger log.Logger, interval time.Duration, certExpDays int) {
+func Cleanup(logger log.Logger, interval time.Duration, certExpDays int, cleanupCertRevokeLastVersion bool) {
 	// create a new Ticker
 	tk := time.NewTicker(interval)
 
 	// start the ticker
 	for range tk.C {
-		err := CleanupCertificateVersions(logger, certExpDays)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-		}
+		CleanupCertificateVersions(logger, certExpDays, cleanupCertRevokeLastVersion)
 	}
 }
 
-func CleanupCertificateVersions(logger log.Logger, certExpDays int) error {
+func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertRevokeLastVersion bool) {
 	secrets, err := vault.GlobalClient.ListSecretWithAppRole(vault.GlobalClient.Config.CertPrefix + "/")
 	if err != nil {
-		return fmt.Errorf("failed to list secrets: %v", err)
+		_ = level.Error(logger).Log("msg", "failed to list secrets", "err", err)
+		return
 	}
 
 	_ = level.Debug(logger).Log("msg", fmt.Sprintf("vault certificate secrets list: %v", secrets))
@@ -45,7 +43,7 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int) error {
 		}
 
 		// a secret must contain almost 2 versions
-		if len(versions) <= 1 {
+		if len(versions) <= 1 && !cleanupCertRevokeLastVersion {
 			_ = level.Debug(logger).Log("msg", fmt.Sprintf("Skip secret %s containing less than 2 versions", secretPath))
 			continue
 		}
@@ -139,6 +137,4 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int) error {
 			}
 		}
 	}
-
-	return nil
 }
