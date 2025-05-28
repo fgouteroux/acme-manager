@@ -71,6 +71,9 @@ type Vault struct {
 	CertPrefix   string `yaml:"certificate_prefix"`
 	TokenPrefix  string `yaml:"token_prefix"`
 	MountPath    string `yaml:"mount_path"`
+	RetryMax     int    `yaml:"retry_max"`
+	RetryWaitMin int    `yaml:"retry_wait_min"`
+	RetryWaitMax int    `yaml:"retry_wait_max"`
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.

@@ -147,7 +147,7 @@ func main() {
 		client.GlobalConfig = cfg
 
 		if cfg.Common.CertBackup || *clientPullOnly {
-			vault.GlobalClient, err = vault.InitClient(cfg.Storage.Vault)
+			vault.GlobalClient, err = vault.InitClient(cfg.Storage.Vault, logrusLogger)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 				os.Exit(1)
@@ -284,7 +284,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	vault.GlobalClient, err = vault.InitClient(cfg.Storage.Vault)
+	vault.GlobalClient, err = vault.InitClient(cfg.Storage.Vault, logrusLogger)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
@@ -330,12 +330,12 @@ func main() {
 	go certstore.WatchCertExpiration(logger, *checkRenewalInterval)
 
 	// check config file changes
-	go certstore.WatchConfigFileChanges(logger, *checkConfigInterval, *configPath, version.Version)
+	go certstore.WatchConfigFileChanges(logger, logrusLogger, *checkConfigInterval, *configPath, version.Version)
 
 	go certstore.WatchIssuerHealth(logger, *checkIssuerInterval, version.Version)
 
 	if *cleanup {
-		go certstore.Cleanup(logger, *cleanupInterval, *cleanupCertExpDays)
+		go certstore.Cleanup(logger, *cleanupInterval, *cleanupCertExpDays, *cleanupCertRevokeLastVersion)
 	}
 
 	http.Handle("/", indexHandler("", indexPage))

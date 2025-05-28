@@ -18,28 +18,8 @@ import (
 
 	"github.com/fgouteroux/acme_manager/api"
 	"github.com/fgouteroux/acme_manager/certstore"
+	"github.com/fgouteroux/acme_manager/utils"
 )
-
-// LogrusAdapter implements the retryablehttp.Logger interface using logrus
-type LogrusAdapter struct {
-	Logger *logrus.Logger
-}
-
-func (l *LogrusAdapter) Printf(format string, args ...interface{}) {
-	l.Logger.Printf(format, args...)
-}
-
-func (l *LogrusAdapter) Errorf(format string, args ...interface{}) {
-	l.Logger.Errorf(format, args...)
-}
-
-func (l *LogrusAdapter) Debugf(format string, args ...interface{}) {
-	l.Logger.Debugf(format, args...)
-}
-
-func (l *LogrusAdapter) Warnf(format string, args ...interface{}) {
-	l.Logger.Warnf(format, args...)
-}
 
 type Client struct {
 	BaseURL    string
@@ -82,29 +62,15 @@ func setTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Confi
 	return tlsConfig, nil
 }
 
-// ResponseLogHook logs the response status code and body
-func ResponseLogHook() retryablehttp.ResponseLogHook {
-	return func(logger retryablehttp.Logger, resp *http.Response) {
-		if resp.StatusCode >= 400 {
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				logger.Printf("Failed to read response body: %v", err)
-				return
-			}
-			logger.Printf("Request failed with status code %d: %s", resp.StatusCode, string(body))
-		}
-	}
-}
-
 func NewClient(baseURL, token, certFile, keyFile, caFile string, insecure bool, logger *logrus.Logger) (*Client, error) {
 	var client Client
 	retryClient := retryablehttp.NewClient()
 
 	// Set the custom logger
 	if logger != nil {
-		retryClient.Logger = &LogrusAdapter{Logger: logger}
+		retryClient.Logger = &utils.LogrusAdapter{Logger: logger}
 		// Set the response log hook
-		retryClient.ResponseLogHook = ResponseLogHook()
+		retryClient.ResponseLogHook = utils.ResponseLogHook()
 	} else {
 		retryClient.Logger = nil
 	}

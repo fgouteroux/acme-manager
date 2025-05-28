@@ -13,6 +13,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"io"
+	"net/http"
 
 	mathRand "math/rand"
 
@@ -30,6 +32,7 @@ import (
 	"github.com/go-kit/log/level"
 
 	"github.com/go-acme/lego/v4/certcrypto"
+	"github.com/hashicorp/go-retryablehttp"
 
 	"github.com/sirupsen/logrus"
 
@@ -264,4 +267,39 @@ func ValidateRenewalDays(value string) (int, int, error) {
 		}
 	}
 	return certRenewalMinDays, certRenewalMaxDays, nil
+}
+
+// LogrusAdapter implements the retryablehttp.Logger interface using logrus
+type LogrusAdapter struct {
+	Logger *logrus.Logger
+}
+
+func (l *LogrusAdapter) Printf(format string, args ...interface{}) {
+	l.Logger.Printf(format, args...)
+}
+
+func (l *LogrusAdapter) Errorf(format string, args ...interface{}) {
+	l.Logger.Errorf(format, args...)
+}
+
+func (l *LogrusAdapter) Debugf(format string, args ...interface{}) {
+	l.Logger.Debugf(format, args...)
+}
+
+func (l *LogrusAdapter) Warnf(format string, args ...interface{}) {
+	l.Logger.Warnf(format, args...)
+}
+
+// ResponseLogHook logs the response status code and body
+func ResponseLogHook() retryablehttp.ResponseLogHook {
+	return func(logger retryablehttp.Logger, resp *http.Response) {
+		if resp.StatusCode >= 400 {
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				logger.Printf("Failed to read response body: %v", err)
+				return
+			}
+			logger.Printf("Request failed with status code %d: %s", resp.StatusCode, string(body))
+		}
+	}
 }

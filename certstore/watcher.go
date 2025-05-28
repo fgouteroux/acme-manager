@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/sirupsen/logrus"
 
 	"github.com/go-acme/lego/v4/certcrypto"
 
@@ -20,12 +21,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPath, version string) {
+func WatchConfigFileChanges(logger log.Logger, customLogger *logrus.Logger, interval time.Duration, configPath, version string) {
 	// create a new Ticker
 	tk := time.NewTicker(interval)
 
 	// start the ticker
 	for range tk.C {
+		_ = level.Info(logger).Log("msg", "check config file changes")
 		newConfigBytes, err := os.ReadFile(filepath.Clean(configPath))
 		if err != nil {
 			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to read file %s", configPath), "err", err)
@@ -57,7 +59,7 @@ func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPat
 				continue
 			}
 
-			vault.GlobalClient, err = vault.InitClient(cfg.Storage.Vault)
+			vault.GlobalClient, err = vault.InitClient(cfg.Storage.Vault, customLogger)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring vault changes in file %s because of error", configPath), "err", err)
 				continue
@@ -66,6 +68,7 @@ func WatchConfigFileChanges(logger log.Logger, interval time.Duration, configPat
 			metrics.IncConfigReload()
 			metrics.SetConfigError(0)
 		}
+		_ = level.Info(logger).Log("msg", "check config file changes done")
 	}
 }
 
@@ -77,10 +80,12 @@ func WatchCertExpiration(logger log.Logger, interval time.Duration) {
 	for range tk.C {
 		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 		if isLeaderNow {
+			_ = level.Info(logger).Log("msg", "check certificates expiration")
 			err := CheckCertExpiration(AmStore, logger, isLeaderNow)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "Certificate check renewal failed", "err", err)
 			}
+			_ = level.Info(logger).Log("msg", "check certificates expiration done")
 		}
 	}
 }
@@ -93,6 +98,7 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 	for range tk.C {
 		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 		if isLeaderNow {
+			_ = level.Info(logger).Log("msg", "check tokens expiration")
 			data, err := AmStore.GetKVRingToken(AmTokenRingKey, isLeaderNow)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -130,6 +136,7 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 				// udpate kv store
 				AmStore.PutKVRing(AmTokenRingKey, data)
 			}
+			_ = level.Info(logger).Log("msg", "check tokens expiration done")
 		}
 	}
 }
@@ -141,6 +148,7 @@ func WatchIssuerHealth(logger log.Logger, interval time.Duration, version string
 	// start the ticker
 	for range tk.C {
 
+		_ = level.Info(logger).Log("msg", "check issuer health")
 		for issuer, issuerConf := range config.GlobalConfig.Issuer {
 
 			issuerError := 1.0
@@ -166,8 +174,8 @@ func WatchIssuerHealth(logger log.Logger, interval time.Duration, version string
 			}
 
 			metrics.SetIssuerConfigError(issuer, 0.0)
-
 		}
+		_ = level.Info(logger).Log("msg", "check issuer health done")
 	}
 }
 

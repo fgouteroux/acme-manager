@@ -4,12 +4,17 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	vaultApi "github.com/hashicorp/vault/api"
 	auth "github.com/hashicorp/vault/api/auth/approle"
 
+	"github.com/hashicorp/go-retryablehttp"
+	"github.com/sirupsen/logrus"
+
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
+	"github.com/fgouteroux/acme_manager/utils"
 )
 
 var (
@@ -21,10 +26,39 @@ type Client struct {
 	Config    config.Vault
 }
 
-func InitClient(cfg config.Vault) (*Client, error) {
+func InitClient(cfg config.Vault, logger *logrus.Logger) (*Client, error) {
 	client := &Client{}
 	config := vaultApi.DefaultConfig()
 	config.Address = cfg.URL
+
+	// Create a retryable HTTP client
+	retryClient := retryablehttp.NewClient()
+
+	retryClient.RetryMax = 3
+	if cfg.RetryMax != 0 {
+		retryClient.RetryMax = cfg.RetryMax
+	}
+	retryClient.RetryWaitMin = 1 * time.Second
+	if cfg.RetryWaitMin != 0 {
+		retryClient.RetryWaitMin = time.Duration(cfg.RetryWaitMin) * time.Second
+	}
+	retryClient.RetryWaitMax = 10 * time.Second
+	if cfg.RetryWaitMax != 0 {
+		retryClient.RetryWaitMax = time.Duration(cfg.RetryWaitMax) * time.Second
+	}
+
+	// Set the custom logger
+	if logger != nil {
+		retryClient.Logger = &utils.LogrusAdapter{Logger: logger}
+		// Set the response log hook
+		retryClient.ResponseLogHook = utils.ResponseLogHook()
+	} else {
+		retryClient.Logger = nil
+	}
+
+	// Set the HTTP client of the Vault client to the retryable HTTP client
+	config.HttpClient = retryClient.StandardClient()
+
 	c, err := vaultApi.NewClient(config)
 	if err != nil {
 		return client, fmt.Errorf("unable to initialize Vault client: %w", err)
