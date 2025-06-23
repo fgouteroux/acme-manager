@@ -21,14 +21,54 @@ func Cleanup(logger log.Logger, interval time.Duration, certExpDays int, cleanup
 
 	// start the ticker
 	for range tk.C {
+		CleanupTokens(logger)
 		CleanupCertificateVersions(logger, certExpDays, cleanupCertRevokeLastVersion)
+	}
+}
+
+func CleanupTokens(logger log.Logger) {
+	secrets, err := vault.GlobalClient.ListSecretWithAppRole(vault.GlobalClient.Config.TokenPrefix + "/")
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "failed to list vault token secrets", "err", err)
+		return
+	}
+
+	_ = level.Debug(logger).Log("msg", fmt.Sprintf("vault token secrets list: %v", secrets))
+
+	for _, secretPath := range secrets {
+		// Retrieve the list of versions for the secret
+		versions, err := vault.GlobalClient.APIClient.KVv2(vault.GlobalClient.Config.SecretEngine).GetVersionsAsList(context.Background(), secretPath)
+		if err != nil {
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to get vault token versions secret %s", secretPath), "err", err)
+			continue
+		}
+
+		// Sort the versions by version number in descending order
+		sort.Slice(versions, func(i, j int) bool {
+			return versions[i].Version > versions[j].Version
+		})
+
+		var inactiveSecret bool
+		if !versions[0].DeletionTime.IsZero() {
+			inactiveSecret = true
+		}
+
+		if inactiveSecret {
+			err := vault.GlobalClient.DeleteSecretMetadataWithAppRole(secretPath)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to delete inactive vault token secret %s", secretPath), "err", err)
+			} else {
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("Deleted inactive vault token secret %s", secretPath))
+			}
+			continue
+		}
 	}
 }
 
 func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertRevokeLastVersion bool) {
 	secrets, err := vault.GlobalClient.ListSecretWithAppRole(vault.GlobalClient.Config.CertPrefix + "/")
 	if err != nil {
-		_ = level.Error(logger).Log("msg", "failed to list secrets", "err", err)
+		_ = level.Error(logger).Log("msg", "failed to list vault certificate secrets", "err", err)
 		return
 	}
 
@@ -38,7 +78,7 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 		// Retrieve the list of versions for the secret
 		versions, err := vault.GlobalClient.APIClient.KVv2(vault.GlobalClient.Config.SecretEngine).GetVersionsAsList(context.Background(), secretPath)
 		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to get versions for secret %s", secretPath), "err", err)
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to get vault certificate versions secret %s", secretPath), "err", err)
 			continue
 		}
 
@@ -46,6 +86,24 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 		sort.Slice(versions, func(i, j int) bool {
 			return versions[i].Version > versions[j].Version
 		})
+
+		// if all versions are destroyed, permanently delete secret
+		inactiveSecret := true
+		for _, version := range versions {
+			if !version.Destroyed {
+				inactiveSecret = false
+			}
+		}
+
+		if inactiveSecret {
+			err := vault.GlobalClient.DeleteSecretMetadataWithAppRole(secretPath)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to permanently delete inactive vault certificate secret %s", secretPath), "err", err)
+			} else {
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("Permanently deleted inactive vault certificate secret %s", secretPath))
+			}
+			continue
+		}
 
 		if !cleanupCertRevokeLastVersion {
 			// a secret must contain almost 2 versions

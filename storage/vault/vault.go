@@ -221,6 +221,21 @@ func (client *Client) DestroySecretWithAppRole(secretPath string) error {
 	return nil
 }
 
+// DeleteSecretMetadataWithAppRole permanently deletes the metadata and all versions of a secret.
+func (client *Client) DeleteSecretMetadataWithAppRole(secretPath string) error {
+	err := vaultAppRoleLogin(client)
+	if err != nil {
+		return err
+	}
+
+	path := client.Config.SecretEngine + "/metadata/" + secretPath
+	_, err = client.APIClient.Logical().Delete(path)
+	if err != nil {
+		return fmt.Errorf("failed to delete secret metadata for %s: %w", secretPath, err)
+	}
+	return nil
+}
+
 // listSecret returns a list of secrets from Vault
 func listSecret(client *Client, path string) (*vaultApi.Secret, error) {
 	secret, err := client.APIClient.Logical().List(path)
