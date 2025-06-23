@@ -282,7 +282,7 @@ func main() {
 		Logger:     logger,
 	}
 
-	err = certstore.Setup(logger, cfg, version.Version)
+	err = certstore.Setup(logger, logrusLogger, cfg, version.Version)
 	if err != nil {
 		os.Exit(1)
 	}
@@ -335,7 +335,7 @@ func main() {
 	// check config file changes
 	go certstore.WatchConfigFileChanges(logger, logrusLogger, *checkConfigInterval, *configPath, version.Version)
 
-	go certstore.WatchIssuerHealth(logger, *checkIssuerInterval, version.Version)
+	go certstore.WatchIssuerHealth(logger, logrusLogger, *checkIssuerInterval, version.Version)
 
 	if *cleanup {
 		go certstore.Cleanup(logger, *cleanupInterval, *cleanupCertExpDays, *cleanupCertRevokeLastVersion)

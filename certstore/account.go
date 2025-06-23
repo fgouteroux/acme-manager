@@ -11,6 +11,9 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/sirupsen/logrus"
+
+	"github.com/hashicorp/go-retryablehttp"
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/challenge"
@@ -67,12 +70,13 @@ func accountSave(account *Account, accountFilePath string) error {
 	return nil
 }
 
-func tryRecoverRegistration(privateKey crypto.PrivateKey, email, caDirURL, userAgent string) (*lego.Client, *registration.Resource, error) {
+func tryRecoverRegistration(customLogger *logrus.Logger, cfg config.Config, privateKey crypto.PrivateKey, email, caDirURL, userAgent string) (*lego.Client, *registration.Resource, error) {
 	// couldn't load account but got a key. Try to look the account up.
 	conf := lego.NewConfig(&Account{key: privateKey, Email: email})
 	conf.CADirURL = caDirURL
 	conf.UserAgent = userAgent
 
+	setRetryHTTPClient(conf, cfg, customLogger)
 	client, err := lego.NewClient(conf)
 	if err != nil {
 		return client, nil, err
@@ -85,7 +89,7 @@ func tryRecoverRegistration(privateKey crypto.PrivateKey, email, caDirURL, userA
 	return client, reg, nil
 }
 
-func Setup(logger log.Logger, cfg config.Config, version string) error {
+func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, version string) error {
 	for issuer, issuerConf := range cfg.Issuer {
 		accountFilePath := fmt.Sprintf("%s/%s/account.json", cfg.Common.RootPathAccount, issuer)
 		accountBytes, err := os.ReadFile(filepath.Clean(accountFilePath))
@@ -124,7 +128,7 @@ func Setup(logger log.Logger, cfg config.Config, version string) error {
 
 		if account.Registration == nil || account.Registration.Body.Status == "" {
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Trying to recover registration account for private key '%s'", privateKeyPath))
-			client, reg, err := tryRecoverRegistration(account.key, issuerConf.Contact, issuerConf.CADirURL, userAgent)
+			client, reg, err := tryRecoverRegistration(customLogger, cfg, account.key, issuerConf.Contact, issuerConf.CADirURL, userAgent)
 			if err != nil {
 				if strings.Contains(err.Error(), "urn:ietf:params:acme:error:accountDoesNotExist") {
 					_ = level.Warn(logger).Log("err", err.Error())
@@ -163,6 +167,7 @@ func Setup(logger log.Logger, cfg config.Config, version string) error {
 					conf.CADirURL = issuerConf.CADirURL
 					conf.UserAgent = userAgent
 
+					setRetryHTTPClient(conf, cfg, customLogger)
 					client, err := lego.NewClient(conf)
 					if err != nil {
 						continue
@@ -194,6 +199,7 @@ func Setup(logger log.Logger, cfg config.Config, version string) error {
 			conf.CADirURL = issuerConf.CADirURL
 			conf.UserAgent = userAgent
 
+			setRetryHTTPClient(conf, cfg, customLogger)
 			client, err := lego.NewClient(conf)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -222,6 +228,7 @@ func Setup(logger log.Logger, cfg config.Config, version string) error {
 			conf.CADirURL = issuerConf.CADirURL
 			conf.UserAgent = userAgent
 
+			setRetryHTTPClient(conf, cfg, customLogger)
 			client, err := lego.NewClient(conf)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -265,6 +272,7 @@ func Setup(logger log.Logger, cfg config.Config, version string) error {
 		conf.Certificate.Timeout = time.Duration(issuerConf.CertificateTimeout) * time.Second
 		conf.UserAgent = userAgent
 
+		setRetryHTTPClient(conf, cfg, customLogger)
 		client, err := lego.NewClient(conf)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -290,4 +298,34 @@ func NewHTTPChallengeProviderByName(name, config string, logger log.Logger) (cha
 	default:
 		return nil, fmt.Errorf("unrecognized HTTP provider: %s", name)
 	}
+}
+
+func setRetryHTTPClient(conf *lego.Config, cfg config.Config, customLogger *logrus.Logger) {
+	retryClient := retryablehttp.NewClient()
+
+	retryClient.RetryMax = 5
+	if cfg.Common.HTTPClientRetryMax != 0 {
+		retryClient.RetryMax = cfg.Common.HTTPClientRetryMax
+	}
+	retryClient.RetryWaitMin = 1 * time.Second
+	if cfg.Common.HTTPClientRetryWaitMin != 0 {
+		retryClient.RetryWaitMin = time.Duration(cfg.Common.HTTPClientRetryWaitMin) * time.Second
+	}
+	retryClient.RetryWaitMax = 10 * time.Second
+	if cfg.Common.HTTPClientRetryWaitMax != 0 {
+		retryClient.RetryWaitMax = time.Duration(cfg.Common.HTTPClientRetryWaitMax) * time.Second
+	}
+
+	retryClient.HTTPClient = conf.HTTPClient
+
+	// Set the custom logger
+	if customLogger != nil {
+		retryClient.Logger = &utils.LogrusAdapter{Logger: customLogger}
+		// Set the response log hook
+		retryClient.ResponseLogHook = utils.ResponseLogHook()
+	} else {
+		retryClient.Logger = nil
+	}
+
+	conf.HTTPClient = retryClient.StandardClient()
 }

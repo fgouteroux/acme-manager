@@ -52,7 +52,7 @@ func WatchConfigFileChanges(logger log.Logger, customLogger *logrus.Logger, inte
 		if string(oldConfigBytes) != string(newConfigBytes) {
 			_ = level.Info(logger).Log("msg", "modified file", "name", configPath)
 
-			err = Setup(logger, cfg, version)
+			err = Setup(logger, customLogger, cfg, version)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring issuer changes in file %s because of error", configPath), "err", err)
 				metrics.SetConfigError(1)
@@ -141,7 +141,7 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 	}
 }
 
-func WatchIssuerHealth(logger log.Logger, interval time.Duration, version string) {
+func WatchIssuerHealth(logger log.Logger, customLogger *logrus.Logger, interval time.Duration, version string) {
 	// create a new Ticker
 	tk := time.NewTicker(interval)
 
@@ -168,7 +168,7 @@ func WatchIssuerHealth(logger log.Logger, interval time.Duration, version string
 			}
 
 			userAgent := fmt.Sprintf("acme-manager/%s", version)
-			_, _, err = tryRecoverRegistration(privateKeyPEM, issuerConf.Contact, issuerConf.CADirURL, userAgent)
+			_, _, err = tryRecoverRegistration(customLogger, config.GlobalConfig, privateKeyPEM, issuerConf.Contact, issuerConf.CADirURL, userAgent)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Errorf("Unable to recover registration account for private key '%s'", privateKeyPath), "err", err)
 			}

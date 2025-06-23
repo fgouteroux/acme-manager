@@ -36,11 +36,14 @@ type Plugin struct {
 
 // Common represents common config.
 type Common struct {
-	APIKeyHash          string   `yaml:"api_key_hash"`
-	CertDaysRenewal     string   `yaml:"cert_days_renewal"`
-	RootPathAccount     string   `yaml:"rootpath_account"`
-	RootPathCertificate string   `yaml:"rootpath_certificate"`
-	Plugins             []Plugin `yaml:"plugins"`
+	APIKeyHash             string   `yaml:"api_key_hash"`
+	CertDaysRenewal        string   `yaml:"cert_days_renewal"`
+	RootPathAccount        string   `yaml:"rootpath_account"`
+	RootPathCertificate    string   `yaml:"rootpath_certificate"`
+	Plugins                []Plugin `yaml:"plugins"`
+	HTTPClientRetryMax     int      `yaml:"http_client_retry_max"`
+	HTTPClientRetryWaitMin int      `yaml:"http_client_retry_wait_min"`
+	HTTPClientRetryWaitMax int      `yaml:"http_client_retry_wait_max"`
 }
 
 type Issuer struct {
