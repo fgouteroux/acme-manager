@@ -94,11 +94,11 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	for issuer, issuerConf := range s.Issuer {
 		if issuerConf.DNSChallenge != "" && issuerConf.HTTPChallenge != "" {
-			return fmt.Errorf("Invalid config in '%s' issuer, 'dns_challenge' and 'http_challenge' are mutually exclusive", issuer)
+			return fmt.Errorf("invalid config in '%s' issuer, 'dns_challenge' and 'http_challenge' are mutually exclusive", issuer)
 		}
 
 		if issuerConf.DNSChallenge == "" && issuerConf.HTTPChallenge == "" {
-			return fmt.Errorf("Invalid config in '%s' issuer, 'dns_challenge' or 'http_challenge' must be set", issuer)
+			return fmt.Errorf("invalid config in '%s' issuer, 'dns_challenge' or 'http_challenge' must be set", issuer)
 		}
 
 		if issuerConf.OverallRequestLimit == 0 {

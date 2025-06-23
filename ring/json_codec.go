@@ -33,7 +33,7 @@ func (c *Data) Merge(mergeable memberlist.Mergeable, _ bool) (memberlist.Mergeab
 		return nil, nil
 	}
 
-	if c.CreatedAt == other.CreatedAt {
+	if c.CreatedAt.Equal(other.CreatedAt) {
 		return nil, nil
 	}
 

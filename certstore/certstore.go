@@ -126,7 +126,7 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 	var issuerAcmeClient *lego.Client
 	var issuerFound bool
 	if issuerAcmeClient, issuerFound = AcmeClient[certData.Issuer]; !issuerFound {
-		return certData, fmt.Errorf("Could not create certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
+		return certData, fmt.Errorf("could not create certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
 	}
 
 	var dnsChallenge, httpChallenge string
@@ -298,7 +298,7 @@ func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) er
 		var issuerAcmeClient *lego.Client
 		var issuerFound bool
 		if issuerAcmeClient, issuerFound = AcmeClient[certData.Issuer]; !issuerFound {
-			return fmt.Errorf("Could not delete certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
+			return fmt.Errorf("could not delete certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
 		}
 
 		err = issuerAcmeClient.Certificate.Revoke([]byte(certBytes.(string)))
@@ -316,7 +316,7 @@ func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) er
 			return err
 		}
 	} else {
-		_ = level.Error(logger).Log("err", fmt.Errorf("No cert found in vault secret key: %s", vaultSecretPath))
+		_ = level.Error(logger).Log("err", fmt.Errorf("no cert found in vault secret key: %s", vaultSecretPath))
 	}
 	return nil
 }
@@ -410,7 +410,7 @@ func executeCommand(logger log.Logger, cmdPath string, cmdArgs []string, cmdTime
 
 	out, err := run(cmdPath, cmdArgs, cmdTimeout, envVars)
 	if err != nil {
-		return fmt.Errorf("Command '%s %s' failed: %s. Error: %s", cmdPath, strings.Join(cmdArgs, " "), out, err.Error())
+		return fmt.Errorf("command '%s %s' failed: %s. Error: %s", cmdPath, strings.Join(cmdArgs, " "), out, err.Error())
 	}
 	_ = level.Info(logger).Log("msg", fmt.Sprintf("Command '%s %s' successfully executed", cmdPath, strings.Join(cmdArgs, " ")))
 	_ = level.Debug(logger).Log("msg", "Command output", "output", out)

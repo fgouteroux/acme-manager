@@ -64,21 +64,21 @@ func checkAuth(r *http.Request) (certstore.Token, error) {
 	var tokenData certstore.Token
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		return tokenData, fmt.Errorf("Authorization Header is missing or empty")
+		return tokenData, fmt.Errorf("authorization Header is missing or empty")
 	}
 	splitToken := strings.Split(authHeader, "Bearer ")
 	if len(splitToken) != 2 {
-		return tokenData, fmt.Errorf("Invalid token format")
+		return tokenData, fmt.Errorf("invalid token format")
 	}
 
 	payload, err := base64.StdEncoding.DecodeString(splitToken[1])
 	if err != nil {
-		return tokenData, fmt.Errorf("Invalid token format")
+		return tokenData, fmt.Errorf("invalid token format")
 	}
 
 	token := strings.SplitN(string(payload), ":", 2)
 	if len(token) != 2 {
-		return tokenData, fmt.Errorf("Invalid token format")
+		return tokenData, fmt.Errorf("invalid token format")
 	}
 
 	tokens, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, false)
@@ -89,23 +89,23 @@ func checkAuth(r *http.Request) (certstore.Token, error) {
 	var tokenExists bool
 	tokenData, tokenExists = tokens[token[0]]
 	if !tokenExists {
-		return tokenData, fmt.Errorf("Token not found")
+		return tokenData, fmt.Errorf("token not found")
 	}
 
 	reqTokenHash := utils.SHA1Hash(token[1])
 	if tokenExists && reqTokenHash != tokenData.TokenHash {
-		return tokenData, fmt.Errorf("Invalid token")
+		return tokenData, fmt.Errorf("invalid token")
 	}
 
 	if tokenData.Expires != "Never" {
 		layout := "2006-01-02 15:04:05 -0700 MST"
 		t, err := time.Parse(layout, tokenData.Expires)
 		if err != nil {
-			return tokenData, fmt.Errorf("Could not parse token expiration time")
+			return tokenData, fmt.Errorf("could not parse token expiration time")
 		}
 
 		if time.Now().After(t) {
-			return tokenData, fmt.Errorf("Token expired")
+			return tokenData, fmt.Errorf("token expired")
 		}
 	}
 
@@ -154,7 +154,7 @@ func CertificateMetadataHandler(logger log.Logger) http.HandlerFunc {
 				return c.Domain == domain && c.Issuer == issuer && c.Owner == tokenValue.Username
 			})
 			if idx == -1 {
-				responseJSON(w, nil, fmt.Errorf("Certificate '%s' with issuer '%s' not found", domain, issuer), http.StatusNotFound)
+				responseJSON(w, nil, fmt.Errorf("certificate '%s' with issuer '%s' not found", domain, issuer), http.StatusNotFound)
 				return
 			}
 			metadata = append(metadata, data[idx])
@@ -226,11 +226,11 @@ func GetCertificateHandler(logger log.Logger) http.HandlerFunc {
 		}
 
 		if !slices.Contains(tokenValue.Scope, "read") {
-			responseJSON(w, nil, fmt.Errorf("Invalid scope, missing 'read' scope"), http.StatusForbidden)
+			responseJSON(w, nil, fmt.Errorf("invalid scope, missing 'read' scope"), http.StatusForbidden)
 			return
 		}
 		if idx == -1 || certData.Owner != owner {
-			responseJSON(w, nil, fmt.Errorf("Certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
+			responseJSON(w, nil, fmt.Errorf("certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
 			return
 		}
 		secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
@@ -287,7 +287,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		if !slices.Contains(config.SupportedIssuers, certParams.Issuer) {
-			responseJSON(w, nil, fmt.Errorf("Invalid issuer '%s' must be one of %v", certParams.Issuer, config.SupportedIssuers), http.StatusBadRequest)
+			responseJSON(w, nil, fmt.Errorf("invalid issuer '%s' must be one of %v", certParams.Issuer, config.SupportedIssuers), http.StatusBadRequest)
 			return
 		}
 
@@ -359,7 +359,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		})
 
 		if idx >= 0 {
-			responseJSON(w, nil, fmt.Errorf("Certificate already exists"), http.StatusBadRequest)
+			responseJSON(w, nil, fmt.Errorf("certificate already exists"), http.StatusBadRequest)
 			return
 		}
 
@@ -378,7 +378,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
 			_ = level.Info(logger).Log("msg", "another create operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
-			responseJSON(w, nil, fmt.Errorf("Another operation is in progress"), http.StatusTooManyRequests)
+			responseJSON(w, nil, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
 			return
 		}
 
@@ -387,7 +387,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		defer func() { certLockMap.Delete(certLockKey) }() // Unlock deferred
 
 		if !slices.Contains(tokenValue.Scope, "create") {
-			responseJSON(w, nil, fmt.Errorf("Invalid scope, missing 'create' scope"), http.StatusForbidden)
+			responseJSON(w, nil, fmt.Errorf("invalid scope, missing 'create' scope"), http.StatusForbidden)
 			return
 		}
 
@@ -479,7 +479,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		if !slices.Contains(config.SupportedIssuers, certParams.Issuer) {
-			responseJSON(w, nil, fmt.Errorf("Invalid issuer '%s' must be one of %v", certParams.Issuer, config.SupportedIssuers), http.StatusBadRequest)
+			responseJSON(w, nil, fmt.Errorf("invalid issuer '%s' must be one of %v", certParams.Issuer, config.SupportedIssuers), http.StatusBadRequest)
 			return
 		}
 
@@ -555,7 +555,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		})
 
 		if idx == -1 {
-			responseJSON(w, nil, fmt.Errorf("Certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
+			responseJSON(w, nil, fmt.Errorf("certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
 			return
 		}
 
@@ -574,7 +574,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
 			_ = level.Info(logger).Log("msg", "another update operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
-			responseJSON(w, nil, fmt.Errorf("Another operation is in progress"), http.StatusTooManyRequests)
+			responseJSON(w, nil, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
 			return
 		}
 
@@ -583,7 +583,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		defer func() { certLockMap.Delete(certLockKey) }() // Unlock deferred
 
 		if !slices.Contains(tokenValue.Scope, "update") {
-			responseJSON(w, nil, fmt.Errorf("Invalid scope, missing 'update' scope"), http.StatusForbidden)
+			responseJSON(w, nil, fmt.Errorf("invalid scope, missing 'update' scope"), http.StatusForbidden)
 			return
 		}
 
@@ -762,7 +762,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		})
 
 		if idx == -1 {
-			responseJSON(w, nil, fmt.Errorf("Certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
+			responseJSON(w, nil, fmt.Errorf("certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
 			return
 		}
 
@@ -781,7 +781,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
 			_ = level.Info(logger).Log("msg", "another delete operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
-			responseJSON(w, nil, fmt.Errorf("Another operation is in progress"), http.StatusTooManyRequests)
+			responseJSON(w, nil, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
 			return
 		}
 
@@ -790,7 +790,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		defer func() { certLockMap.Delete(certLockKey) }() // Unlock deferred
 
 		if !slices.Contains(tokenValue.Scope, "delete") {
-			responseJSON(w, nil, fmt.Errorf("Invalid scope, missing 'delete' scope"), http.StatusForbidden)
+			responseJSON(w, nil, fmt.Errorf("invalid scope, missing 'delete' scope"), http.StatusForbidden)
 			return
 		}
 
@@ -887,12 +887,12 @@ func checkCSR(certParams CertificateParams) error {
 
 	csrDecoded, err := base64.StdEncoding.DecodeString(certParams.CSR)
 	if err != nil {
-		return fmt.Errorf("Invalid 'csr' parameter, bad format: %v", err)
+		return fmt.Errorf("invalid 'csr' parameter, bad format: %v", err)
 	}
 
 	csr, err := certcrypto.PemDecodeTox509CSR([]byte(csrDecoded))
 	if err != nil {
-		return fmt.Errorf("Invalid 'csr' parameter: %v", err)
+		return fmt.Errorf("invalid 'csr' parameter: %v", err)
 	}
 
 	// checks domains, sstart with the common name

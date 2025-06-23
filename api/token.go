@@ -108,7 +108,7 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 				responseJSON(w, tokenData, nil, http.StatusOK)
 				return
 			}
-			responseJSON(w, nil, fmt.Errorf("Token ID '%s' not found", ID), http.StatusNotFound)
+			responseJSON(w, nil, fmt.Errorf("token ID '%s' not found", ID), http.StatusNotFound)
 			return
 		}
 		http.Error(w, "Missing token ID", http.StatusBadRequest)
@@ -166,7 +166,7 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 
 		for _, scope := range token.Scope {
 			if !slices.Contains(allowedScope, scope) {
-				responseJSON(w, nil, fmt.Errorf("Invalid scope value '%s', must be in %v", scope, allowedScope), http.StatusBadRequest)
+				responseJSON(w, nil, fmt.Errorf("invalid scope value '%s', must be in %v", scope, allowedScope), http.StatusBadRequest)
 				return
 			}
 		}
@@ -190,7 +190,7 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		randomToken, err := utils.RandomStringCrypto(32)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, fmt.Errorf("Error generating token: %v", err), http.StatusInternalServerError)
+			responseJSON(w, nil, fmt.Errorf("error generating token: %v", err), http.StatusInternalServerError)
 			return
 		}
 
@@ -200,7 +200,7 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		} else {
 			duration, err := model.ParseDuration(token.Duration)
 			if err != nil {
-				responseJSON(w, nil, fmt.Errorf("Invalid duration for 'expires' parameter: %v", err), http.StatusBadRequest)
+				responseJSON(w, nil, fmt.Errorf("invalid duration for 'expires' parameter: %v", err), http.StatusBadRequest)
 				return
 			}
 
@@ -311,7 +311,7 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 
 		_, tokenExists := data[token.ID]
 		if !tokenExists {
-			responseJSON(w, nil, fmt.Errorf("Token ID '%s' not found", token.ID), http.StatusNotFound)
+			responseJSON(w, nil, fmt.Errorf("token ID '%s' not found", token.ID), http.StatusNotFound)
 			return
 		}
 
@@ -332,7 +332,7 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 
 		for _, scope := range token.Scope {
 			if !slices.Contains(allowedScope, scope) {
-				responseJSON(w, nil, fmt.Errorf("Invalid 'scope' must be in %v", allowedScope), http.StatusBadRequest)
+				responseJSON(w, nil, fmt.Errorf("invalid 'scope' must be in %v", allowedScope), http.StatusBadRequest)
 				return
 			}
 		}
@@ -349,7 +349,7 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		randomToken, err := utils.RandomStringCrypto(32)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, fmt.Errorf("Error generating token: %v", err), http.StatusInternalServerError)
+			responseJSON(w, nil, fmt.Errorf("error generating token: %v", err), http.StatusInternalServerError)
 			return
 		}
 
@@ -359,7 +359,7 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		} else {
 			duration, err := model.ParseDuration(token.Duration)
 			if err != nil {
-				responseJSON(w, nil, fmt.Errorf("Invalid duration for 'expires' parameter: %v", err), http.StatusBadRequest)
+				responseJSON(w, nil, fmt.Errorf("invalid duration for 'expires' parameter: %v", err), http.StatusBadRequest)
 				return
 			}
 
@@ -501,7 +501,7 @@ func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
-			responseJSON(w, nil, fmt.Errorf("Token ID '%s' not found", ID), http.StatusNotFound)
+			responseJSON(w, nil, fmt.Errorf("token ID '%s' not found", ID), http.StatusNotFound)
 			return
 		}
 		http.Error(w, "Missing token ID", http.StatusBadRequest)

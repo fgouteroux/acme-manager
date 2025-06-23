@@ -72,7 +72,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	certstore.Setup(logger, config.GlobalConfig, "dev")
+	certstore.Setup(logger, nil, config.GlobalConfig, "dev")
 
 	// Initialize the KV store with test data
 	initKVStoreToken()

@@ -162,7 +162,7 @@ func WatchIssuerHealth(logger log.Logger, customLogger *logrus.Logger, interval 
 			}
 			privateKeyPEM, err := certcrypto.ParsePEMPrivateKey(privateKeyBytes)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Errorf("Unable parse private key '%s'", privateKeyPath), "err", err)
+				_ = level.Error(logger).Log("msg", fmt.Errorf("unable parse private key '%s'", privateKeyPath), "err", err)
 				metrics.SetIssuerConfigError(issuer, issuerError)
 				continue
 			}
@@ -170,7 +170,7 @@ func WatchIssuerHealth(logger log.Logger, customLogger *logrus.Logger, interval 
 			userAgent := fmt.Sprintf("acme-manager/%s", version)
 			_, _, err = tryRecoverRegistration(customLogger, config.GlobalConfig, privateKeyPEM, issuerConf.Contact, issuerConf.CADirURL, userAgent)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Errorf("Unable to recover registration account for private key '%s'", privateKeyPath), "err", err)
+				_ = level.Error(logger).Log("msg", fmt.Errorf("unable to recover registration account for private key '%s'", privateKeyPath), "err", err)
 			}
 
 			metrics.SetIssuerConfigError(issuer, 0.0)

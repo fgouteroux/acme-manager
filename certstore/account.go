@@ -64,7 +64,7 @@ func accountSave(account *Account, accountFilePath string) error {
 
 	err = os.WriteFile(accountFilePath, jsonBytes, 0600)
 	if err != nil {
-		return fmt.Errorf("Unable to save account file %s: %v", accountFilePath, err)
+		return fmt.Errorf("unable to save account file %s: %v", accountFilePath, err)
 	}
 
 	return nil
@@ -106,7 +106,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 		privateKeyPath := fmt.Sprintf("%s/%s/private_key.pem", cfg.Common.RootPathAccount, issuer)
 
 		if !utils.FileExists(privateKeyPath) {
-			_ = level.Error(logger).Log("msg", fmt.Errorf("Skipping issuer account '%s' because private key '%s' doesn't exists", issuer, privateKeyPath))
+			_ = level.Error(logger).Log("msg", fmt.Errorf("skipping issuer account '%s' because private key '%s' doesn't exists", issuer, privateKeyPath))
 			metrics.SetIssuerConfigError(issuer, 1.0)
 			continue
 		}
@@ -119,7 +119,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 		}
 		account.key, err = certcrypto.ParsePEMPrivateKey(privateKeyBytes)
 		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Errorf("Unable parse private key '%s'", privateKeyPath), "err", err)
+			_ = level.Error(logger).Log("msg", fmt.Errorf("unable parse private key '%s'", privateKeyPath), "err", err)
 			metrics.SetIssuerConfigError(issuer, 1.0)
 			continue
 		}
@@ -237,27 +237,27 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 
 			err = client.Registration.DeleteRegistration()
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Errorf("Unable to unregister '%s' issuer account", issuer), "err", err)
+				_ = level.Error(logger).Log("msg", fmt.Errorf("unable to unregister '%s' issuer account", issuer), "err", err)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("Account deleted for private key '%s'", privateKeyPath))
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("account deleted for private key '%s'", privateKeyPath))
 
 			if utils.FileExists(accountFilePath) {
 				err := os.Remove(accountFilePath)
 				if err != nil {
-					_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to delete account file '%s'", accountFilePath), "err", err)
+					_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to delete account file '%s'", accountFilePath), "err", err)
 				}
 			} else {
-				_ = level.Info(logger).Log("msg", fmt.Sprintf("Account file '%s' deleted", accountFilePath))
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("account file '%s' deleted", accountFilePath))
 			}
 
 			if utils.FileExists(privateKeyPath) {
 				err := os.Remove(privateKeyPath)
 				if err != nil {
-					_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to delete private key '%s'", privateKeyPath), "err", err)
+					_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to delete private key '%s'", privateKeyPath), "err", err)
 				}
 			} else {
-				_ = level.Info(logger).Log("msg", fmt.Sprintf("Account private key '%s' deleted", privateKeyPath))
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("account private key '%s' deleted", privateKeyPath))
 			}
 			delete(AcmeClient, issuer)
 			continue

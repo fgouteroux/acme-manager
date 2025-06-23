@@ -193,12 +193,12 @@ func ValidateLabels(labels string) (errors []error) {
 		if len(label) == 2 {
 			if !labelNameRegexp.MatchString(label[0]) {
 				errors = append(errors, fmt.Errorf(
-					"Invalid Label Name '%s'. Must match the regex '%s'", label[0], labelNameRegexp))
+					"invalid Label Name '%s'. Must match the regex '%s'", label[0], labelNameRegexp))
 			}
 
 			if !utf8.ValidString(label[1]) {
 				errors = append(errors, fmt.Errorf(
-					"Invalid Label Value '%s': not a valid UTF8 string", label[1]))
+					"invalid Label Value '%s': not a valid UTF8 string", label[1]))
 			}
 		}
 	}
