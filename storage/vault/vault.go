@@ -24,6 +24,17 @@ var (
 type Client struct {
 	APIClient *vaultApi.Client
 	Config    config.Vault
+	Token     string    // Store the token
+	TokenTTL  time.Time // Store the token expiry time
+}
+
+// Function to check if the token is still valid
+func (client *Client) isTokenValid() bool {
+	if client.Token == "" {
+		return false
+	}
+	// Check if the current time is before the token's TTL
+	return time.Now().Before(client.TokenTTL)
 }
 
 func InitClient(cfg config.Vault, logger *logrus.Logger) (*Client, error) {
@@ -70,6 +81,10 @@ func InitClient(cfg config.Vault, logger *logrus.Logger) (*Client, error) {
 }
 
 func vaultAppRoleLogin(client *Client) error {
+	if client.isTokenValid() {
+		return nil // Skip login if token is valid
+	}
+
 	appRoleAuth, err := auth.NewAppRoleAuth(
 		client.Config.RoleID,
 		&auth.SecretID{FromString: client.Config.SecretID},
@@ -86,6 +101,19 @@ func vaultAppRoleLogin(client *Client) error {
 	if authInfo == nil {
 		return fmt.Errorf("no auth info was returned after login")
 	}
+
+	// Calculate the token TTL with a buffer of 10 seconds before actual expiry
+	leaseDuration := time.Duration(authInfo.Auth.LeaseDuration) * time.Second
+	bufferDuration := 10 * time.Second // Buffer time
+	effectiveTTL := leaseDuration - bufferDuration
+
+	// Store token and its TTL with the buffer
+	client.Token = authInfo.Auth.ClientToken
+	client.TokenTTL = time.Now().Add(effectiveTTL)
+
+	// Set the token in the API client
+	client.APIClient.SetToken(client.Token)
+
 	return nil
 }
 
