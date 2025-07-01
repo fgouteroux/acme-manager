@@ -1,9 +1,11 @@
 package certstore
 
 import (
+	"context"
 	"crypto"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -326,6 +328,37 @@ func setRetryHTTPClient(conf *lego.Config, cfg config.Config, customLogger *logr
 	} else {
 		retryClient.Logger = nil
 	}
+	if len(cfg.Common.HTTPClientRetryStatusCode) > 0 {
+		retryClient.CheckRetry = NewStatusCodeRetryPolicy(customLogger, cfg.Common.HTTPClientRetryStatusCode)
+	}
 
 	conf.HTTPClient = retryClient.StandardClient()
+}
+
+// NewStatusCodeRetryPolicy creates a CheckRetry function that retries
+// on connection errors, 5xx status codes (default behavior), and
+// any additional status codes provided in the `retryStatusCodes` list.
+func NewStatusCodeRetryPolicy(customLogger *logrus.Logger, retryStatusCodes []int) retryablehttp.CheckRetry {
+	return func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		// First, defer to the default retry policy for common errors (network, 5xx, etc.)
+		shouldRetry, defaultErr := retryablehttp.DefaultRetryPolicy(ctx, resp, err)
+
+		// If the default policy already decided to retry or an error occurred, return that.
+		if shouldRetry || defaultErr != nil {
+			return shouldRetry, defaultErr
+		}
+
+		// Now, check if the response status code is in our custom list.
+		if resp != nil {
+			for _, code := range retryStatusCodes {
+				if resp.StatusCode == code {
+					customLogger.Printf("Retrying on custom status code %d for URL: %s\n", code, resp.Request.URL)
+					return true, nil
+				}
+			}
+		}
+
+		// Otherwise, do not retry.
+		return false, nil
+	}
 }
