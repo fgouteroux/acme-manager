@@ -300,6 +300,9 @@ func ResponseLogHook() retryablehttp.ResponseLogHook {
 				return
 			}
 			logger.Printf("Request failed with status code %d: %s", resp.StatusCode, string(body))
+
+			// Restore the body content to the response
+			resp.Body = io.NopCloser(bytes.NewBuffer(body))
 		}
 	}
 }
