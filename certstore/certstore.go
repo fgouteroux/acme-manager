@@ -3,6 +3,8 @@ package certstore
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -245,7 +247,18 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 		return certData, err
 	}
 
-	certData.Encryption = x509Cert.SignatureAlgorithm.String()
+	// Determine the key type and calculate length
+	var publicKeyLength int
+	switch pubKey := x509Cert.PublicKey.(type) {
+	case *rsa.PublicKey:
+		publicKeyLength = pubKey.N.BitLen()
+	case *ecdsa.PublicKey:
+		publicKeyLength = pubKey.Curve.Params().BitSize
+	default:
+		_ = level.Error(logger).Log("err", "unsupported public key algorithm")
+	}
+
+	certData.Encryption = fmt.Sprintf("%s-%d", x509Cert.PublicKeyAlgorithm.String(), publicKeyLength)
 	certData.Serial = x509Cert.SerialNumber.Text(16)
 	certData.Expires = x509Cert.NotAfter.String()
 	certData.Fingerprint = utils.GenerateFingerprint(resource.Certificate)
