@@ -96,6 +96,13 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	for _, cert := range s.Certificate {
+		if cert.KeyType != "" {
+			_, err := utils.GetKeyType(cert.KeyType)
+			if err != nil {
+				return err
+			}
+		}
+
 		if cert.Labels != "" {
 			err := utils.ValidateLabels(cert.Labels)
 			if len(err) != 0 {

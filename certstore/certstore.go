@@ -62,6 +62,7 @@ type Certificate struct {
 	Labels        string `json:"labels"`
 	Encryption    string `json:"encryption"`
 	Serial        string `json:"serial"`
+	KeyType       string `json:"key_type" yaml:"key_type" example:"ec256"`
 }
 
 type CertMap struct {
@@ -302,7 +303,7 @@ func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) er
 		}
 
 		err = issuerAcmeClient.Certificate.Revoke([]byte(certBytes.(string)))
-		if err != nil {
+		if err != nil && !(strings.Contains(err.Error(), "Certificate is expired") || strings.Contains(err.Error(), "urn:ietf:params:acme:error:alreadyRevoked")) {
 			_ = level.Error(logger).Log("err", err)
 			metrics.SetRevokedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
 			return err

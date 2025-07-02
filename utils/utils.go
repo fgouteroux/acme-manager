@@ -1,9 +1,8 @@
 package utils
 
 import (
+	"bytes"
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -145,15 +144,19 @@ func SetTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Confi
 }
 
 // GenerateCSRAndPrivateKey generates a Certificate Signing Request (CSR) and a private key.
-func GenerateCSRAndPrivateKey(privateKey, domain string, SAN []string) (string, []byte, error) {
+func GenerateCSRAndPrivateKey(privateKey, keyType, domain string, SAN []string) (string, []byte, error) {
 	var pKey crypto.PrivateKey
 	var err error
 	if privateKey == "" {
-		// Generate a new ECDSA key pair using the P-256 curve
-		pKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		certKeyType, err := GetKeyType(keyType)
 		if err != nil {
 			return "", nil, err
 		}
+		pKey, err = certcrypto.GeneratePrivateKey(certKeyType)
+		if err != nil {
+			return "", nil, err
+		}
+
 	} else {
 		privateKeyBytes, err := os.ReadFile(filepath.Clean(privateKey))
 		if err != nil {
@@ -184,6 +187,27 @@ func GenerateCSRAndPrivateKey(privateKey, domain string, SAN []string) (string, 
 	csr64 := base64.StdEncoding.EncodeToString(csrPEM)
 
 	return csr64, certcrypto.PEMEncode(pKey), nil
+}
+
+// GetKeyType the type from which private keys should be generated.
+func GetKeyType(keyTypeStr string) (certcrypto.KeyType, error) {
+	switch strings.ToUpper(keyTypeStr) {
+	case "RSA2048":
+		return certcrypto.RSA2048, nil
+	case "RSA3072":
+		return certcrypto.RSA3072, nil
+	case "RSA4096":
+		return certcrypto.RSA4096, nil
+	case "RSA8192":
+		return certcrypto.RSA8192, nil
+	case "EC256":
+		return certcrypto.EC256, nil
+	case "EC384":
+		return certcrypto.EC384, nil
+	default:
+		var zeroKeyType certcrypto.KeyType
+		return zeroKeyType, fmt.Errorf("unsupported key type: %s", keyTypeStr)
+	}
 }
 
 func ValidateLabels(labels string) (errors []error) {

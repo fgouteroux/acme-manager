@@ -46,6 +46,7 @@ type CertificateParams struct {
 	HTTPChallenge string `json:"http_challenge,omitempty" example:""`
 	Revoke        bool   `json:"revoke"`
 	Labels        string `json:"labels"`
+	KeyType       string `json:"key_type"`
 }
 
 func responseJSON(w http.ResponseWriter, data interface{}, err error, statusCode int) {
@@ -606,6 +607,9 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			recreateCert = true
 		}
 		if certData.CSR != data[idx].CSR {
+			recreateCert = true
+		}
+		if certData.KeyType != data[idx].KeyType {
 			recreateCert = true
 		}
 

@@ -180,7 +180,7 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 				}
 
 				err = issuerAcmeClient.Certificate.Revoke([]byte(data.Cert))
-				if err != nil && !strings.Contains(err.Error(), "urn:ietf:params:acme:error:alreadyRevoked") {
+				if err != nil && !(strings.Contains(err.Error(), "Certificate is expired") || strings.Contains(err.Error(), "urn:ietf:params:acme:error:alreadyRevoked")) {
 					_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to revoke certificate version %d of secret %s", versionNumber, secretPath), "err", err)
 					continue
 				}
