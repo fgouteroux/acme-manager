@@ -59,6 +59,15 @@ func (hook *DebugLevelHook) Fire(entry *logrus.Entry) error {
 			"caller": entry.Caller.File + ":" + fmt.Sprint(entry.Caller.Line),
 		}).Debug(newMessage)
 	}
+	if entry.Level == logrus.InfoLevel && strings.HasPrefix(entry.Message, "[ERR]") {
+		// remove [debug] in message
+		newMessage := strings.TrimPrefix(entry.Message, "[ERR] ")
+
+		// keep original entry metadata
+		hook.Logger.WithFields(entry.Data).WithFields(logrus.Fields{
+			"caller": entry.Caller.File + ":" + fmt.Sprint(entry.Caller.Line),
+		}).Error(newMessage)
+	}
 	return nil
 }
 
@@ -75,6 +84,9 @@ func (cw *CustomWriter) Write(p []byte) (n int, err error) {
 	message := string(p)
 	// supporting text and json formatter
 	if strings.Contains(message, "[DEBUG]") && (strings.Contains(message, "level=info") || strings.Contains(message, "\"level\":\"info\"")) {
+		return len(p), nil
+	}
+		if strings.Contains(message, "[ERR]") && (strings.Contains(message, "level=info") || strings.Contains(message, "\"level\":\"info\"")) {
 		return len(p), nil
 	}
 	return cw.writer.Write(p)
