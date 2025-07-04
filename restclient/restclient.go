@@ -23,6 +23,7 @@ import (
 
 type Client struct {
 	BaseURL    string
+	Logger     *logrus.Logger
 	Token      string
 	httpclient *http.Client
 }
@@ -86,13 +87,14 @@ func NewClient(baseURL, token, certFile, keyFile, caFile string, insecure bool, 
 	}
 
 	client.BaseURL = baseURL
+	client.Logger = logger
 	client.Token = token
 	client.httpclient = retryClient.StandardClient()
 
 	return &client, nil
 }
 
-func (c *Client) doRequest(ctx context.Context, method, path string, headers map[string]string, body io.Reader) (*http.Response, error) {
+func (c *Client) doRequest(ctx context.Context, method, path string, headers map[string]string, body io.Reader, timeout int) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, body)
 	if err != nil {
 		return nil, err
@@ -104,6 +106,16 @@ func (c *Client) doRequest(ctx context.Context, method, path string, headers map
 
 	resp, err := c.httpclient.Do(req)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			if _, ok := ctx.Deadline(); ok {
+				// Calculate total timeout duration in seconds
+				timeoutDuration := time.Duration(timeout) * time.Second
+				c.Logger.Errorf("Context deadline exceeded for request to %s. Timeout duration was %d seconds.",
+					req.URL.String(), timeoutDuration/time.Second)
+			} else {
+				c.Logger.Errorf("Context deadline exceeded for request to %s. No deadline set.", req.URL.String())
+			}
+		}
 		return nil, err
 	}
 
@@ -125,7 +137,7 @@ func (c *Client) GetAllCertificateMetadata(timeout int) ([]certstore.Certificate
 
 	baseErrMsg := "error getting all certificate metadata"
 
-	resp, err := c.doRequest(ctx, "GET", "/certificate/metadata", headers, nil)
+	resp, err := c.doRequest(ctx, "GET", "/certificate/metadata", headers, nil, timeout)
 	if err != nil {
 		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
@@ -157,7 +169,7 @@ func (c *Client) GetCertificateMetadata(issuer, domain string, timeout int) (cer
 
 	baseErrMsg := "error getting certificate metadata"
 
-	resp, err := c.doRequest(ctx, "GET", path, headers, nil)
+	resp, err := c.doRequest(ctx, "GET", path, headers, nil, timeout)
 	if err != nil {
 		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
@@ -188,7 +200,7 @@ func (c *Client) ReadCertificate(data certstore.Certificate, timeout int) (certs
 
 	baseErrMsg := fmt.Sprintf("error reading certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
 
-	resp, err := c.doRequest(ctx, "GET", fmt.Sprintf("/certificate/%s/%s", data.Issuer, data.Domain), headers, bytes.NewReader(reqBody))
+	resp, err := c.doRequest(ctx, "GET", fmt.Sprintf("/certificate/%s/%s", data.Issuer, data.Domain), headers, bytes.NewReader(reqBody), timeout)
 	if err != nil {
 		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
@@ -223,7 +235,7 @@ func (c *Client) CreateCertificate(data api.CertificateParams, timeout int) (cer
 
 	baseErrMsg := fmt.Sprintf("error creating certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
 
-	resp, err := c.doRequest(ctx, "POST", "/certificate", headers, bytes.NewReader(reqBody))
+	resp, err := c.doRequest(ctx, "POST", "/certificate", headers, bytes.NewReader(reqBody), timeout)
 	if err != nil {
 		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
@@ -258,7 +270,7 @@ func (c *Client) UpdateCertificate(data api.CertificateParams, timeout int) (cer
 
 	baseErrMsg := fmt.Sprintf("error updating certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
 
-	resp, err := c.doRequest(ctx, "PUT", "/certificate", headers, bytes.NewReader(reqBody))
+	resp, err := c.doRequest(ctx, "PUT", "/certificate", headers, bytes.NewReader(reqBody), timeout)
 	if err != nil {
 		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
@@ -287,7 +299,7 @@ func (c *Client) DeleteCertificate(issuer, domain string, revoke bool, timeout i
 
 	baseErrMsg := fmt.Sprintf("error deleting certificate with issuer '%s' and domain '%s':", issuer, domain)
 
-	resp, err := c.doRequest(ctx, "DELETE", fmt.Sprintf("/certificate/%s/%s?revoke=%v", issuer, domain, revoke), headers, nil)
+	resp, err := c.doRequest(ctx, "DELETE", fmt.Sprintf("/certificate/%s/%s?revoke=%v", issuer, domain, revoke), headers, nil, timeout)
 	if err != nil {
 		return fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
@@ -313,7 +325,7 @@ func (c *Client) GetSelfToken(timeout int) (certstore.Token, error) {
 
 	baseErrMsg := "error getting self token"
 
-	resp, err := c.doRequest(ctx, "GET", "/token/self", headers, nil)
+	resp, err := c.doRequest(ctx, "GET", "/token/self", headers, nil, timeout)
 	if err != nil {
 		return token, fmt.Errorf("%s - %v", baseErrMsg, err)
 	}
