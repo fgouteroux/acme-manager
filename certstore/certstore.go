@@ -317,8 +317,8 @@ func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) er
 
 		err = issuerAcmeClient.Certificate.Revoke([]byte(certBytes.(string)))
 		if err != nil &&
-		   !strings.Contains(err.Error(), "Certificate is expired") &&
-		   !strings.Contains(err.Error(), "urn:ietf:params:acme:error:alreadyRevoked") {
+			!strings.Contains(err.Error(), "Certificate is expired") &&
+			!strings.Contains(err.Error(), "urn:ietf:params:acme:error:alreadyRevoked") {
 			_ = level.Error(logger).Log("err", err)
 			metrics.SetRevokedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
 			return err

@@ -315,15 +315,15 @@ func (l *LogrusAdapter) Warnf(format string, args ...interface{}) {
 }
 
 // ResponseLogHook logs the response status code and body
-func ResponseLogHook() retryablehttp.ResponseLogHook {
-	return func(logger retryablehttp.Logger, resp *http.Response) {
+func ResponseLogHook(logger *LogrusAdapter) retryablehttp.ResponseLogHook {
+	return func(_ retryablehttp.Logger, resp *http.Response) {
 		if resp.StatusCode >= 400 {
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-				logger.Printf("Failed to read response body: %v", err)
+				logger.Errorf("Failed to read response body: %v", err)
 				return
 			}
-			logger.Printf("Request failed with status code %d: %s", resp.StatusCode, string(body))
+			logger.Errorf("Request failed with status code %d: %s", resp.StatusCode, string(body))
 
 			// Restore the body content to the response
 			resp.Body = io.NopCloser(bytes.NewBuffer(body))

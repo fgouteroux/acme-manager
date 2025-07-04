@@ -68,9 +68,10 @@ func NewClient(baseURL, token, certFile, keyFile, caFile string, insecure bool, 
 
 	// Set the custom logger
 	if logger != nil {
-		retryClient.Logger = &utils.LogrusAdapter{Logger: logger}
+		logrusAdapter := &utils.LogrusAdapter{Logger: logger}
+		retryClient.Logger = logrusAdapter
 		// Set the response log hook
-		retryClient.ResponseLogHook = utils.ResponseLogHook()
+		retryClient.ResponseLogHook = utils.ResponseLogHook(logrusAdapter)
 	} else {
 		retryClient.Logger = nil
 	}
