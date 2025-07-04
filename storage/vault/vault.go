@@ -60,10 +60,9 @@ func InitClient(cfg config.Vault, logger *logrus.Logger) (*Client, error) {
 
 	// Set the custom logger
 	if logger != nil {
-		logrusAdapter := &utils.LogrusAdapter{Logger: logger}
-		retryClient.Logger = logrusAdapter
+		retryClient.Logger = logger
 		// Set the response log hook
-		retryClient.ResponseLogHook = utils.ResponseLogHook(logrusAdapter)
+		retryClient.ResponseLogHook = utils.ResponseLogHook(logger, false)
 	} else {
 		retryClient.Logger = nil
 	}

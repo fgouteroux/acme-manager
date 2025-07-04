@@ -322,10 +322,9 @@ func setRetryHTTPClient(conf *lego.Config, cfg config.Config, customLogger *logr
 
 	// Set the custom logger
 	if customLogger != nil {
-		logrusAdapter := &utils.LogrusAdapter{Logger: customLogger}
-		retryClient.Logger = logrusAdapter
+		retryClient.Logger = customLogger
 		// Set the response log hook
-		retryClient.ResponseLogHook = utils.ResponseLogHook(logrusAdapter)
+		retryClient.ResponseLogHook = utils.ResponseLogHook(customLogger, false)
 	} else {
 		retryClient.Logger = nil
 	}

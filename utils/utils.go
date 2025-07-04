@@ -293,29 +293,8 @@ func ValidateRenewalDays(value string) (int, int, error) {
 	return certRenewalMinDays, certRenewalMaxDays, nil
 }
 
-// LogrusAdapter implements the retryablehttp.Logger interface using logrus
-type LogrusAdapter struct {
-	Logger *logrus.Logger
-}
-
-func (l *LogrusAdapter) Printf(format string, args ...interface{}) {
-	l.Logger.Printf(format, args...)
-}
-
-func (l *LogrusAdapter) Errorf(format string, args ...interface{}) {
-	l.Logger.Errorf(format, args...)
-}
-
-func (l *LogrusAdapter) Debugf(format string, args ...interface{}) {
-	l.Logger.Debugf(format, args...)
-}
-
-func (l *LogrusAdapter) Warnf(format string, args ...interface{}) {
-	l.Logger.Warnf(format, args...)
-}
-
 // ResponseLogHook logs the response status code and body
-func ResponseLogHook(logger *LogrusAdapter) retryablehttp.ResponseLogHook {
+func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.ResponseLogHook {
 	return func(_ retryablehttp.Logger, resp *http.Response) {
 		if resp.StatusCode >= 400 {
 			body, err := io.ReadAll(resp.Body)
@@ -323,7 +302,25 @@ func ResponseLogHook(logger *LogrusAdapter) retryablehttp.ResponseLogHook {
 				logger.Errorf("Failed to read response body: %v", err)
 				return
 			}
-			logger.Errorf("Request failed with status code %d: %s", resp.StatusCode, string(body))
+
+			if logJSONBody {
+				// Try to unmarshal the body as JSON
+				var jsonData map[string]string
+				err = json.Unmarshal(body, &jsonData)
+				if err != nil {
+					// If not JSON, log the raw body
+					logger.Errorf("Request failed with status code %d: %s", resp.StatusCode, string(body))
+				} else {
+					fields := make(logrus.Fields, len(jsonData))
+					// If JSON, log each field
+					for key, value := range jsonData {
+						fields[key] = value
+					}
+					logger.WithFields(fields).Errorf("Request failed with status code %d", resp.StatusCode)
+				}
+			} else {
+				logger.Errorf("Request failed with status code %d: %s", resp.StatusCode, string(body))
+			}
 
 			// Restore the body content to the response
 			resp.Body = io.NopCloser(bytes.NewBuffer(body))

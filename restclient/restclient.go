@@ -69,10 +69,9 @@ func NewClient(baseURL, token, certFile, keyFile, caFile string, insecure bool, 
 
 	// Set the custom logger
 	if logger != nil {
-		logrusAdapter := &utils.LogrusAdapter{Logger: logger}
-		retryClient.Logger = logrusAdapter
+		retryClient.Logger = logger
 		// Set the response log hook
-		retryClient.ResponseLogHook = utils.ResponseLogHook(logrusAdapter)
+		retryClient.ResponseLogHook = utils.ResponseLogHook(logger, true)
 	} else {
 		retryClient.Logger = nil
 	}
@@ -110,10 +109,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, headers map
 			if _, ok := ctx.Deadline(); ok {
 				// Calculate total timeout duration in seconds
 				timeoutDuration := time.Duration(timeout) * time.Second
-				c.Logger.Errorf("Context deadline exceeded for request to %s. Timeout duration was %d seconds.",
-					req.URL.String(), timeoutDuration/time.Second)
-			} else {
-				c.Logger.Errorf("Context deadline exceeded for request to %s. No deadline set.", req.URL.String())
+				err = fmt.Errorf("%w: Timeout duration was %d seconds", err, timeoutDuration/time.Second)
 			}
 		}
 		return nil, err

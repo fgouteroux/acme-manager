@@ -52,8 +52,24 @@ type CertificateParams struct {
 func responseJSON(w http.ResponseWriter, data interface{}, err error, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
-		output, _ := json.Marshal(&responseErrorJSON{Error: err.Error()})
-		http.Error(w, string(output), statusCode)
+
+		if data != nil {
+			// If data is a map, add the error field; otherwise, create a new map
+			var combinedData map[string]string
+			if mData, ok := data.(map[string]string); ok {
+				combinedData = mData
+			} else {
+				combinedData = make(map[string]string)
+				// If data is not nil but not a map, this will ignore it for simplicity
+				// You might want to handle this case differently depending on requirements
+			}
+			combinedData["err"] = err.Error()
+			output, _ := json.Marshal(data)
+			http.Error(w, string(output), statusCode)
+		} else {
+			output, _ := json.Marshal(&responseErrorJSON{Error: err.Error()})
+			http.Error(w, string(output), statusCode)
+		}
 	} else {
 		output, _ := json.Marshal(data)
 		w.WriteHeader(statusCode)
@@ -341,17 +357,23 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		certData.Owner = tokenValue.Username
 
+		jsonData := map[string]string{
+			"user":   certData.Owner,
+			"domain": certData.Domain,
+			"issuer": certData.Issuer,
+		}
+
 		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
 
 		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
 
@@ -360,7 +382,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		})
 
 		if idx >= 0 {
-			responseJSON(w, nil, fmt.Errorf("certificate already exists"), http.StatusBadRequest)
+			responseJSON(w, jsonData, fmt.Errorf("certificate already exists"), http.StatusBadRequest)
 			return
 		}
 
@@ -379,7 +401,8 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
 			_ = level.Info(logger).Log("msg", "another create operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
-			responseJSON(w, nil, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
+
+			responseJSON(w, jsonData, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
 			return
 		}
 
@@ -388,7 +411,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		defer func() { certLockMap.Delete(certLockKey) }() // Unlock deferred
 
 		if !slices.Contains(tokenValue.Scope, "create") {
-			responseJSON(w, nil, fmt.Errorf("invalid scope, missing 'create' scope"), http.StatusForbidden)
+			responseJSON(w, jsonData, fmt.Errorf("invalid scope, missing 'create' scope"), http.StatusForbidden)
 			return
 		}
 
@@ -401,7 +424,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				statusCode = http.StatusBadRequest
 			}
 
-			responseJSON(w, nil, err, statusCode)
+			responseJSON(w, jsonData, err, statusCode)
 			return
 		}
 		_ = level.Info(logger).Log("msg", "created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
@@ -429,7 +452,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
 
@@ -537,17 +560,23 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		certData.Owner = tokenValue.Username
 
+		jsonData := map[string]string{
+			"user":   certData.Owner,
+			"domain": certData.Domain,
+			"issuer": certData.Issuer,
+		}
+
 		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
 
 		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
 
@@ -556,7 +585,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		})
 
 		if idx == -1 {
-			responseJSON(w, nil, fmt.Errorf("certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
+			responseJSON(w, jsonData, fmt.Errorf("certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
 			return
 		}
 
@@ -575,7 +604,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
 			_ = level.Info(logger).Log("msg", "another update operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
-			responseJSON(w, nil, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
+			responseJSON(w, jsonData, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
 			return
 		}
 
@@ -584,7 +613,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		defer func() { certLockMap.Delete(certLockKey) }() // Unlock deferred
 
 		if !slices.Contains(tokenValue.Scope, "update") {
-			responseJSON(w, nil, fmt.Errorf("invalid scope, missing 'update' scope"), http.StatusForbidden)
+			responseJSON(w, jsonData, fmt.Errorf("invalid scope, missing 'update' scope"), http.StatusForbidden)
 			return
 		}
 
@@ -621,7 +650,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
-					responseJSON(w, nil, err, http.StatusInternalServerError)
+					responseJSON(w, jsonData, err, http.StatusInternalServerError)
 					return
 				}
 				_ = level.Info(logger).Log("msg", "revoked certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
@@ -631,7 +660,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			newCert, err = certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
-				responseJSON(w, nil, err, http.StatusInternalServerError)
+				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
 			_ = level.Info(logger).Log("msg", "re-created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
@@ -640,7 +669,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
-				responseJSON(w, nil, err, http.StatusInternalServerError)
+				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
 
@@ -653,7 +682,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			err = vault.GlobalClient.PutSecretWithAppRole(secretKeyPath, utils.StructToMapInterface(secret))
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
-				responseJSON(w, nil, err, http.StatusInternalServerError)
+				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
 			_ = level.Info(logger).Log("msg", "updated certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
@@ -691,7 +720,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
 
@@ -742,22 +771,28 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			Owner:  tokenValue.Username,
 		}
 
+		jsonData := map[string]string{
+			"user":   certData.Owner,
+			"domain": certData.Domain,
+			"issuer": certData.Issuer,
+		}
+
 		if certData.Domain == "" || certData.Issuer == "" {
-			responseJSON(w, nil, fmt.Errorf("missing 'issuer' and/or 'domain' parameter"), http.StatusBadRequest)
+			responseJSON(w, jsonData, fmt.Errorf("missing 'issuer' and/or 'domain' parameter"), http.StatusBadRequest)
 			return
 		}
 
 		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
 
 		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
 
@@ -766,7 +801,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		})
 
 		if idx == -1 {
-			responseJSON(w, nil, fmt.Errorf("certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
+			responseJSON(w, jsonData, fmt.Errorf("certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
 			return
 		}
 
@@ -785,7 +820,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
 			_ = level.Info(logger).Log("msg", "another delete operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
-			responseJSON(w, nil, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
+			responseJSON(w, jsonData, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
 			return
 		}
 
@@ -794,7 +829,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		defer func() { certLockMap.Delete(certLockKey) }() // Unlock deferred
 
 		if !slices.Contains(tokenValue.Scope, "delete") {
-			responseJSON(w, nil, fmt.Errorf("invalid scope, missing 'delete' scope"), http.StatusForbidden)
+			responseJSON(w, jsonData, fmt.Errorf("invalid scope, missing 'delete' scope"), http.StatusForbidden)
 			return
 		}
 
@@ -803,7 +838,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
-				responseJSON(w, nil, err, http.StatusInternalServerError)
+				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
 			_ = level.Info(logger).Log("msg", "revoked certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
@@ -813,7 +848,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			err = vault.GlobalClient.DeleteSecretWithAppRole(secretKeyPath)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
-				responseJSON(w, nil, err, http.StatusInternalServerError)
+				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
 			_ = level.Info(logger).Log("msg", "deleted certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
