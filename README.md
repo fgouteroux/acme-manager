@@ -19,7 +19,7 @@ ACME Manager is a tool designed to create, manage, and deploy ACME certificates 
 
 1. ACME Manager creates certificates using [ACME](https://datatracker.ietf.org/doc/html/rfc8555).
 2. Certificates are stored securely in Vault.
-3. The application monitors expiration dates and renews certificates as needed. (by default 30d before expiration)
+3. The application monitors expiration dates and renews certificates as needed. (by default between 20-30d before expiration)
 
 
 ### Usage
@@ -431,6 +431,7 @@ Optional Certificate parameters:
 - **san** (string, comma separated): DNS domain names to add to certificate
 - **http_challenge** (string): http challenge name to use for domain validation
 - **dns_challenge** (string): dns challenge name to use for domain validation
+- **key_type** (string): Key type to use for private keys. Supported: rsa2048, rsa3072, rsa4096, rsa8192, ec256, ec384
 - **labels** (key=value string, comma separated): labels to attach to the certificate, used by the metric `acme_manager_certificate_expiry`
 
 
