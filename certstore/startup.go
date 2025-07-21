@@ -72,7 +72,7 @@ func OnStartup(logger log.Logger) error {
 	if challengeData != nil {
 		// update local cache
 		content, _ := json.Marshal(challengeData)
-		localCache.Set(AmCertificateRingKey, string(content))
+		localCache.Set(AmChallengeRingKey, string(content))
 	}
 
 	if len(tokenData) == 0 && isLeaderNow {
@@ -87,7 +87,7 @@ func OnStartup(logger log.Logger) error {
 	} else {
 		// update local cache
 		content, _ := json.Marshal(tokenData)
-		localCache.Set(AmCertificateRingKey, string(content))
+		localCache.Set(AmTokenRingKey, string(content))
 	}
 
 	if len(certificateData) == 0 && isLeaderNow {
