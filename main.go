@@ -18,8 +18,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	versioncollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/promlog"
-	"github.com/prometheus/common/promlog/flag"
 	"github.com/prometheus/common/version"
 	"github.com/sirupsen/logrus"
 
@@ -42,6 +40,10 @@ import (
 )
 
 var (
+	// Logging flags
+	logLevel  = kingpin.Flag("log.level", "Only log messages with the given severity or above. One of: [debug, info, warn, error]").Default("info").String()
+	logFormat = kingpin.Flag("log.format", "Output format of log messages. One of: [logfmt, json]").Default("logfmt").String()
+
 	serverListenAddress     = kingpin.Flag("server.listen-address", "server listen address").Default(":8989").String()
 	serverTLSCertFile       = kingpin.Flag("server.tls-cert-file", "server tls certificate file").String()
 	serverTLSKeyFile        = kingpin.Flag("server.tls-key-file", "server tls key file").String()
@@ -94,8 +96,6 @@ var (
 // @in header
 // @name X-API-Key
 func main() {
-	promlogConfig := &promlog.Config{}
-	flag.AddFlags(kingpin.CommandLine, promlogConfig)
 	kingpin.Version(version.Print("acme-manager"))
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
@@ -104,10 +104,13 @@ func main() {
 	logrusLogger := logrus.New()
 	logrusLogger.SetReportCaller(true)
 
-	logLevel, _ := logrus.ParseLevel(promlogConfig.Level.String())
-	logrusLogger.SetLevel(logLevel)
+	parsedLogLevel, err := logrus.ParseLevel(*logLevel)
+	if err != nil {
+		parsedLogLevel = logrus.InfoLevel
+	}
+	logrusLogger.SetLevel(parsedLogLevel)
 
-	if promlogConfig.Format.String() == "json" {
+	if *logFormat == "json" {
 		logrusLogger.SetFormatter(utils.UTCFormatter{Formatter: &logrus.JSONFormatter{
 			TimestampFormat: "2006-01-02T15:04:05.000Z",
 			FieldMap: logrus.FieldMap{
@@ -130,7 +133,26 @@ func main() {
 	// Override lego logger
 	legoLog.Logger = logrusLogger
 
-	logger = promlog.New(promlogConfig)
+	// Create go-kit logger
+	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stdout))
+	if *logFormat == "json" {
+		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stdout))
+	}
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
+
+	// Set log level for go-kit logger
+	switch *logLevel {
+	case "debug":
+		logger = level.NewFilter(logger, level.AllowDebug())
+	case "info":
+		logger = level.NewFilter(logger, level.AllowInfo())
+	case "warn":
+		logger = level.NewFilter(logger, level.AllowWarn())
+	case "error":
+		logger = level.NewFilter(logger, level.AllowError())
+	default:
+		logger = level.NewFilter(logger, level.AllowInfo())
+	}
 
 	if *clientMode {
 
@@ -207,7 +229,7 @@ func main() {
 		runHTTPServer(*serverListenAddress, *serverTLSCertFile, *serverTLSKeyFile, *serverReadTimeout, *serverReadHeaderTimeout)
 	}
 
-	err := godotenv.Load(*envConfigPath)
+	err = godotenv.Load(*envConfigPath)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
