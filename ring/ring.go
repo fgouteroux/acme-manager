@@ -171,6 +171,10 @@ func SimpleMemberlistKV(instanceID, instanceAddr string, instancePort int, joinM
 	// other peers with at least one `joinMembers`.
 	if len(joinMembers) > 0 {
 		config.JoinMembers = joinMembers
+		config.MinJoinBackoff = 1 * time.Second
+		config.MaxJoinBackoff = 1 * time.Minute
+		config.MaxJoinRetries = 10
+		config.AbortIfFastJoinFails = false // Don't abort on fast-join failure
 	}
 
 	// resolver defines how each peers IP address should be resolved.
