@@ -4,156 +4,191 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var managedCertificate = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "acme_manager_certificate_total",
-		Help: "Number of managed certificates by issuer and owner",
-	},
-	[]string{"issuer", "owner"},
-)
+var (
+	managedCertificate = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_certificate_total",
+			Help: "Number of managed certificates by issuer and owner",
+		},
+		[]string{"issuer", "owner"},
+	)
 
-var createdCertificate = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "acme_manager_certificate_created",
-		Help: "Created certificate by issuer, owner and domain, 1 = created, 0 = error",
-	},
-	[]string{"issuer", "owner", "domain"},
-)
+	createdCertificate = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_certificate_created",
+			Help: "Created certificate by issuer, owner and domain, 1 = created, 0 = error",
+		},
+		[]string{"issuer", "owner", "domain"},
+	)
 
-var revokedCertificate = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "acme_manager_certificate_revoke",
-		Help: "Revoked certificate by issuer, owner and domain, 1 = revoked, 0 = error",
-	},
-	[]string{"issuer", "owner", "domain"},
-)
+	revokedCertificate = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_certificate_revoke",
+			Help: "Revoked certificate by issuer, owner and domain, 1 = revoked, 0 = error",
+		},
+		[]string{"issuer", "owner", "domain"},
+	)
 
-var renewedCertificate = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "acme_manager_certificate_renewed",
-		Help: "Renewed certificate by issuer, owner and domain, 1 = renewed, 0 = error",
-	},
-	[]string{"issuer", "owner", "domain"},
-)
+	renewedCertificate = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_certificate_renewed",
+			Help: "Renewed certificate by issuer, owner and domain, 1 = renewed, 0 = error",
+		},
+		[]string{"issuer", "owner", "domain"},
+	)
 
-var createdLocalCertificate = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "acme_manager_local_certificate_created_total",
-		Help: "Number of created local certificates by issuer",
-	},
-	[]string{"issuer"},
-)
+	createdLocalCertificate = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_local_certificate_created_total",
+			Help: "Number of created local certificates by issuer",
+		},
+		[]string{"issuer"},
+	)
 
-var deletedLocalCertificate = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "acme_manager_local_certificate_deleted_total",
-		Help: "Number of deleted local certificates by issuer",
-	},
-	[]string{"issuer"},
-)
+	deletedLocalCertificate = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_local_certificate_deleted_total",
+			Help: "Number of deleted local certificates by issuer",
+		},
+		[]string{"issuer"},
+	)
 
-var runSuccessLocalCmd = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "acme_manager_local_cmd_run_success_total",
-		Help: "Number of success local cmd run",
-	},
-	[]string{},
-)
+	runSuccessLocalCmd = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_local_cmd_run_success_total",
+			Help: "Number of success local cmd run",
+		},
+		[]string{},
+	)
 
-var runFailedLocalCmd = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "acme_manager_local_cmd_run_failed_total",
-		Help: "Number of failed local cmd run",
-	},
-	[]string{},
-)
+	runFailedLocalCmd = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_local_cmd_run_failed_total",
+			Help: "Number of failed local cmd run",
+		},
+		[]string{},
+	)
 
-var getSuccessVaultSecret = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "acme_manager_vault_get_secret_success_total",
-		Help: "Number of retrieved vault secrets",
-	},
-	[]string{},
-)
+	getSuccessVaultSecret = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_vault_get_secret_success_total",
+			Help: "Number of retrieved vault secrets",
+		},
+		[]string{},
+	)
 
-var putSuccessVaultSecret = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "acme_manager_vault_put_secret_success_total",
-		Help: "Number of created/updated vault secrets",
-	},
-	[]string{},
-)
+	putSuccessVaultSecret = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_vault_put_secret_success_total",
+			Help: "Number of created/updated vault secrets",
+		},
+		[]string{},
+	)
 
-var deleteSuccessVaultSecret = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "acme_manager_vault_delete_secret_success_total",
-		Help: "Number of created vault secrets",
-	},
-	[]string{},
-)
+	deleteSuccessVaultSecret = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_vault_delete_secret_success_total",
+			Help: "Number of created vault secrets",
+		},
+		[]string{},
+	)
 
-var getFailedVaultSecret = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "acme_manager_vault_get_secret_failed_total",
-		Help: "Number of created vault secrets",
-	},
-	[]string{},
-)
+	getFailedVaultSecret = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_vault_get_secret_failed_total",
+			Help: "Number of created vault secrets",
+		},
+		[]string{},
+	)
 
-var putFailedVaultSecret = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "acme_manager_vault_put_secret_failed_total",
-		Help: "Number of deleted vault secrets",
-	},
-	[]string{},
-)
+	putFailedVaultSecret = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_vault_put_secret_failed_total",
+			Help: "Number of deleted vault secrets",
+		},
+		[]string{},
+	)
 
-var deleteFailedVaultSecret = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "acme_manager_vault_delete_secret_failed_total",
-		Help: "Number of created vault secrets",
-	},
-	[]string{},
-)
+	deleteFailedVaultSecret = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_vault_delete_secret_failed_total",
+			Help: "Number of created vault secrets",
+		},
+		[]string{},
+	)
 
-var certificateConfigReload = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "acme_manager_certificate_config_reload",
-		Help: "Number of certificate config file reload",
-	},
-	[]string{},
-)
+	certificateConfigReload = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_certificate_config_reload",
+			Help: "Number of certificate config file reload",
+		},
+		[]string{},
+	)
 
-var certificateConfigError = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "acme_manager_certificate_config_error",
-		Help: "1 if there was an error opening or reading the certificate config file, 0 otherwise",
-	},
-	[]string{},
-)
+	certificateConfigError = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_certificate_config_error",
+			Help: "1 if there was an error opening or reading the certificate config file, 0 otherwise",
+		},
+		[]string{},
+	)
 
-var configReload = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "acme_manager_config_reload",
-		Help: "Number of config file reload",
-	},
-	[]string{},
-)
+	configReload = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_config_reload",
+			Help: "Number of config file reload",
+		},
+		[]string{},
+	)
 
-var configError = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "acme_manager_config_error",
-		Help: "1 if there was an error opening or reading the config file, 0 otherwise",
-	},
-	[]string{},
-)
+	configError = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_config_error",
+			Help: "1 if there was an error opening or reading the config file, 0 otherwise",
+		},
+		[]string{},
+	)
 
-var issuerConfigError = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "acme_manager_issuer_config_error",
-		Help: "1 if there was an error with issuer config, 0 otherwise",
-	},
-	[]string{"issuer"},
+	issuerConfigError = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_issuer_config_error",
+			Help: "1 if there was an error with issuer config, 0 otherwise",
+		},
+		[]string{"issuer"},
+	)
+
+	// Metrics for KV data consistency monitoring
+	kvDataHashGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_kv_data_hash",
+			Help: "SHA256 hash of KV data content for consistency checking (first 8 bytes as float64)",
+		},
+		[]string{"key", "source"},
+	)
+
+	kvDataLengthGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_kv_data_length",
+			Help: "Length of KV data content in bytes",
+		},
+		[]string{"key", "source"},
+	)
+
+	kvHashErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_kv_hash_errors_total",
+			Help: "Total number of errors while calculating KV data hashes",
+		},
+		[]string{"key", "source", "error_type"},
+	)
+
+	nodeRole = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_node_role",
+			Help: "Node role, 0 = unknown, 1 = leader, 2 = follower",
+		},
+		[]string{},
+	)
 )
 
 func SetManagedCertificate(issuer, owner string, value float64) {
@@ -240,6 +275,22 @@ func SetIssuerConfigError(issuer string, value float64) {
 	issuerConfigError.WithLabelValues(issuer).Set(value)
 }
 
+func SetKvDataHashGauge(key, source string, value float64) {
+	kvDataHashGauge.WithLabelValues(key, source).Set(value)
+}
+
+func SetKvDataLengthGauge(key, source string, value float64) {
+	kvDataLengthGauge.WithLabelValues(key, source).Set(value)
+}
+
+func IncKvHashErrorsTotal(key, source, errorType string) {
+	kvHashErrorsTotal.WithLabelValues(key, source, errorType).Inc()
+}
+
+func SetNodeRole(value float64) {
+	nodeRole.WithLabelValues().Set(value)
+}
+
 func init() {
 	collectors := []prometheus.Collector{
 		managedCertificate,
@@ -261,6 +312,10 @@ func init() {
 		configReload,
 		configError,
 		issuerConfigError,
+		kvDataHashGauge,
+		kvDataLengthGauge,
+		kvHashErrorsTotal,
+		nodeRole,
 	}
 
 	for _, collector := range collectors {

@@ -42,73 +42,91 @@ func OnStartup(logger log.Logger) error {
 	go certificateWorker.DoWork()
 	go challengeWorker.DoWork()
 
-	// init local cache
-	localCache.Set(AmCertificateRingKey, "")
-	localCache.Set(AmTokenRingKey, "")
-	localCache.Set(AmChallengeRingKey, "")
-
 	isLeaderNow, err := ring.IsLeader(AmStore.RingConfig)
 	if err != nil {
 		_ = level.Warn(logger).Log("msg", "Failed to determine the ring leader", "err", err)
 		return err
 	}
 
-	certificateData, err := AmStore.GetKVRing(AmCertificateRingKey, isLeaderNow)
+	// Handle certificates
+	certificateData, err := AmStore.GetKVRingCert(AmCertificateRingKey, isLeaderNow)
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
+		_ = level.Error(logger).Log("msg", "Failed to get certificate data from KV ring", "err", err)
 		return err
-	}
-
-	tokenData, err := AmStore.GetKVRingToken(AmTokenRingKey, isLeaderNow)
-	if err != nil {
-		_ = level.Error(logger).Log("err", err)
-		return err
-	}
-
-	challengeData, err := AmStore.GetKVRingMapString(AmChallengeRingKey, isLeaderNow)
-	if err != nil {
-		return err
-	}
-	if challengeData != nil {
-		// update local cache
-		content, _ := json.Marshal(challengeData)
-		localCache.Set(AmChallengeRingKey, string(content))
-	}
-
-	if len(tokenData) == 0 && isLeaderNow {
-		tokens := getVaultAllToken(logger)
-
-		// update local cache
-		content, _ := json.Marshal(tokens)
-		localCache.Set(AmTokenRingKey, content)
-
-		// udpate kv store
-		AmStore.PutKVRing(AmTokenRingKey, tokens)
-	} else {
-		// update local cache
-		content, _ := json.Marshal(tokenData)
-		localCache.Set(AmTokenRingKey, string(content))
 	}
 
 	if len(certificateData) == 0 && isLeaderNow {
-
+		// if leader and no data exists, populate from vault
+		_ = level.Info(logger).Log("msg", "Leader node with empty certificate data, populating from vault")
 		vaultCertList := getVaultAllCertificate(logger)
 
-		var content []Certificate
 		for _, certData := range vaultCertList {
 			metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 		}
-		content = vaultCertList
 
-		// update local cache
-		localCache.Set(AmCertificateRingKey, content)
-
-		// udpate kv store
-		AmStore.PutKVRing(AmCertificateRingKey, content)
-	} else {
-		// update local cache
+		// Store in ring (this will also update local cache via PutKVRing)
+		AmStore.PutKVRing(AmCertificateRingKey, vaultCertList)
+	} else if len(certificateData) > 0 {
+		// Data exists, update local cache
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing certificates in KV ring", len(certificateData)))
 		content, _ := json.Marshal(certificateData)
 		localCache.Set(AmCertificateRingKey, string(content))
+	} else {
+		// Non-leader with empty data - this is normal, will be populated by ring updates
+		_ = level.Info(logger).Log("msg", "Non-leader node with empty certificate data, waiting for ring updates")
+		// Initialize with empty slice JSON
+		localCache.Set(AmCertificateRingKey, "[]")
+	}
+
+	// Handle tokens
+	tokenData, err := AmStore.GetKVRingToken(AmTokenRingKey, isLeaderNow)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "Failed to get token data from KV ring", "err", err)
+		return err
+	}
+
+	if len(tokenData) == 0 && isLeaderNow {
+		// if leader and no data exists, populate from vault
+		_ = level.Info(logger).Log("msg", "Leader node with empty token data, populating from vault")
+		tokens := getVaultAllToken(logger)
+
+		// Store in ring (this will also update local cache via PutKVRing)
+		AmStore.PutKVRing(AmTokenRingKey, tokens)
+	} else if len(tokenData) > 0 {
+		// Data exists, update local cache
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing tokens in KV ring", len(tokenData)))
+		content, _ := json.Marshal(tokenData)
+		localCache.Set(AmTokenRingKey, string(content))
+	} else {
+		// Non-leader with empty data - this is normal, will be populated by ring updates
+		_ = level.Info(logger).Log("msg", "Non-leader node with empty token data, waiting for ring updates")
+		// Initialize with empty map JSON
+		localCache.Set(AmTokenRingKey, "{}")
+	}
+
+	// Handle challenges
+	challengeData, err := AmStore.GetKVRingMapString(AmChallengeRingKey, isLeaderNow)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "Failed to get challenge data from KV ring", "err", err)
+		return err
+	}
+
+	// Always ensure local cache has the JSON representation
+	if challengeData != nil && len(challengeData) > 0 {
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing challenges in KV ring", len(challengeData)))
+		content, _ := json.Marshal(challengeData)
+		localCache.Set(AmChallengeRingKey, string(content))
+	} else {
+		// Initialize with empty map JSON
+		_ = level.Info(logger).Log("msg", "No challenge data found, initializing with empty map")
+		emptyMap := make(map[string]string)
+
+		// If we're leader, populate the ring too
+		if isLeaderNow {
+			AmStore.PutKVRing(AmChallengeRingKey, emptyMap) // This updates both ring and cache
+		} else {
+			localCache.Set(AmChallengeRingKey, "{}") // Non-leader just initializes cache
+		}
 	}
 
 	return nil

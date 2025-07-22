@@ -25,9 +25,15 @@ func (c *CertStore) GetKVRingCert(key string, isLeader bool) ([]Certificate, err
 		return data, err
 	}
 
+	// Handle empty content
+	if content == "" {
+		_ = level.Debug(c.Logger).Log("msg", fmt.Sprintf("Empty content for key '%s', returning empty slice", key))
+		return data, nil
+	}
+
 	err = json.Unmarshal([]byte(content), &data)
 	if err != nil {
-		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", key), "err", err)
+		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", key), "err", err, "content", content)
 		return data, err
 	}
 	return data, nil
@@ -41,12 +47,16 @@ func (c *CertStore) GetKVRingMapString(key string, isLeader bool) (map[string]st
 		return data, err
 	}
 
-	if content != "" {
-		err = json.Unmarshal([]byte(content), &data)
-		if err != nil {
-			_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", key), "err", err)
-			return data, err
-		}
+	// Handle empty content
+	if content == "" {
+		_ = level.Debug(c.Logger).Log("msg", fmt.Sprintf("Empty content for key '%s', returning empty map", key))
+		return make(map[string]string), nil
+	}
+
+	err = json.Unmarshal([]byte(content), &data)
+	if err != nil {
+		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", key), "err", err, "content", content)
+		return data, err
 	}
 	return data, nil
 }
@@ -59,12 +69,16 @@ func (c *CertStore) GetKVRingToken(key string, isLeader bool) (map[string]Token,
 		return data, err
 	}
 
-	if content != "" {
-		err = json.Unmarshal([]byte(content), &data)
-		if err != nil {
-			_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", key), "err", err)
-			return data, err
-		}
+	// Handle empty content
+	if content == "" {
+		_ = level.Debug(c.Logger).Log("msg", fmt.Sprintf("Empty content for key '%s', returning empty map", key))
+		return make(map[string]Token), nil
+	}
+
+	err = json.Unmarshal([]byte(content), &data)
+	if err != nil {
+		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", key), "err", err, "content", content)
+		return data, err
 	}
 	return data, nil
 }

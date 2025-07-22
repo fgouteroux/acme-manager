@@ -138,7 +138,7 @@ func main() {
 	if *logFormat == "json" {
 		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stdout))
 	}
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.Caller(5))
 
 	// Set log level for go-kit logger
 	switch *logLevel {
@@ -358,6 +358,8 @@ func main() {
 	go certstore.WatchConfigFileChanges(logger, logrusLogger, *checkConfigInterval, *configPath, version.Version)
 
 	go certstore.WatchIssuerHealth(logger, logrusLogger, *checkIssuerInterval, version.Version)
+
+	certstore.StartMonitoring(logger)
 
 	if *cleanup {
 		go certstore.Cleanup(logger, *cleanupInterval, *cleanupCertExpDays, *cleanupCertRevokeLastVersion)
