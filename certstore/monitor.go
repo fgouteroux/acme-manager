@@ -53,7 +53,7 @@ func (mon *Monitor) calculateDataHash(content string) float64 {
 func (mon *Monitor) getRole() int {
 	isLeader, err := ring.IsLeader(AmStore.RingConfig)
 	if err != nil {
-		level.Warn(mon.logger).Log("msg", "Failed to determine role", "err", err)
+		_ = level.Warn(mon.logger).Log("msg", "Failed to determine role", "err", err)
 		return 0
 	}
 
@@ -71,7 +71,7 @@ func (mon *Monitor) monitorKvKey(key string) {
 	// Get data from ring (non-leader path to ensure we get ring data)
 	ringContent, err := AmStore.GetKVRing(key, false)
 	if err != nil {
-		level.Error(mon.logger).Log("msg", "Failed to get KV ring data for hash calculation", "key", key, "err", err)
+		_ = level.Error(mon.logger).Log("msg", "Failed to get KV ring data for hash calculation", "key", key, "err", err)
 		metrics.IncKvHashErrorsTotal(key, "ring", "get_kv_error")
 		return
 	}
@@ -80,7 +80,7 @@ func (mon *Monitor) monitorKvKey(key string) {
 	var cacheContent string
 	cached, found := localCache.Get(key)
 	if !found {
-		level.Error(mon.logger).Log("msg", "Failed to get KV cache data for hash calculation", "key", key)
+		_ = level.Error(mon.logger).Log("msg", "Failed to get KV cache data for hash calculation", "key", key)
 		metrics.IncKvHashErrorsTotal(key, "cache", "get_kv_error")
 		return
 	}
@@ -92,7 +92,7 @@ func (mon *Monitor) monitorKvKey(key string) {
 	case []byte:
 		cacheContent = string(v)
 	default:
-		level.Error(mon.logger).Log("msg", "Unexpected cache value type", "key", key, "type", fmt.Sprintf("%T", v))
+		_ = level.Error(mon.logger).Log("msg", "Unexpected cache value type", "key", key, "type", fmt.Sprintf("%T", v))
 		metrics.IncKvHashErrorsTotal(key, "cache", "type_error")
 		return
 	}
@@ -112,7 +112,7 @@ func (mon *Monitor) monitorKvKey(key string) {
 	isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 
 	// Debug logging
-	level.Debug(mon.logger).Log(
+	_ = level.Debug(mon.logger).Log(
 		"msg", "Data comparison",
 		"key", key,
 		"ring_length", len(ringContent),
@@ -123,7 +123,7 @@ func (mon *Monitor) monitorKvKey(key string) {
 
 	if ringHashFloat != cacheHashFloat {
 		// Log detailed hash information for debugging
-		level.Warn(mon.logger).Log(
+		_ = level.Warn(mon.logger).Log(
 			"msg", "KV ring/cache data hash mismatch",
 			"key", key,
 			"ring_hash", ringHashFloat,
@@ -133,7 +133,7 @@ func (mon *Monitor) monitorKvKey(key string) {
 			"is_leader", isLeaderNow,
 		)
 	} else {
-		level.Debug(mon.logger).Log(
+		_ = level.Debug(mon.logger).Log(
 			"msg", "Ring and cache data match",
 			"key", key,
 			"hash", ringHashFloat,
@@ -143,7 +143,7 @@ func (mon *Monitor) monitorKvKey(key string) {
 
 // MonitorPeriodically starts periodic hash calculation for all keys
 func (mon *Monitor) MonitorPeriodically(ctx context.Context) {
-	level.Info(mon.logger).Log("msg", "Starting KV hash monitoring", "interval", mon.interval)
+	_ = level.Info(mon.logger).Log("msg", "Starting KV hash monitoring", "interval", mon.interval)
 
 	ticker := time.NewTicker(mon.interval)
 	defer ticker.Stop()
@@ -161,7 +161,7 @@ func (mon *Monitor) MonitorPeriodically(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			level.Info(mon.logger).Log("msg", "Stopping KV hash monitoring")
+			_ = level.Info(mon.logger).Log("msg", "Stopping KV hash monitoring")
 			return
 		case <-ticker.C:
 			mon.monitorAllKvKeys(keysToMonitor)
@@ -171,13 +171,13 @@ func (mon *Monitor) MonitorPeriodically(ctx context.Context) {
 
 // monitorAllKvKeys monitors all keys in a single cycle
 func (mon *Monitor) monitorAllKvKeys(keys []string) {
-	level.Debug(mon.logger).Log("msg", "Starting hash monitoring cycle")
+	_ = level.Debug(mon.logger).Log("msg", "Starting hash monitoring cycle")
 
 	for _, key := range keys {
 		mon.monitorKvKey(key)
 	}
 
-	level.Debug(mon.logger).Log("msg", "Completed hash monitoring cycle")
+	_ = level.Debug(mon.logger).Log("msg", "Completed hash monitoring cycle")
 }
 
 func StartMonitoring(logger log.Logger) {

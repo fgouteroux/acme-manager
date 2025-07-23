@@ -111,8 +111,7 @@ func OnStartup(logger log.Logger) error {
 		return err
 	}
 
-	// Always ensure local cache has the JSON representation
-	if challengeData != nil && len(challengeData) > 0 {
+	if len(challengeData) > 0 {
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing challenges in KV ring", len(challengeData)))
 		content, _ := json.Marshal(challengeData)
 		localCache.Set(AmChallengeRingKey, string(content))
