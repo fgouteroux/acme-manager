@@ -160,10 +160,8 @@ func SimpleMemberlistKV(instanceID, instanceAddr string, instancePort int, joinM
 	config.Codecs = []codec.Codec{ring.GetCodec(), JSONCodec}
 
 	// TCPTransport defines what addr and port this particular peer should listen for.
-	config.TCPTransport = memberlist.TCPTransportConfig{
-		BindPort:  instancePort,
-		BindAddrs: []string{instanceAddr},
-	}
+	config.TCPTransport.BindPort = instancePort
+	config.TCPTransport.BindAddrs = []string{instanceAddr}
 
 	// joinMembers is the address of peer who is already in the memberlist group.
 	// Usually be provided if this peer is trying to join existing cluster.
