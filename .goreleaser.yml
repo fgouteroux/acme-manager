@@ -10,6 +10,9 @@ builds:
     goos:
       - linux
       - darwin
+    goarch:
+      - amd64
+      - arm64
     ldflags: |
       -X github.com/prometheus/common/version.Version={{.Version}}
       -X github.com/prometheus/common/version.Branch={{.Branch}}
