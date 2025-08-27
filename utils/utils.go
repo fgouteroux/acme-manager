@@ -299,29 +299,34 @@ func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.Resp
 		if resp.StatusCode >= 400 {
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-				logger.Errorf("Failed to read response body: %v", err)
+				fields := logrus.Fields{"err": fmt.Sprintf("url: %s\nbody_error: %v", resp.Request.URL.String(), err)}
+				logger.WithFields(fields).Errorf("Failed to read response body")
 				return
 			}
 
+			errMsg := fmt.Sprintf("url: %s\nbody: %s", resp.Request.URL.String(), string(body))
+			fields := logrus.Fields{"err": errMsg}
+
 			if logJSONBody {
 				// Try to unmarshal the body as JSON
-				var jsonData map[string]string
+				var jsonData map[string]interface{}
 				err = json.Unmarshal(body, &jsonData)
 				if err != nil {
-					// If not JSON, log the raw body
-					logger.Errorf("Request failed with status code %d: %s", resp.StatusCode, string(body))
+					// If not JSON, keep the original err message
+					fields["err"] = fmt.Sprintf("%s\njson_parse_error: %v", errMsg, err)
 				} else {
-					fields := make(logrus.Fields, len(jsonData))
-					// If JSON, log each field
+					// If JSON, log each field in addition to the err field
 					for key, value := range jsonData {
-						fields[key] = value
+						if key == "err" {
+							// Rename conflicting err field from JSON to avoid overwriting our err field
+							fields["response_err"] = value
+						} else {
+							fields[key] = value
+						}
 					}
-					logger.WithFields(fields).Errorf("Request failed with status code %d", resp.StatusCode)
 				}
-			} else {
-				logger.Errorf("Request failed with status code %d: %s", resp.StatusCode, string(body))
 			}
-
+			logger.WithFields(fields).Errorf("Request failed with status code %d", resp.StatusCode)
 			// Restore the body content to the response
 			resp.Body = io.NopCloser(bytes.NewBuffer(body))
 		}
