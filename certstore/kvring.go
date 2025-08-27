@@ -8,8 +8,6 @@ import (
 
 	"github.com/go-kit/log/level"
 
-	"github.com/grafana/dskit/kv/memberlist"
-
 	"github.com/fgouteroux/acme_manager/memcache"
 	"github.com/fgouteroux/acme_manager/ring"
 )
@@ -127,18 +125,12 @@ func (c *CertStore) updateKV(key, content string) {
 		CreatedAt: time.Now(),
 	}
 
-	val, err := ring.JSONCodec.Encode(data)
+	ctx := context.Background()
+	err := c.RingConfig.JSONClient.CAS(ctx, key, func(in interface{}) (out interface{}, retry bool, err error) {
+		return data, true, nil
+	})
+
 	if err != nil {
-		_ = level.Error(c.Logger).Log("msg", fmt.Sprintf("Failed to encode data with '%s'", ring.JSONCodec.CodecID()), "err", err)
-		return
+		_ = level.Error(c.Logger).Log("msg", "Failed to update KV store after retries", "key", key, "err", err)
 	}
-
-	msg := memberlist.KeyValuePair{
-		Key:   key,
-		Value: val,
-		Codec: ring.JSONCodec.CodecID(),
-	}
-
-	msgBytes, _ := msg.Marshal()
-	c.RingConfig.KvStore.NotifyMsg(msgBytes)
 }
