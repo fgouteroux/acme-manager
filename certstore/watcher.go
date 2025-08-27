@@ -2,6 +2,7 @@ package certstore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -186,6 +187,17 @@ func WatchRingKvStoreChanges(ringConfig ring.AcmeManagerRing, logger log.Logger)
 			val := in.(*ring.Data)
 			localCache.Set(AmCertificateRingKey, val.Content)
 			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", AmCertificateRingKey)) // #nosec G104
+
+			// update managed certificate metric
+			var data []Certificate
+			err := json.Unmarshal([]byte(val.Content), &data)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", AmCertificateRingKey), "err", err, "content", val.Content)
+			} else {
+				for _, certData := range data {
+					metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
+				}
+			}
 		}
 		return true // yes, keep watching
 	})

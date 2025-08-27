@@ -291,6 +291,8 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 		_ = level.Error(logger).Log("err", err)
 		return certData, err
 	}
+	_ = level.Info(logger).Log("msg", "Certificate saved to vault", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
+
 	// remove local cert once stored in vault
 	err = os.RemoveAll(baseCertificateFilePath)
 	if err != nil {

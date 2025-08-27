@@ -191,10 +191,6 @@ var (
 	)
 )
 
-func SetManagedCertificate(issuer, owner string, value float64) {
-	managedCertificate.WithLabelValues(issuer, owner).Set(value)
-}
-
 func IncManagedCertificate(issuer, owner string) {
 	managedCertificate.WithLabelValues(issuer, owner).Inc()
 }
