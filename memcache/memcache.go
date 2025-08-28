@@ -41,3 +41,14 @@ func (c *MemCache) Del(key string) {
 	defer c.lock.Unlock()
 	delete(c.data, key)
 }
+
+func (c *MemCache) GetAllKeys() []string {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	keys := make([]string, 0, len(c.data))
+	for key := range c.data {
+		keys = append(keys, key)
+	}
+	return keys
+}

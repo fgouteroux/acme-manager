@@ -401,6 +401,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/kv/sync": {
+            "post": {
+                "security": [
+                    {
+                        "APIKeyAuth": []
+                    }
+                ],
+                "description": "Sync kv keys data across all nodes from leader kv data",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "kv"
+                ],
+                "summary": "Sync kv data across all nodes",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "kv keys to sync",
+                        "name": "keys",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.KVSyncResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    }
+                }
+            }
+        },
         "/token": {
             "put": {
                 "security": [
@@ -650,9 +707,15 @@ const docTemplate = `{
                     "type": "string",
                     "example": "letsencrypt"
                 },
+                "key_type": {
+                    "type": "string"
+                },
+                "labels": {
+                    "type": "string"
+                },
                 "renewal_days": {
-                    "type": "integer",
-                    "example": 30
+                    "type": "string",
+                    "example": "30"
                 },
                 "revoke": {
                     "type": "boolean"
@@ -660,6 +723,29 @@ const docTemplate = `{
                 "san": {
                     "type": "string",
                     "example": ""
+                }
+            }
+        },
+        "api.KVSyncResponse": {
+            "type": "object",
+            "properties": {
+                "failed_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "synced_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "total_keys": {
+                    "type": "integer"
                 }
             }
         },
@@ -783,6 +869,9 @@ const docTemplate = `{
                     "type": "string",
                     "example": "testfgx.example.com"
                 },
+                "encryption": {
+                    "type": "string"
+                },
                 "expires": {
                     "type": "string",
                     "example": "2025-04-09 09:56:34 +0000 UTC"
@@ -799,17 +888,30 @@ const docTemplate = `{
                     "type": "string",
                     "example": "letsencrypt"
                 },
+                "key_type": {
+                    "type": "string",
+                    "example": "ec256"
+                },
+                "labels": {
+                    "type": "string"
+                },
                 "owner": {
                     "type": "string",
                     "example": "testfgx"
                 },
+                "renewal_date": {
+                    "type": "string"
+                },
                 "renewal_days": {
-                    "type": "integer",
-                    "example": 30
+                    "type": "string",
+                    "example": "30"
                 },
                 "san": {
                     "type": "string",
                     "example": ""
+                },
+                "serial": {
+                    "type": "string"
                 },
                 "url": {
                     "type": "string",
@@ -839,6 +941,9 @@ const docTemplate = `{
                     "type": "string",
                     "example": "testfgx.example.com"
                 },
+                "encryption": {
+                    "type": "string"
+                },
                 "expires": {
                     "type": "string",
                     "example": "2025-04-09 09:56:34 +0000 UTC"
@@ -855,17 +960,30 @@ const docTemplate = `{
                     "type": "string",
                     "example": "letsencrypt"
                 },
+                "key_type": {
+                    "type": "string",
+                    "example": "ec256"
+                },
+                "labels": {
+                    "type": "string"
+                },
                 "owner": {
                     "type": "string",
                     "example": "testfgx"
                 },
+                "renewal_date": {
+                    "type": "string"
+                },
                 "renewal_days": {
-                    "type": "integer",
-                    "example": 30
+                    "type": "string",
+                    "example": "30"
                 },
                 "san": {
                     "type": "string",
                     "example": ""
+                },
+                "serial": {
+                    "type": "string"
                 }
             }
         }

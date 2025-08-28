@@ -22,14 +22,33 @@ definitions:
       issuer:
         example: letsencrypt
         type: string
+      key_type:
+        type: string
+      labels:
+        type: string
       renewal_days:
-        example: 30
-        type: integer
+        example: "30"
+        type: string
       revoke:
         type: boolean
       san:
         example: ""
         type: string
+    type: object
+  api.KVSyncResponse:
+    properties:
+      failed_keys:
+        items:
+          type: string
+        type: array
+      synced_keys:
+        items:
+          type: string
+        type: array
+      timestamp:
+        type: string
+      total_keys:
+        type: integer
     type: object
   api.TokenParams:
     properties:
@@ -118,6 +137,8 @@ definitions:
       domain:
         example: testfgx.example.com
         type: string
+      encryption:
+        type: string
       expires:
         example: 2025-04-09 09:56:34 +0000 UTC
         type: string
@@ -130,14 +151,23 @@ definitions:
       issuer:
         example: letsencrypt
         type: string
+      key_type:
+        example: ec256
+        type: string
+      labels:
+        type: string
       owner:
         example: testfgx
         type: string
+      renewal_date:
+        type: string
       renewal_days:
-        example: 30
-        type: integer
+        example: "30"
+        type: string
       san:
         example: ""
+        type: string
+      serial:
         type: string
       url:
         example: https://acme-staging-v02.api.letsencrypt.org/acme/cert/4b63b4e8b6109
@@ -159,6 +189,8 @@ definitions:
       domain:
         example: testfgx.example.com
         type: string
+      encryption:
+        type: string
       expires:
         example: 2025-04-09 09:56:34 +0000 UTC
         type: string
@@ -171,14 +203,23 @@ definitions:
       issuer:
         example: letsencrypt
         type: string
+      key_type:
+        example: ec256
+        type: string
+      labels:
+        type: string
       owner:
         example: testfgx
         type: string
+      renewal_date:
+        type: string
       renewal_days:
-        example: 30
-        type: integer
+        example: "30"
+        type: string
       san:
         example: ""
+        type: string
+      serial:
         type: string
     type: object
 info:
@@ -450,6 +491,42 @@ paths:
       summary: Read metadata certificate
       tags:
       - metadata certificate
+  /kv/sync:
+    post:
+      description: Sync kv keys data across all nodes from leader kv data
+      parameters:
+      - description: kv keys to sync
+        in: query
+        name: keys
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.KVSyncResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+      security:
+      - APIKeyAuth: []
+      summary: Sync kv data across all nodes
+      tags:
+      - kv
   /token:
     post:
       description: Create token for a given username, scope and expiration time.

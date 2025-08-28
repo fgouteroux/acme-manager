@@ -345,6 +345,9 @@ func main() {
 	http.Handle("GET /api/v1/token/{id}", LoggerHandler(api.GetTokenHandler(logger)))
 	http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(api.RevokeTokenHandler(logger, proxyClient)))
 
+	// kv
+	http.Handle("POST /api/v1/kv/sync", LoggerHandler(api.KVSyncHandler(logger)))
+
 	// update local cache on kv ring changes
 	certstore.WatchRingKvStoreChanges(ringConfig, logger)
 

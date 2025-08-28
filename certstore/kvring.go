@@ -14,6 +14,10 @@ import (
 
 var localCache = memcache.NewLocalCache()
 
+func (c *CertStore) GetLocalCacheKeys() []string {
+	return localCache.GetAllKeys()
+}
+
 func (c *CertStore) GetKVRingCert(key string, isLeader bool) ([]Certificate, error) {
 	var data []Certificate
 
@@ -122,15 +126,76 @@ func (c *CertStore) updateKV(key, content string) {
 
 	data := &ring.Data{
 		Content:   content,
-		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	ctx := context.Background()
-	err := c.RingConfig.JSONClient.CAS(ctx, key, func(in interface{}) (out interface{}, retry bool, err error) {
+	err := c.RingConfig.JSONClient.CAS(ctx, key, func(_ interface{}) (out interface{}, retry bool, err error) {
 		return data, true, nil
 	})
 
 	if err != nil {
 		_ = level.Error(c.Logger).Log("msg", "Failed to update KV store after retries", "key", key, "err", err)
 	}
+}
+
+// KVSyncFromLeader - Leader pushes its state using CAS operations
+func (c *CertStore) KVSyncFromLeader(leader string, keys []string) (map[string]interface{}, error) {
+	keysToSync := keys
+	if len(keysToSync) == 0 {
+		keysToSync = localCache.GetAllKeys()
+	}
+
+	result := map[string]interface{}{
+		"timestamp":   time.Now(),
+		"total_keys":  len(keysToSync),
+		"synced_keys": []string{},
+		"failed_keys": []string{},
+	}
+
+	syncedKeys := []string{}
+	failedKeys := []string{}
+
+	for _, key := range keysToSync {
+		if c.forceSyncKey(leader, key) {
+			syncedKeys = append(syncedKeys, key)
+		} else {
+			failedKeys = append(failedKeys, key)
+		}
+	}
+
+	result["synced_keys"] = syncedKeys
+	result["failed_keys"] = failedKeys
+
+	_ = level.Info(c.Logger).Log(
+		"msg", "kv sync completed",
+		"synced", len(syncedKeys),
+		"failed", len(failedKeys),
+	)
+
+	return result, nil
+}
+
+// forceSyncKey - Force sync a single key
+func (c *CertStore) forceSyncKey(leader, key string) bool {
+	cached, found := localCache.Get(key)
+	if !found {
+		return false
+	}
+
+	data := &ring.Data{
+		Content:   cached.Value.(string),
+		UpdatedAt: time.Now(),
+		SyncedBy:  leader,
+		Force:     true,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := c.RingConfig.JSONClient.CAS(ctx, key, func(_ interface{}) (out interface{}, retry bool, err error) {
+		return data, true, nil
+	})
+
+	return err == nil
 }

@@ -11,7 +11,9 @@ import (
 
 type Data struct {
 	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"created_at"`
+	SyncedBy  string    `json:"synced_by"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Force     bool      `json:"force"`
 }
 
 // Merge implements the memberlist.Mergeable interface.
@@ -29,11 +31,11 @@ func (c *Data) Merge(mergeable memberlist.Mergeable, _ bool) (memberlist.Mergeab
 		return nil, nil
 	}
 
-	if other.CreatedAt.Before(c.CreatedAt) {
+	if other.UpdatedAt.Before(c.UpdatedAt) {
 		return nil, nil
 	}
 
-	if c.CreatedAt.Equal(other.CreatedAt) {
+	if c.UpdatedAt.Equal(other.UpdatedAt) {
 		return nil, nil
 	}
 

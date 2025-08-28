@@ -118,7 +118,10 @@ func memberlistStatusHandler(httpPathPrefix string, kvs *memberlist.KVInitServic
 }
 
 func leaderHandler(w http.ResponseWriter, _ *http.Request) {
-	name, _ := ring.GetLeader(certstore.AmStore.RingConfig)
+	name, err := ring.GetLeader(certstore.AmStore.RingConfig)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 	_, _ = io.WriteString(w, fmt.Sprintf("{\"name\":\"%s\"}", name))
 }
 
