@@ -224,6 +224,7 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 		if (plugin.Checksum != "" && slices.Contains(config.SecuredPlugins, plugin.Name)) || plugin.Checksum == "" {
 			err = executeCommand(logger, plugin.Path, []string{certData.Domain, certData.Issuer, challengeType}, plugin.Timeout, plugin.Env)
 			if err != nil {
+				metrics.SetCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
 				return certData, err
 			}
 		}
