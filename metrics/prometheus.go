@@ -182,6 +182,14 @@ var (
 		[]string{"key", "source", "error_type"},
 	)
 
+	kvDataUpdateTimeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_kv_data_update_time_seconds",
+			Help: "Unix timestamp of when KV data was last updated",
+		},
+		[]string{"key"},
+	)
+
 	nodeRole = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "acme_manager_node_role",
@@ -283,6 +291,10 @@ func IncKvHashErrorsTotal(key, source, errorType string) {
 	kvHashErrorsTotal.WithLabelValues(key, source, errorType).Inc()
 }
 
+func SetKVDataUpdateTime(key string, value float64) {
+	kvDataUpdateTimeGauge.WithLabelValues(key).Set(value)
+}
+
 func SetNodeRole(value float64) {
 	nodeRole.WithLabelValues().Set(value)
 }
@@ -311,6 +323,7 @@ func init() {
 		kvDataHashGauge,
 		kvDataLengthGauge,
 		kvHashErrorsTotal,
+		kvDataUpdateTimeGauge,
 		nodeRole,
 	}
 

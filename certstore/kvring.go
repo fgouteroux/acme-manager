@@ -9,6 +9,7 @@ import (
 	"github.com/go-kit/log/level"
 
 	"github.com/fgouteroux/acme_manager/memcache"
+	"github.com/fgouteroux/acme_manager/metrics"
 	"github.com/fgouteroux/acme_manager/ring"
 )
 
@@ -124,9 +125,10 @@ func (c *CertStore) updateKV(key, content string) {
 	// update local cache
 	localCache.Set(key, content)
 
+	updatedAt := time.Now()
 	data := &ring.Data{
 		Content:   content,
-		UpdatedAt: time.Now(),
+		UpdatedAt: updatedAt,
 	}
 
 	ctx := context.Background()
@@ -136,6 +138,8 @@ func (c *CertStore) updateKV(key, content string) {
 
 	if err != nil {
 		_ = level.Error(c.Logger).Log("msg", "Failed to update KV store after retries", "key", key, "err", err)
+	} else {
+		metrics.SetKVDataUpdateTime(key, float64(updatedAt.Unix()))
 	}
 }
 
@@ -183,9 +187,10 @@ func (c *CertStore) forceSyncKey(leader, key string) bool {
 		return false
 	}
 
+	updatedAt := time.Now()
 	data := &ring.Data{
 		Content:   cached.Value.(string),
-		UpdatedAt: time.Now(),
+		UpdatedAt: updatedAt,
 		SyncedBy:  leader,
 		Force:     true,
 	}
@@ -197,5 +202,8 @@ func (c *CertStore) forceSyncKey(leader, key string) bool {
 		return data, true, nil
 	})
 
+	if err == nil {
+		metrics.SetKVDataUpdateTime(key, float64(updatedAt.Unix()))
+	}
 	return err == nil
 }
