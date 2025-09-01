@@ -2,6 +2,7 @@ package ring
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -55,20 +56,58 @@ type AcmeManagerRing struct {
 	JSONClient    *memberlist.Client
 }
 
-func New(instanceID, instanceAddr, joinMembers, instanceInterfaceNames string, instancePort int, logger log.Logger) (AcmeManagerRing, error) {
+// Config holds all ring-related configuration
+type Config struct {
+	// Memberlist configuration
+	MemberlistKV memberlist.KVConfig
+
+	// Instance configuration (not covered by memberlist config)
+	InstanceID             string
+	InstanceAddr           string
+	InstancePort           int
+	InstanceInterfaceNames string
+	JoinMembers            string
+
+	// Ring lifecycler configuration
+	KeepInstanceInTheRingOnShutdown bool
+	HeartbeatPeriod                 time.Duration
+	HeartbeatTimeout                time.Duration
+}
+
+// RegisterFlagsWithPrefix registers all ring flags with the given prefix
+func (cfg *Config) RegisterFlagsWithPrefix(fs *flag.FlagSet, prefix string) {
+	// Register memberlist KV configuration flags
+	cfg.MemberlistKV.RegisterFlagsWithPrefix(fs, prefix)
+
+	// Register instance-specific flags that aren't part of memberlist config
+	fs.StringVar(&cfg.InstanceID, prefix+"instance-id", "", "Instance ID to register in the ring.")
+	fs.StringVar(&cfg.InstanceAddr, prefix+"instance-addr", "", "IP address to advertise in the ring. Default is auto-detected.")
+	fs.IntVar(&cfg.InstancePort, prefix+"instance-port", 7946, "Port to advertise in the ring.")
+	fs.StringVar(&cfg.InstanceInterfaceNames, prefix+"instance-interface-names", "", "List of network interface names to look up when finding the instance IP address.")
+	fs.StringVar(&cfg.JoinMembers, prefix+"join-members", "", "Other cluster members to join. Comma-separated list of addresses.")
+
+	// Register ring lifecycler flags
+	fs.BoolVar(&cfg.KeepInstanceInTheRingOnShutdown, prefix+"keep-instance-in-ring-on-shutdown", true, "Keep the instance in the ring when shutting down. If false, instance will be removed from ring immediately.")
+	fs.DurationVar(&cfg.HeartbeatPeriod, prefix+"heartbeat-period", 15*time.Second, "Period at which to heartbeat to the ring.")
+	fs.DurationVar(&cfg.HeartbeatTimeout, prefix+"heartbeat-timeout", 30*time.Second, "The heartbeat timeout after which instances are assumed unhealthy.")
+}
+
+// NewWithConfig creates a new AcmeManagerRing using the Config struct
+func NewWithConfig(ringConfig Config, logger log.Logger) (AcmeManagerRing, error) {
 	var config AcmeManagerRing
 	ctx := context.Background()
 
 	joinMembersSlice := make([]string, 0)
-	if joinMembers != "" {
-		joinMembersSlice = strings.Split(joinMembers, ",")
+	if ringConfig.JoinMembers != "" {
+		joinMembersSlice = strings.Split(ringConfig.JoinMembers, ",")
 	}
 
 	instanceInterfaceNamesSlice := make([]string, 0)
-	if instanceInterfaceNames != "" {
-		instanceInterfaceNamesSlice = strings.Split(instanceInterfaceNames, ",")
+	if ringConfig.InstanceInterfaceNames != "" {
+		instanceInterfaceNamesSlice = strings.Split(ringConfig.InstanceInterfaceNames, ",")
 	}
 
+	instanceID := ringConfig.InstanceID
 	if instanceID == "" {
 		var err error
 		instanceID, err = os.Hostname()
@@ -81,8 +120,8 @@ func New(instanceID, instanceAddr, joinMembers, instanceInterfaceNames string, i
 	reg := prometheus.DefaultRegisterer
 	reg = prometheus.WrapRegistererWithPrefix("acme_manager_", reg)
 
-	// start memberlist service.
-	memberlistsvc := SimpleMemberlistKV(instanceID, instanceAddr, instancePort, joinMembersSlice, logger, reg)
+	// Use the structured configuration instead of hardcoded values
+	memberlistsvc := NewMemberlistKVWithConfig(ringConfig, instanceID, joinMembersSlice, logger, reg)
 	if err := services.StartAndAwaitRunning(ctx, memberlistsvc); err != nil {
 		return config, err
 	}
@@ -102,7 +141,7 @@ func New(instanceID, instanceAddr, joinMembers, instanceInterfaceNames string, i
 		return config, err
 	}
 
-	lfc, err := SimpleRingLifecycler(ringClient, instanceID, instanceAddr, instancePort, instanceInterfaceNamesSlice, logger, reg)
+	lfc, err := SimpleRingLifecyclerWithConfig(ringClient, ringConfig, instanceID, instanceInterfaceNamesSlice, logger, reg)
 	if err != nil {
 		return config, err
 	}
@@ -130,6 +169,81 @@ func New(instanceID, instanceAddr, joinMembers, instanceInterfaceNames string, i
 	}, nil
 }
 
+// NewMemberlistKVWithConfig creates memberlist KV using the structured config
+func NewMemberlistKVWithConfig(ringConfig Config, instanceID string, joinMembers []string, logger log.Logger, reg prometheus.Registerer) *memberlist.KVInitService {
+	// Start with the provided configuration (which includes all the flags that were set)
+	config := ringConfig.MemberlistKV
+
+	// Codecs is used to tell memberlist library how to serialize/de-serialize the messages between peers.
+	// `ring.GetCode()` uses default, which is protobuf.
+	config.Codecs = []codec.Codec{ring.GetCodec(), JSONCodec}
+
+	// TCPTransport defines what addr and port this particular peer should listen for.
+	// These may have been set via flags, but ensure they're set
+	if config.TCPTransport.BindPort == 0 {
+		config.TCPTransport.BindPort = ringConfig.InstancePort
+	}
+	if len(config.TCPTransport.BindAddrs) == 0 && ringConfig.InstanceAddr != "" {
+		config.TCPTransport.BindAddrs = []string{ringConfig.InstanceAddr}
+	}
+	if len(config.TCPTransport.BindAddrs) == 0 {
+		config.TCPTransport.BindAddrs = []string{"127.0.0.1"}
+	}
+
+	// joinMembers is the address of peer who is already in the memberlist group.
+	if len(joinMembers) > 0 {
+		config.JoinMembers = joinMembers
+		// Set sensible defaults if not configured via flags
+		if config.MinJoinBackoff == 0 {
+			config.MinJoinBackoff = 1 * time.Second
+		}
+		if config.MaxJoinBackoff == 0 {
+			config.MaxJoinBackoff = 1 * time.Minute
+		}
+		if config.MaxJoinRetries == 0 {
+			config.MaxJoinRetries = 10
+		}
+	}
+
+	// resolver defines how each peers IP address should be resolved.
+	resolver := dns.NewProvider(log.With(logger, "component", "dns"), reg, dns.GolangResolverType)
+
+	// Set remaining defaults if not configured via flags
+	if config.NodeName == "" {
+		config.NodeName = instanceID
+	}
+	if config.StreamTimeout == 0 {
+		config.StreamTimeout = 10 * time.Second
+	}
+	if config.GossipToTheDeadTime == 0 {
+		config.GossipToTheDeadTime = 30 * time.Second
+	}
+
+	return memberlist.NewKVInitService(
+		&config,
+		log.With(logger, "component", "memberlist"),
+		resolver,
+		reg,
+	)
+}
+
+// Keep the original New function for backward compatibility
+func New(instanceID, instanceAddr, joinMembers, instanceInterfaceNames string, instancePort int, logger log.Logger) (AcmeManagerRing, error) {
+	// Convert old parameters to new config structure
+	config := Config{
+		InstanceID:             instanceID,
+		InstanceAddr:           instanceAddr,
+		InstancePort:           instancePort,
+		InstanceInterfaceNames: instanceInterfaceNames,
+		JoinMembers:            joinMembers,
+	}
+
+	// Initialize MemberlistKV config with defaults
+	flagext.DefaultValues(&config.MemberlistKV)
+
+	return NewWithConfig(config, logger)
+}
+
 // SimpleRing returns an instance of `ring.Ring` as a service. Starting and Stopping the service is upto the caller.
 func SimpleRing(store kv.Client, logger log.Logger, reg prometheus.Registerer) (*ring.Ring, error) {
 	var config ring.Config
@@ -148,75 +262,36 @@ func SimpleRing(store kv.Client, logger log.Logger, reg prometheus.Registerer) (
 	)
 }
 
-// SimpleMemberlistKV returns a memberlist KV as a service. Starting and Stopping the service is upto the caller.
-// Caller can create an instance `kv.Client` from returned service by explicity calling `.GetMemberlistKV()`
-// which can be used as dependency to create a ring or ring lifecycler.
-func SimpleMemberlistKV(instanceID, instanceAddr string, instancePort int, joinMembers []string, logger log.Logger, reg prometheus.Registerer) *memberlist.KVInitService {
-	var config memberlist.KVConfig
-	flagext.DefaultValues(&config)
-
-	// Codecs is used to tell memberlist library how to serialize/de-serialize the messages between peers.
-	// `ring.GetCode()` uses default, which is protobuf.
-	config.Codecs = []codec.Codec{ring.GetCodec(), JSONCodec}
-
-	// TCPTransport defines what addr and port this particular peer should listen for.
-	config.TCPTransport.BindPort = instancePort
-	config.TCPTransport.BindAddrs = []string{instanceAddr}
-
-	// joinMembers is the address of peer who is already in the memberlist group.
-	// Usually be provided if this peer is trying to join existing cluster.
-	// Generally you start very first peer without `joinMembers`, but start every
-	// other peers with at least one `joinMembers`.
-	if len(joinMembers) > 0 {
-		config.JoinMembers = joinMembers
-		config.MinJoinBackoff = 1 * time.Second
-		config.MaxJoinBackoff = 1 * time.Minute
-		config.MaxJoinRetries = 10
-		config.AbortIfFastJoinFails = false // Don't abort on fast-join failure
-	}
-
-	// resolver defines how each peers IP address should be resolved.
-	// We use default resolver comes with Go.
-	resolver := dns.NewProvider(log.With(logger, "component", "dns"), reg, dns.GolangResolverType)
-
-	config.NodeName = instanceID
-	config.StreamTimeout = 10 * time.Second
-	config.GossipToTheDeadTime = 30 * time.Second
-	// Enable message compression, reduce bandwidth usage but slightly more CPU usage
-	config.EnableCompression = true
-	// Disable state push/pull syncs completely
-	config.PushPullInterval = 0 * time.Second
-
-	return memberlist.NewKVInitService(
-		&config,
-		log.With(logger, "component", "memberlist"),
-		resolver,
-		reg,
-	)
-}
-
-// SimpleRingLifecycler returns an instance lifecycler for the given `kv.Client`.
-// Usually lifecycler will be part of the server side that act as a single peer.
-func SimpleRingLifecycler(store kv.Client, instanceID, instanceAddr string, instancePort int, instanceInterfaceNames []string, logger log.Logger, reg prometheus.Registerer) (*ring.BasicLifecycler, error) {
+// SimpleRingLifecyclerWithConfig returns an instance lifecycler using the Config values
+func SimpleRingLifecyclerWithConfig(store kv.Client, ringConfig Config, instanceID string, instanceInterfaceNames []string, logger log.Logger, reg prometheus.Registerer) (*ring.BasicLifecycler, error) {
 	var config ring.BasicLifecyclerConfig
-	instanceAddr, err := ring.GetInstanceAddr(instanceAddr, instanceInterfaceNames, logger, false)
+	instanceAddr, err := ring.GetInstanceAddr(ringConfig.InstanceAddr, instanceInterfaceNames, logger, false)
 	if err != nil {
 		return nil, err
 	}
 
 	config.ID = instanceID
-	config.Addr = fmt.Sprintf("%s:%d", instanceAddr, instancePort)
-	config.HeartbeatPeriod = heartbeatPeriod
-	config.HeartbeatTimeout = heartbeatTimeout
+	config.Addr = fmt.Sprintf("%s:%d", instanceAddr, ringConfig.InstancePort)
+
+	config.HeartbeatPeriod = ringConfig.HeartbeatPeriod
+	if config.HeartbeatPeriod == 0 {
+		config.HeartbeatPeriod = heartbeatPeriod // fallback to default
+	}
+
+	config.HeartbeatTimeout = ringConfig.HeartbeatTimeout
+	if config.HeartbeatTimeout == 0 {
+		config.HeartbeatTimeout = heartbeatTimeout // fallback to default
+	}
+
 	config.TokensObservePeriod = 0
 	config.NumTokens = ringNumTokens
-	config.KeepInstanceInTheRingOnShutdown = true
+	config.KeepInstanceInTheRingOnShutdown = ringConfig.KeepInstanceInTheRingOnShutdown
 
 	var delegate ring.BasicLifecyclerDelegate
 
-	delegate = ring.NewInstanceRegisterDelegate(ring.ACTIVE, ringNumTokens)
+	delegate = ring.NewInstanceRegisterDelegate(ring.ACTIVE, config.NumTokens)
 	delegate = ring.NewLeaveOnStoppingDelegate(delegate, logger)
-	delegate = ring.NewAutoForgetDelegate(ringAutoForgetUnhealthyPeriods*heartbeatPeriod, delegate, logger)
+	delegate = ring.NewAutoForgetDelegate(ringAutoForgetUnhealthyPeriods*config.HeartbeatPeriod, delegate, logger)
 
 	return ring.NewBasicLifecycler(
 		config,

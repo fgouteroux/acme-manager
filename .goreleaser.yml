@@ -5,7 +5,24 @@ before:
     - go mod tidy
 
 builds:
-  - env:
+  - id: acme-manager-server
+    main: ./cmd/acme-manager-server
+    binary: acme-manager-server
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags: |
+      -X github.com/prometheus/common/version.Version={{.Version}}
+      -X github.com/prometheus/common/version.Branch={{.Branch}}
+  - id: acme-manager-client
+    main: ./cmd/acme-manager-client
+    binary: acme-manager-client
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
@@ -18,8 +35,28 @@ builds:
       -X github.com/prometheus/common/version.Branch={{.Branch}}
 
 archives:
-  - name_template: >-
-      {{- .ProjectName }}_
+  - id: server-archive
+    builds: [acme-manager-server]
+    name_template: >-
+      acme-manager-server_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end -}}
+  - id: client-archive
+    builds: [acme-manager-client]
+    name_template: >-
+      acme-manager-client_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end -}}
+  - id: combined-archive
+    builds: [acme-manager-server, acme-manager-client]
+    name_template: >-
+      acme-manager-complete_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
