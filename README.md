@@ -25,69 +25,60 @@ ACME Manager is a tool designed to create, manage, and deploy ACME certificates 
 ### Usage
 
 ```
-usage: acme_manager [<flags>]
+Usage of acme-manager-server:
 
+ACME Manager Server - Manages ACME certificates in cluster mode
+Version: (version=v0.5.1-next, branch=main, revision=29075921bf870fcf3a769ea2758b3e3fd279271d)
 
 Flags:
-  -h, --[no-]help                Show context-sensitive help (also try --help-long and --help-man).
-      --server.listen-address=":8989"  
-                                 server listen address
-      --server.tls-cert-file=SERVER.TLS-CERT-FILE  
-                                 server tls certificate file
-      --server.tls-key-file=SERVER.TLS-KEY-FILE  
-                                 server tls key file
-      --server.tls-client-ca-file=SERVER.TLS-CLIENT-CA-FILE  
-                                 Root certificate authority used to verify client certificates
-      --server.http-read-timeout=300  
-                                 Read timeout for entire HTTP request, including headers and body
-      --server.http-read-header-timeout=10  
-                                 Read timeout for HTTP request headers
-      --config-path="config.yml"  
-                                 Config path
-      --env-config-path=".env"   Environment vars config path
-      --check-renewal-interval=30m  
-                                 Time interval to check if certificate renewal needed
-      --check-config-interval=30s  
-                                 Time interval to check if config file changes
-      --check-token-interval=1m  Time interval to check if tokens expired
-      --check-issuer-interval=10m  
-                                 Time interval to check issuer health
-      --ring.instance-id=RING.INSTANCE-ID  
-                                 Instance ID to register in the ring.
-      --ring.instance-addr=RING.INSTANCE-ADDR  
-                                 IP address to advertise in the ring. Default is auto-detected.
-      --ring.instance-port=7946  Port to advertise in the ring.
-      --ring.instance-interface-names=RING.INSTANCE-INTERFACE-NAMES  
-                                 List of network interface names to look up when finding the instance IP address.
-      --ring.join-members=RING.JOIN-MEMBERS  
-                                 Other cluster members to join.
-      --[no-]client              Enables client mode.
-      --[no-]client.pull-only    Set client in pull mode. Manage local certificate files based on remote server changes.
-      --client.manager-url="http://localhost:8989/api/v1"  
-                                 Client manager URL ($ACME_MANAGER_URL)
-      --client.manager-token=CLIENT.MANAGER-TOKEN  
-                                 Client manager token ($ACME_MANAGER_TOKEN)
-      --client.tls-ca-file=CLIENT.TLS-CA-FILE  
-                                 Client manager tls ca certificate file
-      --client.tls-cert-file=CLIENT.TLS-CERT-FILE  
-                                 Client manager tls certificate file
-      --client.tls-key-file=CLIENT.TLS-KEY-FILE  
-                                 Client manager tls key file
-      --[no-]client.tls-skip-verify  
-                                 Client manager tls skip verify
-      --client.config-path="client-config.yml"  
-                                 Client config path
-      --client.check-config-interval=5m  
-                                 Time interval to check if client config file changes and to update local certificate file
-      --[no-]cleanup             Enables cleanup in vault and CA Issuers.
-      --cleanup.interval=1h      Time interval to scan vault secret certificates and cleanup if needed
-      --cleanup.cert-expire-days=10  
-                                 Number of days before old certificate expires to revoke and delete vault secret version
-      --[no-]cleanup.cert-revoke-last-version  
-                                 Revoke last certificate version and delete vault secret version
-      --log.level=info           Only log messages with the given severity or above. One of: [debug, info, warn, error]
-      --log.format=logfmt        Output format of log messages. One of: [logfmt, json]
-      --[no-]version             Show application version.
+  -check-config-interval duration
+        Time interval to check if config file changes. (default "30s")
+  -check-issuer-interval duration
+        Time interval to check issuer health. (default "10m0s")
+  -check-renewal-interval duration
+        Time interval to check if certificate renewal needed. (default "30m0s")
+  -check-token-interval duration
+        Time interval to check if tokens expired. (default "1m0s")
+  -cleanup
+        Enables cleanup in vault and CA Issuers.
+  -cleanup.cert-expire-days int
+        Number of days before old certificate expires to revoke and delete vault secret version. (default "10")
+  -cleanup.cert-revoke-last-version
+        Revoke last certificate version and delete vault secret version.
+  -cleanup.interval duration
+        Time interval to scan vault secret certificates and cleanup if needed. (default "1h0m0s")
+  -config-path string
+        Config path. (default "config.yml")
+  -env-config-path string
+        Environment vars config path. (default ".env")
+  -log.format string
+        Output format of log messages. One of: [logfmt, json]. (default "logfmt")
+  -log.level string
+        Only log messages with the given severity or above. One of: [debug, info, warn, error]. (default "info")
+  -ring.instance-addr string
+        IP address to advertise in the ring. Default is auto-detected.
+  -ring.instance-id string
+        Instance ID to register in the ring.
+  -ring.instance-port int
+        Port to advertise in the ring. (default "7946")
+  -ring.join-members string
+        Other cluster members to join. Comma-separated list of addresses.
+  -server.http-read-header-timeout int
+        Read timeout for HTTP request headers. (default "10")
+  -server.http-read-timeout int
+        Read timeout for entire HTTP request, including headers and body. (default "300")
+  -server.listen-address string
+        Server listen address. (default ":8989")
+  -server.tls-cert-file string
+        Server tls certificate file.
+  -server.tls-client-ca-file string
+        Root certificate authority used to verify client certificates.
+  -server.tls-key-file string
+        Server tls key file.
+  -version
+        Show version information
+
+For all flags including advanced memberlist configuration options, use: --help-all
 ```
 
 ### High availability with clustering
@@ -392,7 +383,51 @@ It is also possible to execute a custom command once certificate have been gener
 The client start a webserver to expose some metrics.
 
 ```
-$ acme_manager --client.config-path config.yml --client
+Usage of acme-manager-client:
+
+ACME Manager Client - Manages local certificates from cluster
+Version: (version=v0.5.1-next, branch=main, revision=29075921bf870fcf3a769ea2758b3e3fd279271d-modified)
+
+Flags:
+  -client.check-config-interval duration
+      Time interval to check if client config file changes and to update local certificate file. (default 5m0s)
+  -client.config-path string
+      Client config path. (default "client-config.yml")
+  -client.manager-token string
+      Client manager token (can be set via ACME_MANAGER_TOKEN env var).
+  -client.manager-url string
+      Client manager URL (can be set via ACME_MANAGER_URL env var). (default "http://localhost:8989/api/v1")
+  -client.pull-only
+      Set client in pull mode. Manage local certificate files based on remote server changes.
+  -client.tls-ca-file string
+      Client manager tls ca certificate file.
+  -client.tls-cert-file string
+      Client manager tls certificate file.
+  -client.tls-key-file string
+      Client manager tls key file.
+  -client.tls-skip-verify
+      Client manager tls skip verify.
+  -log.format string
+      Output format of log messages. One of: [logfmt, json]. (default "logfmt")
+  -log.level string
+      Only log messages with the given severity or above. One of: [debug, info, warn, error]. (default "info")
+  -server.http-read-header-timeout int
+      Read timeout for HTTP request headers. (default 10)
+  -server.http-read-timeout int
+      Read timeout for entire HTTP request, including headers and body. (default 300)
+  -server.listen-address string
+      Server listen address. (default ":8989")
+  -server.tls-cert-file string
+      Server tls certificate file.
+  -server.tls-key-file string
+      Server tls key file.
+  -version
+      Show version information
+```
+
+Example:
+```
+$ acme_manager -client.config-path config.yml
 
 ts=2025-01-10T10:18:49.077Z caller=client.go:40 level=info msg="Checking certificates from config file"
 ts=2025-01-10T10:18:49.165Z caller=client.go:224 level=info msg="Deployed certificate /etc/myapp/ssl/letsencrypt/testfgx01.example.com.crt"

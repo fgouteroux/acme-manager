@@ -34,6 +34,9 @@
         <th>Domain</th>
         <th>Issuer</th>
         <th>Expires</th>
+        <th>Key type</th>
+        <th>Encryption</th>
+        <th>Serial</th>
         <th>Bundle</th>
         <th>SAN</th>
         <th>Duration</th>
@@ -50,6 +53,9 @@
         <td id="domain">{{ $cert.Domain }}</td>
         <td id="issuer">{{ $cert.Issuer }}</td>
         <td id="expires">{{ $cert.Expires }}</td>
+        <td id="key_type">{{ $cert.KeyType }}</td>
+        <td id="encryption">{{ $cert.Encryption }}</td>
+        <td id="serial">{{ $cert.Serial }}</td>
         <td id="bundle">{{ $cert.Bundle }}</td>
         {{ if $cert.SAN }}
         <td id="san">{{ range $item := Split $cert.SAN "," }}{{ $item }}<br>{{ end }}</td>
