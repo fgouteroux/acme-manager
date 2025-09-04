@@ -63,6 +63,7 @@ var (
 	checkConfigInterval  = flag.Duration("check-config-interval", 30*time.Second, "Time interval to check if config file changes.")
 	checkTokenInterval   = flag.Duration("check-token-interval", 1*time.Minute, "Time interval to check if tokens expired.")
 	checkIssuerInterval  = flag.Duration("check-issuer-interval", 10*time.Minute, "Time interval to check issuer health.")
+	checkKVRingInterval  = flag.Duration("check-kvring-interval", 10*time.Minute, "Time interval to check kvring consistency with vault.")
 
 	// Ring configuration - ALL ring flags automatically registered
 	ringConfig = &ring.Config{}
@@ -422,6 +423,8 @@ func main() {
 	go certstore.WatchConfigFileChanges(logger, logrusLogger, *checkConfigInterval, *configPath, version.Version)
 
 	go certstore.WatchIssuerHealth(logger, logrusLogger, *checkIssuerInterval, version.Version)
+
+	go certstore.WatchKVRingConsistencyWithVault(logger, *checkKVRingInterval)
 
 	certstore.StartMonitoring(logger)
 

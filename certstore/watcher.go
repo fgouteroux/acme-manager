@@ -180,6 +180,29 @@ func WatchIssuerHealth(logger log.Logger, customLogger *logrus.Logger, interval 
 	}
 }
 
+func WatchKVRingConsistencyWithVault(logger log.Logger, interval time.Duration) {
+	// create a new Ticker
+	tk := time.NewTicker(interval)
+	// start the ticker
+	for range tk.C {
+		isLeaderNow, err := ring.IsLeader(AmStore.RingConfig)
+		if err != nil {
+			_ = level.Error(logger).Log("msg", "Failed to check if current node is leader", "err", err)
+			continue
+		}
+
+		if isLeaderNow {
+			_ = level.Info(logger).Log("msg", "Checking KV ring consistency with vault storage")
+
+			// Check certificates consistency
+			checkCertificateConsistency(logger)
+
+			// Check tokens consistency
+			checkTokenConsistency(logger)
+		}
+	}
+}
+
 func WatchRingKvStoreChanges(ringConfig ring.AcmeManagerRing, logger log.Logger) {
 	go ringConfig.KvStore.WatchKey(context.Background(), AmCertificateRingKey, ring.JSONCodec, func(in interface{}) bool {
 		isLeaderNow, _ := ring.IsLeader(ringConfig)
