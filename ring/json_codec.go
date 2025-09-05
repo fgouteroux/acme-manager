@@ -1,5 +1,5 @@
 package ring
-
+/*
 import (
 	"fmt"
 	"time"
@@ -75,3 +75,4 @@ func (jsonCodec) Encode(obj interface{}) ([]byte, error) {
 	return jsoniter.ConfigFastest.Marshal(obj)
 }
 func (jsonCodec) CodecID() string { return "jsonCodec" }
+*/

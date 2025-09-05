@@ -11,6 +11,8 @@ import (
 	"github.com/fgouteroux/acme_manager/memcache"
 	"github.com/fgouteroux/acme_manager/metrics"
 	"github.com/fgouteroux/acme_manager/ring"
+
+	"github.com/prometheus/prometheus/model/timestamp"
 )
 
 var localCache = memcache.NewLocalCache()
@@ -128,7 +130,7 @@ func (c *CertStore) updateKV(key, content string) {
 	updatedAt := time.Now()
 	data := &ring.Data{
 		Content:   content,
-		UpdatedAt: updatedAt,
+		UpdatedAt: timestamp.FromTime(updatedAt),
 	}
 
 	ctx := context.Background()
@@ -190,7 +192,7 @@ func (c *CertStore) forceSyncKey(leader, key string) bool {
 	updatedAt := time.Now()
 	data := &ring.Data{
 		Content:   cached.Value.(string),
-		UpdatedAt: updatedAt,
+		UpdatedAt: timestamp.FromTime(updatedAt),
 		SyncedBy:  leader,
 		Force:     true,
 	}
