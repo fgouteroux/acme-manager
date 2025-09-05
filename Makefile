@@ -23,6 +23,17 @@ security:
 build:
 	goreleaser build --snapshot --clean
 
+# Add docs generation target
+docs: cmd/acme-manager-server/main.go
+	swag init -g cmd/acme-manager-server/main.go -o docs --parseDependency --parseInternal
+
+docs-fmt:
+	swag fmt -g cmd/acme-manager-server/main.go
+
+# Force docs regeneration even if files exist
+docs-force:
+	swag init -g cmd/acme-manager-server/main.go -o docs --parseDependency --parseInternal
+
 test: compose-up
 	rm -rf api/tests
 	mkdir -p api/tests/accounts/pebble
@@ -42,3 +53,6 @@ compose-down:
 
 release:
 	goreleaser release --skip-publish --rm-dist
+
+# Declare phony targets (targets that don't create files with the same name)
+.PHONY: clean tidy fmt lint security build docs docs-fmt docs-force test compose-up compose-down release

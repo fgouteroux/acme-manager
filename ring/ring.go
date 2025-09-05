@@ -53,7 +53,7 @@ type AcmeManagerRing struct {
 	Lifecycler    *ring.BasicLifecycler
 	Memberlistsvc *memberlist.KVInitService
 	KvStore       *memberlist.KV
-	JSONClient    *memberlist.Client
+	DataClient    *memberlist.Client
 }
 
 // Config holds all ring-related configuration
@@ -136,7 +136,7 @@ func NewWithConfig(ringConfig Config, logger log.Logger) (AcmeManagerRing, error
 		return config, err
 	}
 
-	jsonClient, err := memberlist.NewClient(store, JSONCodec)
+	jsonClient, err := memberlist.NewClient(store, GetDataCodec())
 	if err != nil {
 		return config, err
 	}
@@ -165,7 +165,7 @@ func NewWithConfig(ringConfig Config, logger log.Logger) (AcmeManagerRing, error
 		Lifecycler:    lfc,
 		Memberlistsvc: memberlistsvc,
 		KvStore:       store,
-		JSONClient:    jsonClient,
+		DataClient:    jsonClient,
 	}, nil
 }
 
@@ -176,7 +176,7 @@ func NewMemberlistKVWithConfig(ringConfig Config, instanceID string, joinMembers
 
 	// Codecs is used to tell memberlist library how to serialize/de-serialize the messages between peers.
 	// `ring.GetCode()` uses default, which is protobuf.
-	config.Codecs = []codec.Codec{ring.GetCodec(), JSONCodec}
+	config.Codecs = []codec.Codec{ring.GetCodec(), GetDataCodec()}
 
 	// TCPTransport defines what addr and port this particular peer should listen for.
 	// These may have been set via flags, but ensure they're set

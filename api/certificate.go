@@ -132,17 +132,17 @@ func checkAuth(r *http.Request) (certstore.Token, error) {
 // manage metadata certificate
 
 // certificateMetadata godoc
-// @Summary Read metadata certificate
-// @Description Return certificate metadata like SAN,expiration, fingerprint...
-// @Tags metadata certificate
-// @Produce  application/json
-// @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
-// @Param issuer query string false "Certificate issuer" default(letsencrypt)
-// @Param domain query string false "Certificate domain" default(testfgx.example.com)
-// @Success 200 {object} []certstore.Certificate
-// @Success 404 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Router /certificate/metadata [get]
+//	@Summary		Read metadata certificate
+//	@Description	Return certificate metadata like SAN,expiration, fingerprint...
+//	@Tags			metadata certificate
+//	@Produce		application/json
+//	@Param			Authorization	header		string	true	"Access token"			default(Bearer <Add access token here>)
+//	@Param			issuer			query		string	false	"Certificate issuer"	default(letsencrypt)
+//	@Param			domain			query		string	false	"Certificate domain"	default(testfgx.example.com)
+//	@Success		200				{object}	[]certstore.Certificate
+//	@Success		404				{object}	responseErrorJSON
+//	@Success		500				{object}	responseErrorJSON
+//	@Router			/certificate/metadata [get]
 func CertificateMetadataHandler(logger log.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -190,20 +190,20 @@ func CertificateMetadataHandler(logger log.Logger) http.HandlerFunc {
 // manage certificate
 
 // certificate godoc
-// @Summary Read certificate
-// @Description Return certificate and issuer ca certificate.
-// @Tags certificate
-// @Produce  application/json
-// @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
-// @Param issuer path string true "Certificate issuer" default(letsencrypt)
-// @Param domain path string true "Certificate domain" default(testfgx.example.com)
-// @Success 200 {object} certstore.CertMap
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 403 {object} responseErrorJSON
-// @Success 404 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Router /certificate/{issuer}/{domain} [get]
+//	@Summary		Read certificate
+//	@Description	Return certificate and issuer ca certificate.
+//	@Tags			certificate
+//	@Produce		application/json
+//	@Param			Authorization	header		string	true	"Access token"			default(Bearer <Add access token here>)
+//	@Param			issuer			path		string	true	"Certificate issuer"	default(letsencrypt)
+//	@Param			domain			path		string	true	"Certificate domain"	default(testfgx.example.com)
+//	@Success		200				{object}	certstore.CertMap
+//	@Success		400				{object}	responseErrorJSON
+//	@Success		401				{object}	responseErrorJSON
+//	@Success		403				{object}	responseErrorJSON
+//	@Success		404				{object}	responseErrorJSON
+//	@Success		500				{object}	responseErrorJSON
+//	@Router			/certificate/{issuer}/{domain} [get]
 func GetCertificateHandler(logger log.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
@@ -265,20 +265,20 @@ func GetCertificateHandler(logger log.Logger) http.HandlerFunc {
 // manage certificate
 
 // certificate godoc
-// @Summary Create certificate
-// @Description Create certificate for a given issuer and domain name.
-// @Tags certificate
-// @Produce  application/json
-// @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
-// @Param body body CertificateParams true "Certificate body"
-// @Success 201 {object} certstore.CertMap
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 403 {object} responseErrorJSON
-// @Success 429 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Success 502 {object} responseErrorJSON
-// @Router /certificate [post]
+//	@Summary		Create certificate
+//	@Description	Create certificate for a given issuer and domain name.
+//	@Tags			certificate
+//	@Produce		application/json
+//	@Param			Authorization	header		string				true	"Access token"	default(Bearer <Add access token here>)
+//	@Param			body			body		CertificateParams	true	"Certificate body"
+//	@Success		201				{object}	certstore.CertMap
+//	@Success		400				{object}	responseErrorJSON
+//	@Success		401				{object}	responseErrorJSON
+//	@Success		403				{object}	responseErrorJSON
+//	@Success		429				{object}	responseErrorJSON
+//	@Success		500				{object}	responseErrorJSON
+//	@Success		502				{object}	responseErrorJSON
+//	@Router			/certificate [post]
 func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
@@ -463,21 +463,21 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 // manage certificate
 
 // certificate godoc
-// @Summary Update certificate
-// @Description Update certificate will revoke the old and create a new certificate with given parameters.
-// @Tags certificate
-// @Produce  application/json
-// @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
-// @Param body body CertificateParams true "Certificate body"
-// @Success 200 {object} certstore.CertMap
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 403 {object} responseErrorJSON
-// @Success 404 {object} responseErrorJSON
-// @Success 429 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Success 502 {object} responseErrorJSON
-// @Router /certificate [put]
+//	@Summary		Update certificate
+//	@Description	Update certificate will revoke the old and create a new certificate with given parameters.
+//	@Tags			certificate
+//	@Produce		application/json
+//	@Param			Authorization	header		string				true	"Access token"	default(Bearer <Add access token here>)
+//	@Param			body			body		CertificateParams	true	"Certificate body"
+//	@Success		200				{object}	certstore.CertMap
+//	@Success		400				{object}	responseErrorJSON
+//	@Success		401				{object}	responseErrorJSON
+//	@Success		403				{object}	responseErrorJSON
+//	@Success		404				{object}	responseErrorJSON
+//	@Success		429				{object}	responseErrorJSON
+//	@Success		500				{object}	responseErrorJSON
+//	@Success		502				{object}	responseErrorJSON
+//	@Router			/certificate [put]
 func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
@@ -731,23 +731,23 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 // manage certificate
 
 // certificate godoc
-// @Summary Delete certificate
-// @Description Delete certificate for the given issuer and domain name.
-// @Tags certificate
-// @Produce  application/json
-// @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
-// @Param issuer path string true "Certificate issuer" default(letsencrypt)
-// @Param domain path string true "Certificate domain" default(testfgx.example.com)
-// @Param revoke query bool false "Revoke Certificate" default(false)
-// @Success 204
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 403 {object} responseErrorJSON
-// @Success 404 {object} responseErrorJSON
-// @Success 429 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Success 502 {object} responseErrorJSON
-// @Router /certificate/{issuer}/{domain} [delete]
+//	@Summary		Delete certificate
+//	@Description	Delete certificate for the given issuer and domain name.
+//	@Tags			certificate
+//	@Produce		application/json
+//	@Param			Authorization	header	string	true	"Access token"			default(Bearer <Add access token here>)
+//	@Param			issuer			path	string	true	"Certificate issuer"	default(letsencrypt)
+//	@Param			domain			path	string	true	"Certificate domain"	default(testfgx.example.com)
+//	@Param			revoke			query	bool	false	"Revoke Certificate"	default(false)
+//	@Success		204
+//	@Success		400	{object}	responseErrorJSON
+//	@Success		401	{object}	responseErrorJSON
+//	@Success		403	{object}	responseErrorJSON
+//	@Success		404	{object}	responseErrorJSON
+//	@Success		429	{object}	responseErrorJSON
+//	@Success		500	{object}	responseErrorJSON
+//	@Success		502	{object}	responseErrorJSON
+//	@Router			/certificate/{issuer}/{domain} [delete]
 func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)

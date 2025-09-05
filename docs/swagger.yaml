@@ -35,21 +35,6 @@ definitions:
         example: ""
         type: string
     type: object
-  api.KVSyncResponse:
-    properties:
-      failed_keys:
-        items:
-          type: string
-        type: array
-      synced_keys:
-        items:
-          type: string
-        type: array
-      timestamp:
-        type: string
-      total_keys:
-        type: integer
-    type: object
   api.TokenParams:
     properties:
       duration:
@@ -226,11 +211,11 @@ info:
   contact:
     email: francois.gouteroux@gmail.com
     name: François Gouteroux
-  description: Manages acme certificate and deploy them on servers
+  description: ACME Manager Server - Manages ACME certificates in cluster mode
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
-  title: acme manager
+  title: acme manager server
   version: "1.0"
 paths:
   /certificate:
@@ -491,42 +476,6 @@ paths:
       summary: Read metadata certificate
       tags:
       - metadata certificate
-  /kv/sync:
-    post:
-      description: Sync kv keys data across all nodes from leader kv data
-      parameters:
-      - description: kv keys to sync
-        in: query
-        name: keys
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.KVSyncResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.responseErrorJSON'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.responseErrorJSON'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.responseErrorJSON'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.responseErrorJSON'
-      security:
-      - APIKeyAuth: []
-      summary: Sync kv data across all nodes
-      tags:
-      - kv
   /token:
     post:
       description: Create token for a given username, scope and expiration time.

@@ -142,9 +142,17 @@ func printFlags(showAll bool) {
 	})
 }
 
-// @title acme manager server
-// @version 1.0
-// @description ACME Manager Server - Manages ACME certificates in cluster mode
+//	@title						acme manager server
+//	@version					1.0
+//	@description				ACME Manager Server - Manages ACME certificates in cluster mode
+//	@contact.name				François Gouteroux
+//	@contact.email				francois.gouteroux@gmail.com
+//	@license.name				Apache 2.0
+//	@license.url				http://www.apache.org/licenses/LICENSE-2.0.html
+//	@BasePath					/api/v1
+//	@securityDefinitions.apikey	APIKeyAuth
+//	@in							header
+//	@name						X-API-Key
 func main() {
 	// Custom usage function that shows different help based on --help-all flag
 	flag.Usage = func() {
@@ -406,8 +414,6 @@ func main() {
 	http.Handle("POST /api/v1/token", LoggerHandler(api.CreateTokenHandler(logger, proxyClient)))
 	http.Handle("GET /api/v1/token/{id}", LoggerHandler(api.GetTokenHandler(logger)))
 	http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(api.RevokeTokenHandler(logger, proxyClient)))
-
-	http.Handle("POST /api/v1/kv/sync", LoggerHandler(api.KVSyncHandler(logger)))
 
 	// update local cache on kv ring changes
 	certstore.WatchRingKvStoreChanges(amring, logger)
