@@ -57,18 +57,18 @@ type TokenResponseGet struct {
 // manage token
 
 // getToken godoc
-// @Summary Read token
-// @Description Return token infos like scope, expiration...
-// @Tags token
-// @Produce  application/json
-// @Param id path string true "Token ID"
-// @Success 200 {object} TokenResponseGet
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 404 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Router /token/{id} [get]
-// @security APIKeyAuth
+//	@Summary		Read token
+//	@Description	Return token infos like scope, expiration...
+//	@Tags			token
+//	@Produce		application/json
+//	@Param			id	path		string	true	"Token ID"
+//	@Success		200	{object}	TokenResponseGet
+//	@Success		400	{object}	responseErrorJSON
+//	@Success		401	{object}	responseErrorJSON
+//	@Success		404	{object}	responseErrorJSON
+//	@Success		500	{object}	responseErrorJSON
+//	@Router			/token/{id} [get]
+//	@security		APIKeyAuth
 func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -118,17 +118,17 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 // manage token
 
 // createToken godoc
-// @Summary Create token
-// @Description Create token for a given username, scope and expiration time.
-// @Tags token
-// @Produce  application/json
-// @Param body body TokenParams true "Token Body"
-// @Success 201 {object} TokenResponse
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Router /token [post]
-// @security APIKeyAuth
+//	@Summary		Create token
+//	@Description	Create token for a given username, scope and expiration time.
+//	@Tags			token
+//	@Produce		application/json
+//	@Param			body	body		TokenParams	true	"Token Body"
+//	@Success		201		{object}	TokenResponse
+//	@Success		400		{object}	responseErrorJSON
+//	@Success		401		{object}	responseErrorJSON
+//	@Success		500		{object}	responseErrorJSON
+//	@Router			/token [post]
+//	@security		APIKeyAuth
 func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
@@ -263,18 +263,18 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 // manage token
 
 // updateToken godoc
-// @Summary Update token
-// @Description Update token for a given username, scope and expiration time, it will generate a new token.
-// @Tags token
-// @Produce  application/json
-// @Param body body TokenParams true "Token Body"
-// @Success 200 {object} TokenResponse
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 429 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Router /token [put]
-// @security APIKeyAuth
+//	@Summary		Update token
+//	@Description	Update token for a given username, scope and expiration time, it will generate a new token.
+//	@Tags			token
+//	@Produce		application/json
+//	@Param			body	body		TokenParams	true	"Token Body"
+//	@Success		200		{object}	TokenResponse
+//	@Success		400		{object}	responseErrorJSON
+//	@Success		401		{object}	responseErrorJSON
+//	@Success		429		{object}	responseErrorJSON
+//	@Success		500		{object}	responseErrorJSON
+//	@Router			/token [put]
+//	@security		APIKeyAuth
 func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
@@ -418,17 +418,17 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 // manage token
 
 // revokeToken godoc
-// @Summary Revoke token
-// @Description Revoke token for a given ID.
-// @Tags token
-// @Produce  application/json
-// @Param id path string true "Token ID"
-// @Success 204
-// @Success 401 {object} responseErrorJSON
-// @Success 404 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Router /token/{id} [delete]
-// @security APIKeyAuth
+//	@Summary		Revoke token
+//	@Description	Revoke token for a given ID.
+//	@Tags			token
+//	@Produce		application/json
+//	@Param			id	path	string	true	"Token ID"
+//	@Success		204
+//	@Success		401	{object}	responseErrorJSON
+//	@Success		404	{object}	responseErrorJSON
+//	@Success		500	{object}	responseErrorJSON
+//	@Router			/token/{id} [delete]
+//	@security		APIKeyAuth
 func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")

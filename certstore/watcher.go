@@ -181,7 +181,7 @@ func WatchIssuerHealth(logger log.Logger, customLogger *logrus.Logger, interval 
 }
 
 func WatchRingKvStoreChanges(ringConfig ring.AcmeManagerRing, logger log.Logger) {
-	go ringConfig.KvStore.WatchKey(context.Background(), AmCertificateRingKey, ring.JSONCodec, func(in interface{}) bool {
+	go ringConfig.KvStore.WatchKey(context.Background(), AmCertificateRingKey, ring.GetDataCodec(), func(in interface{}) bool {
 		isLeaderNow, _ := ring.IsLeader(ringConfig)
 		if !isLeaderNow {
 			val := in.(*ring.Data)
@@ -199,31 +199,31 @@ func WatchRingKvStoreChanges(ringConfig ring.AcmeManagerRing, logger log.Logger)
 					metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 				}
 			}
-			metrics.SetKVDataUpdateTime(AmCertificateRingKey, float64(val.UpdatedAt.Unix()))
+			metrics.SetKVDataUpdateTime(AmCertificateRingKey, float64(val.UpdatedAt/1000))
 		}
 		return true // yes, keep watching
 	})
 
-	go ringConfig.KvStore.WatchKey(context.Background(), AmTokenRingKey, ring.JSONCodec, func(in interface{}) bool {
+	go ringConfig.KvStore.WatchKey(context.Background(), AmTokenRingKey, ring.GetDataCodec(), func(in interface{}) bool {
 		isLeaderNow, _ := ring.IsLeader(ringConfig)
 		if !isLeaderNow {
 			val := in.(*ring.Data)
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("key '%s' changed", AmTokenRingKey)) // #nosec G104
 			localCache.Set(AmTokenRingKey, val.Content)
 			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", AmTokenRingKey)) // #nosec G104
-			metrics.SetKVDataUpdateTime(AmTokenRingKey, float64(val.UpdatedAt.Unix()))
+			metrics.SetKVDataUpdateTime(AmTokenRingKey, float64(val.UpdatedAt/1000))
 		}
 		return true // yes, keep watching
 	})
 
-	go ringConfig.KvStore.WatchKey(context.Background(), AmChallengeRingKey, ring.JSONCodec, func(in interface{}) bool {
+	go ringConfig.KvStore.WatchKey(context.Background(), AmChallengeRingKey, ring.GetDataCodec(), func(in interface{}) bool {
 		isLeaderNow, _ := ring.IsLeader(ringConfig)
 		if !isLeaderNow {
 			val := in.(*ring.Data)
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("key '%s' changed", AmChallengeRingKey)) // #nosec G104
 			localCache.Set(AmChallengeRingKey, val.Content)
 			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", AmChallengeRingKey)) // #nosec G104
-			metrics.SetKVDataUpdateTime(AmChallengeRingKey, float64(val.UpdatedAt.Unix()))
+			metrics.SetKVDataUpdateTime(AmChallengeRingKey, float64(val.UpdatedAt/1000))
 		}
 		return true // yes, keep watching
 	})

@@ -401,63 +401,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/kv/sync": {
-            "post": {
-                "security": [
-                    {
-                        "APIKeyAuth": []
-                    }
-                ],
-                "description": "Sync kv keys data across all nodes from leader kv data",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "kv"
-                ],
-                "summary": "Sync kv data across all nodes",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "kv keys to sync",
-                        "name": "keys",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.KVSyncResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.responseErrorJSON"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.responseErrorJSON"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/api.responseErrorJSON"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.responseErrorJSON"
-                        }
-                    }
-                }
-            }
-        },
         "/token": {
             "put": {
                 "security": [
@@ -726,29 +669,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.KVSyncResponse": {
-            "type": "object",
-            "properties": {
-                "failed_keys": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "synced_keys": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "timestamp": {
-                    "type": "string"
-                },
-                "total_keys": {
-                    "type": "integer"
-                }
-            }
-        },
         "api.TokenParams": {
             "type": "object",
             "properties": {
@@ -1003,8 +923,8 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
-	Title:            "acme manager",
-	Description:      "Manages acme certificate and deploy them on servers",
+	Title:            "acme manager server",
+	Description:      "ACME Manager Server - Manages ACME certificates in cluster mode",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

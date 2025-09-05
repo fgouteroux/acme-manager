@@ -58,7 +58,11 @@ func OnStartup(logger log.Logger) error {
 	if len(certificateData) == 0 && isLeaderNow {
 		// if leader and no data exists, populate from vault
 		_ = level.Info(logger).Log("msg", "Leader node with empty certificate data, populating from vault")
-		vaultCertList := getVaultAllCertificate(logger)
+		vaultCertList, err := getVaultAllCertificate(logger)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
 
 		for _, certData := range vaultCertList {
 			metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
@@ -88,7 +92,11 @@ func OnStartup(logger log.Logger) error {
 	if len(tokenData) == 0 && isLeaderNow {
 		// if leader and no data exists, populate from vault
 		_ = level.Info(logger).Log("msg", "Leader node with empty token data, populating from vault")
-		tokens := getVaultAllToken(logger)
+		tokens, err := getVaultAllToken(logger)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
 
 		// Store in ring (this will also update local cache via PutKVRing)
 		AmStore.PutKVRing(AmTokenRingKey, tokens)
@@ -131,17 +139,16 @@ func OnStartup(logger log.Logger) error {
 	return nil
 }
 
-func getVaultAllCertificate(logger log.Logger) []Certificate {
+func getVaultAllCertificate(logger log.Logger) ([]Certificate, error) {
 	_ = level.Info(logger).Log("msg", "Retrieving certificates from vault")
 
+	var vaultCertList []Certificate
 	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(config.GlobalConfig.Storage.Vault.CertPrefix + "/")
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
-		os.Exit(1)
+		return vaultCertList, err
 	}
 	_ = level.Debug(logger).Log("msg", fmt.Sprintf("vault certificate secrets list: %v", vaultSecrets))
 
-	var vaultCertList []Certificate
 	if len(vaultSecrets) > 0 {
 
 		var vaultCertCount int
@@ -178,23 +185,21 @@ func getVaultAllCertificate(logger log.Logger) []Certificate {
 	} else {
 		_ = level.Warn(logger).Log("msg", "No certificates found from vault")
 	}
-	return vaultCertList
+	return vaultCertList, nil
 }
 
-func getVaultAllToken(logger log.Logger) map[string]Token {
+func getVaultAllToken(logger log.Logger) (map[string]Token, error) {
 	_ = level.Info(logger).Log("msg", "Retrieving tokens from vault")
 
+	tokenMap := make(map[string]Token)
 	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(
 		config.GlobalConfig.Storage.Vault.TokenPrefix + "/",
 	)
+	if err != nil {
+		return tokenMap, err
+	}
 	_ = level.Debug(logger).Log("msg", fmt.Sprintf("vault token secrets list: %v", vaultSecrets))
 
-	if err != nil {
-		_ = level.Error(logger).Log("err", err)
-		os.Exit(1)
-	}
-
-	tokenMap := make(map[string]Token)
 	if len(vaultSecrets) > 0 {
 
 		var vaultTokenCount int
@@ -234,5 +239,5 @@ func getVaultAllToken(logger log.Logger) map[string]Token {
 	} else {
 		_ = level.Warn(logger).Log("msg", "No tokens found from vault")
 	}
-	return tokenMap
+	return tokenMap, nil
 }

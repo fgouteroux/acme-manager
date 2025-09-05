@@ -11,6 +11,8 @@ import (
 	"github.com/fgouteroux/acme_manager/memcache"
 	"github.com/fgouteroux/acme_manager/metrics"
 	"github.com/fgouteroux/acme_manager/ring"
+
+	"github.com/prometheus/prometheus/model/timestamp"
 )
 
 var localCache = memcache.NewLocalCache()
@@ -97,7 +99,7 @@ func (c *CertStore) GetKVRing(key string, isLeader bool) (string, error) {
 		}
 	} else {
 		ctx := context.Background()
-		cached, err := c.RingConfig.JSONClient.Get(ctx, key)
+		cached, err := c.RingConfig.DataClient.Get(ctx, key)
 		if err != nil {
 			return data, err
 		}
@@ -128,11 +130,11 @@ func (c *CertStore) updateKV(key, content string) {
 	updatedAt := time.Now()
 	data := &ring.Data{
 		Content:   content,
-		UpdatedAt: updatedAt,
+		UpdatedAt: timestamp.FromTime(updatedAt),
 	}
 
 	ctx := context.Background()
-	err := c.RingConfig.JSONClient.CAS(ctx, key, func(_ interface{}) (out interface{}, retry bool, err error) {
+	err := c.RingConfig.DataClient.CAS(ctx, key, func(_ interface{}) (out interface{}, retry bool, err error) {
 		return data, true, nil
 	})
 
@@ -141,69 +143,4 @@ func (c *CertStore) updateKV(key, content string) {
 	} else {
 		metrics.SetKVDataUpdateTime(key, float64(updatedAt.Unix()))
 	}
-}
-
-// KVSyncFromLeader - Leader pushes its state using CAS operations
-func (c *CertStore) KVSyncFromLeader(leader string, keys []string) (map[string]interface{}, error) {
-	keysToSync := keys
-	if len(keysToSync) == 0 {
-		keysToSync = localCache.GetAllKeys()
-	}
-
-	result := map[string]interface{}{
-		"timestamp":   time.Now(),
-		"total_keys":  len(keysToSync),
-		"synced_keys": []string{},
-		"failed_keys": []string{},
-	}
-
-	syncedKeys := []string{}
-	failedKeys := []string{}
-
-	for _, key := range keysToSync {
-		if c.forceSyncKey(leader, key) {
-			syncedKeys = append(syncedKeys, key)
-		} else {
-			failedKeys = append(failedKeys, key)
-		}
-	}
-
-	result["synced_keys"] = syncedKeys
-	result["failed_keys"] = failedKeys
-
-	_ = level.Info(c.Logger).Log(
-		"msg", "kv sync completed",
-		"synced", len(syncedKeys),
-		"failed", len(failedKeys),
-	)
-
-	return result, nil
-}
-
-// forceSyncKey - Force sync a single key
-func (c *CertStore) forceSyncKey(leader, key string) bool {
-	cached, found := localCache.Get(key)
-	if !found {
-		return false
-	}
-
-	updatedAt := time.Now()
-	data := &ring.Data{
-		Content:   cached.Value.(string),
-		UpdatedAt: updatedAt,
-		SyncedBy:  leader,
-		Force:     true,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	err := c.RingConfig.JSONClient.CAS(ctx, key, func(_ interface{}) (out interface{}, retry bool, err error) {
-		return data, true, nil
-	})
-
-	if err == nil {
-		metrics.SetKVDataUpdateTime(key, float64(updatedAt.Unix()))
-	}
-	return err == nil
 }
