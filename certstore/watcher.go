@@ -100,11 +100,10 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 		if isLeaderNow {
 			_ = level.Info(logger).Log("msg", "check tokens expiration")
-			data, err := AmStore.GetKVRingToken(AmTokenRingKey, isLeaderNow)
+			data, err := AmStore.ListAllTokens(isLeaderNow)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 			}
-			var hasChange bool
 			for tokenID, tokenData := range data {
 
 				if tokenData.Expires == "Never" {
@@ -129,13 +128,11 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 						_ = level.Error(logger).Log("err", err)
 						continue
 					}
-					hasChange = true
-					delete(data, tokenID)
+					err = AmStore.DeleteToken(tokenID)
+					if err != nil {
+						_ = level.Error(logger).Log("err", err)
+					}
 				}
-			}
-			if hasChange {
-				// udpate kv store
-				AmStore.PutKVRing(AmTokenRingKey, data)
 			}
 			_ = level.Info(logger).Log("msg", "check tokens expiration done")
 		}
@@ -181,50 +178,48 @@ func WatchIssuerHealth(logger log.Logger, customLogger *logrus.Logger, interval 
 }
 
 func WatchRingKvStoreChanges(ringConfig ring.AcmeManagerRing, logger log.Logger) {
-	go ringConfig.KvStore.WatchKey(context.Background(), AmCertificateRingKey, ring.GetDataCodec(), func(in interface{}) bool {
+	// Watch for certificate changes - any key under certificates/
+	go ringConfig.KvStore.WatchPrefix(context.Background(), CertificatePrefix+"/", ring.GetDataCodec(), func(key string, in interface{}) bool {
 		isLeaderNow, _ := ring.IsLeader(ringConfig)
 		if !isLeaderNow {
 			val := in.(*ring.Data)
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("key '%s' changed", AmCertificateRingKey)) // #nosec G104
-			localCache.Set(AmCertificateRingKey, val.Content)
-			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", AmCertificateRingKey)) // #nosec G104
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate key '%s' changed", key))
+			localCache.Set(key, val.Content)
+			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", key))
 
-			// update managed certificate metric
-			var data []Certificate
-			err := json.Unmarshal([]byte(val.Content), &data)
+			// Update metrics for this specific certificate
+			var cert Certificate
+			err := json.Unmarshal([]byte(val.Content), &cert)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", AmCertificateRingKey), "err", err, "content", val.Content)
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to decode certificate key '%s'", key), "err", err)
 			} else {
-				for _, certData := range data {
-					metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
-				}
+				metrics.IncManagedCertificate(cert.Issuer, cert.Owner)
 			}
-			metrics.SetKVDataUpdateTime(AmCertificateRingKey, float64(val.UpdatedAt/1000))
 		}
-		return true // yes, keep watching
+		return true
 	})
 
-	go ringConfig.KvStore.WatchKey(context.Background(), AmTokenRingKey, ring.GetDataCodec(), func(in interface{}) bool {
+	// Watch for token changes - any key under tokens/
+	go ringConfig.KvStore.WatchPrefix(context.Background(), TokenPrefix+"/", ring.GetDataCodec(), func(key string, in interface{}) bool {
 		isLeaderNow, _ := ring.IsLeader(ringConfig)
 		if !isLeaderNow {
 			val := in.(*ring.Data)
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("key '%s' changed", AmTokenRingKey)) // #nosec G104
-			localCache.Set(AmTokenRingKey, val.Content)
-			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", AmTokenRingKey)) // #nosec G104
-			metrics.SetKVDataUpdateTime(AmTokenRingKey, float64(val.UpdatedAt/1000))
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("token key '%s' changed", key))
+			localCache.Set(key, val.Content)
+			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", key))
 		}
-		return true // yes, keep watching
+		return true
 	})
 
-	go ringConfig.KvStore.WatchKey(context.Background(), AmChallengeRingKey, ring.GetDataCodec(), func(in interface{}) bool {
+	// Watch for challenge changes - any key under challenges/
+	go ringConfig.KvStore.WatchPrefix(context.Background(), ChallengePrefix+"/", ring.GetDataCodec(), func(key string, in interface{}) bool {
 		isLeaderNow, _ := ring.IsLeader(ringConfig)
 		if !isLeaderNow {
 			val := in.(*ring.Data)
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("key '%s' changed", AmChallengeRingKey)) // #nosec G104
-			localCache.Set(AmChallengeRingKey, val.Content)
-			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", AmChallengeRingKey)) // #nosec G104
-			metrics.SetKVDataUpdateTime(AmChallengeRingKey, float64(val.UpdatedAt/1000))
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("challenge key '%s' changed", key))
+			localCache.Set(key, val.Content)
+			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", key))
 		}
-		return true // yes, keep watching
+		return true
 	})
 }

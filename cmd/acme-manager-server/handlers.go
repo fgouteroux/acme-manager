@@ -139,14 +139,23 @@ type certificateHandlerData struct {
 
 func certificateListHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, false)
+		isLeader, err := ring.IsLeader(certstore.AmStore.RingConfig)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		data, err := certstore.AmStore.ListAllCertificates(isLeader)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
+		var certSlice []certstore.Certificate
+		for _, cert := range data {
+		    certSlice = append(certSlice, cert)
+		}
+
 		v := &certificateHandlerData{
 			Now:          time.Now(),
-			Certificates: data,
+			Certificates: certSlice,
 		}
 
 		accept := r.Header.Get("Accept")
@@ -178,16 +187,17 @@ func certificateListHandler() http.HandlerFunc {
 }
 
 func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := certstore.AmStore.GetKVRingMapString(certstore.AmChallengeRingKey, false)
+	data, err := certstore.AmStore.GetChallenge(r.RequestURI, false)
 	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		_ = level.Error(logger).Log("err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-
-	if val, ok := data[r.RequestURI]; ok {
-		_, _ = io.WriteString(w, val)
-	} else {
-		http.Error(w, fmt.Sprintf("key %s not found", r.RequestURI), http.StatusNotFound)
-	}
+	_, _ = io.WriteString(w, data)
 }
 
 //go:embed templates/token.gohtml
@@ -200,14 +210,19 @@ type tokenHandlerData struct {
 
 func tokenListHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, false)
+		data, err := certstore.AmStore.ListAllTokens(false)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
+		tokenData := make(map[string]certstore.Token)
+		for k, v := range data {
+			tokenData[strings.TrimPrefix(k, certstore.TokenPrefix+"/")] = v
+		}
+
 		v := &tokenHandlerData{
 			Now:    time.Now(),
-			Tokens: data,
+			Tokens: tokenData,
 		}
 
 		accept := r.Header.Get("Accept")

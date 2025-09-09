@@ -191,16 +191,12 @@ func TestRevokeTokenHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data["valid-id"] = certstore.Token{
+	data := certstore.Token{
 		Scope:    []string{"create", "read", "update", "delete"},
 		Username: "testuser",
 		Expires:  "Never",
 	}
-	certstore.AmStore.PutKVRing(certstore.AmTokenRingKey, data)
+	certstore.AmStore.PutToken("valid-id", data)
 	// wait for cert kv store
 	time.Sleep(1 * time.Second)
 

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/config"
-	"github.com/fgouteroux/acme_manager/queue"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/testhelper"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -86,10 +86,10 @@ func TestMain(m *testing.M) {
 	})
 
 	// certificate
-	mux.Handle("GET /api/v1/certificate/metadata", CertificateMetadataHandler(logger))
+	mux.Handle("GET /api/v1/certificate/metadata", CertificateMetadataHandler(logger, nil))
 	mux.Handle("PUT /api/v1/certificate", UpdateCertificateHandler(logger, nil))
 	mux.Handle("POST /api/v1/certificate", CreateCertificateHandler(logger, nil))
-	mux.Handle("GET /api/v1/certificate/{issuer}/{domain}", GetCertificateHandler(logger))
+	mux.Handle("GET /api/v1/certificate/{issuer}/{domain}", GetCertificateHandler(logger, nil))
 	mux.Handle("DELETE /api/v1/certificate/{issuer}/{domain}", DeleteCertificateHandler(logger, nil))
 
 	// token
@@ -97,21 +97,6 @@ func TestMain(m *testing.M) {
 	mux.Handle("POST /api/v1/token", CreateTokenHandler(logger, nil))
 	mux.Handle("GET /api/v1/token/{id}", GetTokenHandler(logger))
 	mux.Handle("DELETE /api/v1/token/{id}", RevokeTokenHandler(logger, nil))
-
-	// init queues
-	certstore.CertificateQueue = queue.NewQueue("certificate")
-	certstore.ChallengeQueue = queue.NewQueue("challenge")
-	certstore.TokenQueue = queue.NewQueue("token")
-
-	// init workers
-	tokenWorker := queue.NewWorker(certstore.TokenQueue, logger)
-	challengeWorker := queue.NewWorker(certstore.ChallengeQueue, logger)
-	certificateWorker := queue.NewWorker(certstore.CertificateQueue, logger)
-
-	// start workers
-	go tokenWorker.DoWork()
-	go certificateWorker.DoWork()
-	go challengeWorker.DoWork()
 
 	// Run the tests
 	code := m.Run()
@@ -456,14 +441,15 @@ func TestAPIDeleteCertificateHandler(t *testing.T) {
 }
 
 func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := certstore.AmStore.GetKVRingMapString(certstore.AmChallengeRingKey, false)
+	data, err := certstore.AmStore.GetChallenge(r.RequestURI, false)
 	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		_ = level.Error(logger).Log("err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-
-	if val, ok := data[r.RequestURI]; ok {
-		_, _ = io.WriteString(w, val)
-	} else {
-		http.Error(w, fmt.Sprintf("key %s not found", r.RequestURI), http.StatusNotFound)
-	}
+	_, _ = io.WriteString(w, data)
 }

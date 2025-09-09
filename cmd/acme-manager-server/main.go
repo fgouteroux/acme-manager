@@ -404,10 +404,10 @@ func main() {
 	proxyClient := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
 
 	// API routes
-	http.Handle("GET /api/v1/certificate/metadata", LoggerHandler(api.CertificateMetadataHandler(logger)))
+	http.Handle("GET /api/v1/certificate/metadata", LoggerHandler(api.CertificateMetadataHandler(logger, proxyClient)))
 	http.Handle("PUT /api/v1/certificate", LoggerHandler(api.UpdateCertificateHandler(logger, proxyClient)))
 	http.Handle("POST /api/v1/certificate", LoggerHandler(api.CreateCertificateHandler(logger, proxyClient)))
-	http.Handle("GET /api/v1/certificate/{issuer}/{domain}", LoggerHandler(api.GetCertificateHandler(logger)))
+	http.Handle("GET /api/v1/certificate/{issuer}/{domain}", LoggerHandler(api.GetCertificateHandler(logger, proxyClient)))
 	http.Handle("DELETE /api/v1/certificate/{issuer}/{domain}", LoggerHandler(api.DeleteCertificateHandler(logger, proxyClient)))
 
 	http.Handle("PUT /api/v1/token", LoggerHandler(api.UpdateTokenHandler(logger, proxyClient)))
@@ -428,8 +428,6 @@ func main() {
 	go certstore.WatchConfigFileChanges(logger, logrusLogger, *checkConfigInterval, *configPath, version.Version)
 
 	go certstore.WatchIssuerHealth(logger, logrusLogger, *checkIssuerInterval, version.Version)
-
-	certstore.StartMonitoring(logger)
 
 	if *cleanup {
 		go certstore.Cleanup(logger, *cleanupInterval, *cleanupCertExpDays, *cleanupCertRevokeLastVersion)

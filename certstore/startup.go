@@ -13,34 +13,13 @@ import (
 
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
-	"github.com/fgouteroux/acme_manager/queue"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 )
 
-var (
-	CertificateQueue *queue.Queue
-	ChallengeQueue   *queue.Queue
-	TokenQueue       *queue.Queue
-)
-
 func OnStartup(logger log.Logger) error {
 	_ = prometheus.Register(NewCertificateCollector(logger))
-
-	// init queues
-	CertificateQueue = queue.NewQueue("certificate")
-	ChallengeQueue = queue.NewQueue("challenge")
-	TokenQueue = queue.NewQueue("token")
-
-	// init workers
-	tokenWorker := queue.NewWorker(TokenQueue, logger)
-	challengeWorker := queue.NewWorker(ChallengeQueue, logger)
-	certificateWorker := queue.NewWorker(CertificateQueue, logger)
-
-	// start workers
-	go tokenWorker.DoWork()
-	go certificateWorker.DoWork()
-	go challengeWorker.DoWork()
+	_ = prometheus.Register(NewNodeCollector(logger))
 
 	isLeaderNow, err := ring.IsLeader(AmStore.RingConfig)
 	if err != nil {
@@ -49,9 +28,9 @@ func OnStartup(logger log.Logger) error {
 	}
 
 	// Handle certificates
-	certificateData, err := AmStore.GetKVRingCert(AmCertificateRingKey, isLeaderNow)
+	certificateData, err := AmStore.ListAllCertificates(isLeaderNow)
 	if err != nil {
-		_ = level.Error(logger).Log("msg", "Failed to get certificate data from KV ring", "err", err)
+		_ = level.Error(logger).Log("msg", "Failed to list certificates from KV ring", "err", err)
 		return err
 	}
 
@@ -64,26 +43,27 @@ func OnStartup(logger log.Logger) error {
 			os.Exit(1)
 		}
 
+		// Store each certificate with its own key
 		for _, certData := range vaultCertList {
+			err := AmStore.PutCertificate(certData)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", "Failed to store certificate", 
+					"domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
+				continue
+			}
 			metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 		}
-
-		// Store in ring (this will also update local cache via PutKVRing)
-		AmStore.PutKVRing(AmCertificateRingKey, vaultCertList)
 	} else if len(certificateData) > 0 {
 		// Data exists, update local cache
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing certificates in KV ring", len(certificateData)))
-		content, _ := json.Marshal(certificateData)
-		localCache.Set(AmCertificateRingKey, string(content))
-	} else {
-		// Non-leader with empty data - this is normal, will be populated by ring updates
-		_ = level.Info(logger).Log("msg", "Non-leader node with empty certificate data, waiting for ring updates")
-		// Initialize with empty slice JSON
-		localCache.Set(AmCertificateRingKey, "[]")
+		for k,v := range certificateData {
+			content, _ := json.Marshal(v)
+			localCache.Set(k, string(content))
+		}
 	}
 
 	// Handle tokens
-	tokenData, err := AmStore.GetKVRingToken(AmTokenRingKey, isLeaderNow)
+	tokenData, err := AmStore.ListAllTokens(isLeaderNow)
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "Failed to get token data from KV ring", "err", err)
 		return err
@@ -99,21 +79,25 @@ func OnStartup(logger log.Logger) error {
 		}
 
 		// Store in ring (this will also update local cache via PutKVRing)
-		AmStore.PutKVRing(AmTokenRingKey, tokens)
+		for tokenID, token := range tokens {
+			err := AmStore.PutToken(tokenID, token)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", "Failed to store token", 
+					"tokenID", tokenID, "owner", token.Username, "err", err)
+				continue
+			}
+		}
 	} else if len(tokenData) > 0 {
 		// Data exists, update local cache
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing tokens in KV ring", len(tokenData)))
-		content, _ := json.Marshal(tokenData)
-		localCache.Set(AmTokenRingKey, string(content))
-	} else {
-		// Non-leader with empty data - this is normal, will be populated by ring updates
-		_ = level.Info(logger).Log("msg", "Non-leader node with empty token data, waiting for ring updates")
-		// Initialize with empty map JSON
-		localCache.Set(AmTokenRingKey, "{}")
+		for k,v := range tokenData {
+			content, _ := json.Marshal(v)
+			localCache.Set(k, string(content))
+		}
 	}
 
 	// Handle challenges
-	challengeData, err := AmStore.GetKVRingMapString(AmChallengeRingKey, isLeaderNow)
+	challengeData, err := AmStore.ListAllChallenges(isLeaderNow)
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "Failed to get challenge data from KV ring", "err", err)
 		return err
@@ -121,18 +105,8 @@ func OnStartup(logger log.Logger) error {
 
 	if len(challengeData) > 0 {
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing challenges in KV ring", len(challengeData)))
-		content, _ := json.Marshal(challengeData)
-		localCache.Set(AmChallengeRingKey, string(content))
-	} else {
-		// Initialize with empty map JSON
-		_ = level.Info(logger).Log("msg", "No challenge data found, initializing with empty map")
-		emptyMap := make(map[string]string)
-
-		// If we're leader, populate the ring too
-		if isLeaderNow {
-			AmStore.PutKVRing(AmChallengeRingKey, emptyMap) // This updates both ring and cache
-		} else {
-			localCache.Set(AmChallengeRingKey, "{}") // Non-leader just initializes cache
+		for k,v := range challengeData {
+			localCache.Set(k, v)
 		}
 	}
 

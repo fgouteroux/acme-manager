@@ -341,17 +341,13 @@ func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) er
 }
 
 func CheckCertExpiration(amStore *CertStore, logger log.Logger, isLeader bool) error {
-	data, err := amStore.GetKVRingCert(AmCertificateRingKey, isLeader)
+	data, err := amStore.ListAllCertificates(isLeader)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return err
 	}
 
-	dataCopy := make([]Certificate, len(data))
-	_ = copy(dataCopy, data)
-
-	var hasChange bool
-	for i, certData := range data {
+	for _, certData := range data {
 		layout := "2006-01-02 15:04:05 -0700 MST"
 		renewalDate, err := time.Parse(layout, certData.RenewalDate)
 		if err != nil {
@@ -361,7 +357,6 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger, isLeader bool) e
 
 		currentDate := time.Now()
 		if currentDate.After(renewalDate) || currentDate.Equal(renewalDate) {
-			hasChange = true
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Trying renewal certificate owner '%s', issuer '%s' and domain '%s'", certData.Owner, certData.Issuer, certData.Domain))
 			cert, err := CreateRemoteCertificateResource(certData, logger)
 			if err != nil {
@@ -369,12 +364,13 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger, isLeader bool) e
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to renew certificate owner '%s', issuer '%s' and domain '%s'", certData.Owner, certData.Issuer, certData.Domain), "err", err)
 				continue
 			}
+			err = amStore.PutCertificate(cert)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				continue
+			}
 			metrics.SetRenewedCertificate(cert.Issuer, cert.Owner, cert.Domain, 1)
-			dataCopy[i] = cert
 		}
-	}
-	if hasChange {
-		amStore.PutKVRing(AmCertificateRingKey, dataCopy)
 	}
 	return nil
 }

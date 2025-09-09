@@ -136,7 +136,7 @@ func NewWithConfig(ringConfig Config, logger log.Logger) (AcmeManagerRing, error
 		return config, err
 	}
 
-	jsonClient, err := memberlist.NewClient(store, GetDataCodec())
+	dataClient, err := memberlist.NewClient(store, GetDataCodec())
 	if err != nil {
 		return config, err
 	}
@@ -165,7 +165,7 @@ func NewWithConfig(ringConfig Config, logger log.Logger) (AcmeManagerRing, error
 		Lifecycler:    lfc,
 		Memberlistsvc: memberlistsvc,
 		KvStore:       store,
-		DataClient:    jsonClient,
+		DataClient:    dataClient,
 	}, nil
 }
 
