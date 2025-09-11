@@ -2,7 +2,6 @@
 package certstore
 
 import (
-	"github.com/go-acme/lego/v4/challenge/http01"
 	"github.com/go-kit/log"
 )
 
@@ -18,12 +17,10 @@ func NewKVRingProvider(logger log.Logger) (*HTTPProvider, error) {
 
 // Present makes the token available at `HTTP01ChallengePath(token)` by creating the key in the kvring.
 func (w *HTTPProvider) Present(_, token, keyAuth string) error {
-	key := GenerateChallengeKey(http01.ChallengePath(token))
-	return AmStore.PutChallenge(key, keyAuth)
+	return AmStore.PutChallenge(token, keyAuth)
 }
 
 // CleanUp removes the file created for the challenge.
 func (w *HTTPProvider) CleanUp(_, token, _ string) error {
-	key := GenerateChallengeKey(http01.ChallengePath(token))
-	return AmStore.DeleteChallenge(key)
+	return AmStore.DeleteChallenge(token)
 }

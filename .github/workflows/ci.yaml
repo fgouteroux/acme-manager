@@ -7,7 +7,7 @@ on:
       - 'README.md'
       - 'CHANGELOG.md'
   push:
-    branches: [ main ]
+    branches: [ main, v* ]
     paths-ignore:
       - 'README.md'
       - 'CHANGELOG.md'

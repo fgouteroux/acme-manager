@@ -4,6 +4,7 @@ GOFMT        ?= $(GO)fmt
 GOFMT_FILES?=$$(find . -name '*.go' |grep -v vendor)
 SHELL := /bin/bash
 FIRST_GOPATH := $(firstword $(subst :, ,$(shell $(GO) env GOPATH)))
+PROTOC_INCLUDES := -I. -I$(shell go list -f '{{ .Dir }}' -m github.com/gogo/protobuf)
 
 clean:
 	rm -rf ./build ./dist
@@ -54,5 +55,20 @@ compose-down:
 release:
 	goreleaser release --skip-publish --rm-dist
 
+proto-clean:
+	@echo "Cleaning generated protobuf files..."
+	@find models -name "*.pb.go" -delete
+
+proto: proto-clean
+	@echo "Generating protobuf files..."
+	@protoc $(PROTOC_INCLUDES) \
+		--gogofast_out=paths=source_relative:. \
+		models/*.proto
+	@echo "Protobuf generation complete!"
+
+proto-tools:
+	@echo "Installing protobuf tools..."
+	@go install github.com/gogo/protobuf/protoc-gen-gogofast@latest
+
 # Declare phony targets (targets that don't create files with the same name)
-.PHONY: clean tidy fmt lint security build docs docs-fmt docs-force test compose-up compose-down release
+.PHONY: clean tidy fmt lint security build docs docs-fmt docs-force test compose-up compose-down release proto

@@ -17,6 +17,7 @@ import (
 	"github.com/grafana/dskit/kv/memberlist"
 
 	"github.com/fgouteroux/acme_manager/certstore"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/ring"
 )
 
@@ -28,7 +29,8 @@ func newIndexPageContent() *IndexPageContent {
 }
 
 type indexPageContents struct {
-	LinkGroups []IndexPageLinkGroup
+	LinkGroups    []IndexPageLinkGroup
+	CurrentLeader string
 }
 
 // IndexPageContent is a map of sections to path -> description.
@@ -97,7 +99,11 @@ func indexHandler(httpPathPrefix string, content *IndexPageContent) http.Handler
 	template.Must(templ.Parse(indexPageHTML))
 
 	return func(w http.ResponseWriter, _ *http.Request) {
-		err := templ.Execute(w, indexPageContents{LinkGroups: content.GetContent()})
+		leader, err := ring.GetLeader(certstore.AmStore.RingConfig)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		err = templ.Execute(w, indexPageContents{LinkGroups: content.GetContent(), CurrentLeader: leader})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -134,23 +140,19 @@ var certificatePageHTML string
 
 type certificateHandlerData struct {
 	Now          time.Time
-	Certificates []certstore.Certificate
+	Certificates []*models.Certificate
 }
 
 func certificateListHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		isLeader, err := ring.IsLeader(certstore.AmStore.RingConfig)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		data, err := certstore.AmStore.ListAllCertificates(isLeader)
+		data, err := certstore.AmStore.ListAllCertificates()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
-		var certSlice []certstore.Certificate
+		var certSlice []*models.Certificate
 		for _, cert := range data {
-		    certSlice = append(certSlice, cert)
+			certSlice = append(certSlice, cert)
 		}
 
 		v := &certificateHandlerData{
@@ -187,7 +189,8 @@ func certificateListHandler() http.HandlerFunc {
 }
 
 func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := certstore.AmStore.GetChallenge(r.RequestURI, false)
+	challengeID := strings.Split(ChallengePath, r.RequestURI)[1]
+	data, err := certstore.AmStore.GetChallenge(challengeID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -205,17 +208,17 @@ var tokenPageHTML string
 
 type tokenHandlerData struct {
 	Now    time.Time
-	Tokens map[string]certstore.Token
+	Tokens map[string]*models.Token
 }
 
 func tokenListHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data, err := certstore.AmStore.ListAllTokens(false)
+		data, err := certstore.AmStore.ListAllTokens()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
-		tokenData := make(map[string]certstore.Token)
+		tokenData := make(map[string]*models.Token)
 		for k, v := range data {
 			tokenData[strings.TrimPrefix(k, certstore.TokenPrefix+"/")] = v
 		}

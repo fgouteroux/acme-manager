@@ -2,7 +2,6 @@ package certstore
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 
@@ -82,7 +82,7 @@ func WatchCertExpiration(logger log.Logger, interval time.Duration) {
 		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 		if isLeaderNow {
 			_ = level.Info(logger).Log("msg", "check certificates expiration")
-			err := CheckCertExpiration(AmStore, logger, isLeaderNow)
+			err := CheckCertExpiration(AmStore, logger)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "Certificate check renewal failed", "err", err)
 			}
@@ -100,7 +100,7 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 		if isLeaderNow {
 			_ = level.Info(logger).Log("msg", "check tokens expiration")
-			data, err := AmStore.ListAllTokens(isLeaderNow)
+			data, err := AmStore.ListAllTokens()
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 			}
@@ -179,45 +179,39 @@ func WatchIssuerHealth(logger log.Logger, customLogger *logrus.Logger, interval 
 
 func WatchRingKvStoreChanges(ringConfig ring.AcmeManagerRing, logger log.Logger) {
 	// Watch for certificate changes - any key under certificates/
-	go ringConfig.KvStore.WatchPrefix(context.Background(), CertificatePrefix+"/", ring.GetDataCodec(), func(key string, in interface{}) bool {
+	go ringConfig.KvStore.WatchPrefix(context.Background(), CertificatePrefix+"/", models.GetCertificateCodec(), func(key string, in interface{}) bool {
 		isLeaderNow, _ := ring.IsLeader(ringConfig)
 		if !isLeaderNow {
-			val := in.(*ring.Data)
+			cert := in.(*models.Certificate)
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate key '%s' changed", key))
-			localCache.Set(key, val.Content)
+			localCache.Set(key, cert)
 			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", key))
 
 			// Update metrics for this specific certificate
-			var cert Certificate
-			err := json.Unmarshal([]byte(val.Content), &cert)
-			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to decode certificate key '%s'", key), "err", err)
-			} else {
-				metrics.IncManagedCertificate(cert.Issuer, cert.Owner)
-			}
+			metrics.IncManagedCertificate(cert.Issuer, cert.Owner)
 		}
 		return true
 	})
 
 	// Watch for token changes - any key under tokens/
-	go ringConfig.KvStore.WatchPrefix(context.Background(), TokenPrefix+"/", ring.GetDataCodec(), func(key string, in interface{}) bool {
+	go ringConfig.KvStore.WatchPrefix(context.Background(), TokenPrefix+"/", models.GetTokenCodec(), func(key string, in interface{}) bool {
 		isLeaderNow, _ := ring.IsLeader(ringConfig)
 		if !isLeaderNow {
-			val := in.(*ring.Data)
+			token := in.(*models.Token)
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("token key '%s' changed", key))
-			localCache.Set(key, val.Content)
+			localCache.Set(key, token)
 			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", key))
 		}
 		return true
 	})
 
 	// Watch for challenge changes - any key under challenges/
-	go ringConfig.KvStore.WatchPrefix(context.Background(), ChallengePrefix+"/", ring.GetDataCodec(), func(key string, in interface{}) bool {
+	go ringConfig.KvStore.WatchPrefix(context.Background(), ChallengePrefix+"/", models.GetChallengeCodec(), func(key string, in interface{}) bool {
 		isLeaderNow, _ := ring.IsLeader(ringConfig)
 		if !isLeaderNow {
-			val := in.(*ring.Data)
+			challenge := in.(*models.Challenge)
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("challenge key '%s' changed", key))
-			localCache.Set(key, val.Content)
+			localCache.Set(key, challenge)
 			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", key))
 		}
 		return true

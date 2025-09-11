@@ -13,7 +13,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -28,6 +27,7 @@ import (
 
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -43,43 +43,6 @@ var (
 type CertStore struct {
 	RingConfig ring.AcmeManagerRing
 	Logger     log.Logger
-	lock       sync.Mutex
-}
-
-// Certificate represents issuer certificate.
-type Certificate struct {
-	Domain        string `json:"domain" yaml:"domain" example:"testfgx.example.com"`
-	Issuer        string `json:"issuer" yaml:"issuer" example:"letsencrypt"`
-	Bundle        bool   `json:"bundle" yaml:"bundle" example:"false"`
-	SAN           string `json:"san,omitempty" yaml:"san,omitempty" example:""`
-	Days          int    `json:"days,omitempty" yaml:"days,omitempty" example:"90"`
-	RenewalDays   string `json:"renewal_days,omitempty" yaml:"renewal_days,omitempty" example:"30"`
-	RenewalDate   string `json:"renewal_date,omitempty"`
-	DNSChallenge  string `json:"dns_challenge,omitempty" yaml:"dns_challenge,omitempty" example:"ns1"`
-	HTTPChallenge string `json:"http_challenge,omitempty" yaml:"http_challenge,omitempty" example:""`
-	Expires       string `json:"expires" example:"2025-04-09 09:56:34 +0000 UTC"`
-	Fingerprint   string `json:"fingerprint" example:"3c7bccea1992d5095e7ab8c38f247352cd75ff26cdb95972d34ad54ebcef36af"`
-	Owner         string `json:"owner" example:"testfgx"`
-	CSR           string `json:"csr"`
-	Labels        string `json:"labels"`
-	Encryption    string `json:"encryption"`
-	Serial        string `json:"serial"`
-	KeyType       string `json:"key_type" yaml:"key_type" example:"ec256"`
-}
-
-type CertMap struct {
-	Certificate
-	Cert     string `json:"cert" example:"-----BEGIN CERTIFICATE-----\n..."`
-	CAIssuer string `json:"ca_issuer" example:"-----BEGIN CERTIFICATE-----\n..."`
-	URL      string `json:"url" example:"https://acme-staging-v02.api.letsencrypt.org/acme/cert/4b63b4e8b6109"`
-}
-
-type Token struct {
-	TokenHash string   `json:"tokenHash"`
-	Scope     []string `json:"scope"`
-	Username  string   `json:"username"`
-	Expires   string   `json:"expires"`
-	Duration  string   `json:"duration"`
 }
 
 func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resource) {
@@ -97,7 +60,7 @@ func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resou
 	}
 }
 
-func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (Certificate, error) {
+func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Logger) (*models.Certificate, error) {
 	vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 	domain := utils.SanitizedDomain(logger, certData.Domain)
 
@@ -107,7 +70,7 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 		return certData, err
 	}
 
-	csrDecoded, err := base64.StdEncoding.DecodeString(certData.CSR)
+	csrDecoded, err := base64.StdEncoding.DecodeString(certData.Csr)
 	if err != nil {
 		return certData, err
 	}
@@ -133,12 +96,12 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 	}
 
 	var dnsChallenge, httpChallenge string
-	if certData.DNSChallenge != "" {
-		dnsChallenge = certData.DNSChallenge
+	if certData.DnsChallenge != "" {
+		dnsChallenge = certData.DnsChallenge
 	}
 
-	if certData.HTTPChallenge != "" {
-		httpChallenge = certData.HTTPChallenge
+	if certData.HttpChallenge != "" {
+		httpChallenge = certData.HttpChallenge
 	}
 
 	// set challenge from issuer config
@@ -148,13 +111,26 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 	}
 
 	var challengeType string
-	if dnsChallenge != "" {
+	if dnsChallenge != "" && httpChallenge != "" {
+		// this should not happen
+		return certData, fmt.Errorf("both DNS (%s) and HTTP (%s) challenges are configured for domain %s", dnsChallenge, httpChallenge, certData.Domain)
+	} else if dnsChallenge != "" {
 		challengeType = "dns"
+	} else if httpChallenge != "" {
+		challengeType = "http"
+	} else {
+		return certData, fmt.Errorf("no challenge method  domain %s, issuer %s", certData.Domain, certData.Issuer)
 	}
 
-	if httpChallenge != "" {
-		challengeType = "http"
-	}
+	// Log the selected challenge
+	_ = level.Info(logger).Log(
+		"msg", "Challenge method selected",
+		"challenge_type", challengeType,
+		"provider", map[string]string{"dns": dnsChallenge, "http": httpChallenge}[challengeType],
+		"domain", certData.Domain,
+		"issuer", certData.Issuer,
+		"user", certData.Owner,
+	)
 
 	if challengeType == "dns" {
 		dnsProvider, err := dns.NewDNSChallengeProviderByName(dnsChallenge)
@@ -280,7 +256,7 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 
 	certData.RenewalDate = utils.RandomWeekdayBeforeExpiration(x509Cert.NotAfter, certRenewalMinDays, certRenewalMaxDays).String()
 
-	data := CertMap{
+	data := models.CertMap{
 		Certificate: certData,
 		Cert:        string(resource.Certificate),
 		CAIssuer:    string(resource.IssuerCertificate),
@@ -303,7 +279,7 @@ func CreateRemoteCertificateResource(certData Certificate, logger log.Logger) (C
 	return certData, nil
 }
 
-func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) error {
+func DeleteRemoteCertificateResource(certData *models.Certificate, logger log.Logger) error {
 	vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 	data, err := vault.GlobalClient.GetSecretWithAppRole(vaultSecretPath)
 	if err != nil {
@@ -340,14 +316,18 @@ func DeleteRemoteCertificateResource(certData Certificate, logger log.Logger) er
 	return nil
 }
 
-func CheckCertExpiration(amStore *CertStore, logger log.Logger, isLeader bool) error {
-	data, err := amStore.ListAllCertificates(isLeader)
+func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
+	data, err := amStore.ListAllCertificates()
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		return err
 	}
 
 	for _, certData := range data {
+		if certData.DeletedAt > 0 {
+			continue
+		}
+
 		layout := "2006-01-02 15:04:05 -0700 MST"
 		renewalDate, err := time.Parse(layout, certData.RenewalDate)
 		if err != nil {
@@ -375,9 +355,9 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger, isLeader bool) e
 	return nil
 }
 
-func MapInterfaceToCertMap(data map[string]interface{}) CertMap {
+func MapInterfaceToCertMap(data map[string]interface{}) models.CertMap {
 	val, _ := json.Marshal(data)
-	var result CertMap
+	var result models.CertMap
 	_ = json.Unmarshal(val, &result)
 	return result
 }

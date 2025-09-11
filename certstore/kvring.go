@@ -2,17 +2,15 @@ package certstore
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"time"
 	"strings"
+	"time"
 
 	"github.com/go-kit/log/level"
+	"github.com/prometheus/prometheus/model/timestamp"
 
 	"github.com/fgouteroux/acme_manager/memcache"
-	"github.com/fgouteroux/acme_manager/ring"
-
-	"github.com/prometheus/prometheus/model/timestamp"
+	"github.com/fgouteroux/acme_manager/models"
 )
 
 // Key prefixes
@@ -24,84 +22,11 @@ const (
 
 var localCache = memcache.NewLocalCache()
 
-
-func (c *CertStore) GetKVRing(key string, isLeader bool) (string, error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	var data string
-
-	if isLeader {
-		if cached, found := localCache.Get(key); found {
-			data = cached.Value.(string)
-		}
-	} else {
-		ctx := context.Background()
-		cached, err := c.RingConfig.DataClient.Get(ctx, key)
-		if err != nil {
-			return data, err
-		}
-
-		if cached != nil {
-			data = cached.(*ring.Data).Content
-		}
-	}
-
-	return data, nil
-}
-
-func (c *CertStore) PutKVRing(key string, data interface{}) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	_ = level.Debug(c.Logger).Log("msg", fmt.Sprintf("Updating kv store key '%s'", key))
-
-	content, _ := json.Marshal(data)
-	c.updateKV(key, string(content))
-	_ = level.Debug(c.Logger).Log("msg", fmt.Sprintf("Updated kv store key '%s'", key))
-}
-
-func (c *CertStore) updateKV(key, content string) {
-	// update local cache
-	localCache.Set(key, content)
-
-	updatedAt := time.Now()
-	data := &ring.Data{
-		Content:   content,
-		UpdatedAt: timestamp.FromTime(updatedAt),
-	}
-
-	ctx := context.Background()
-	err := c.RingConfig.DataClient.CAS(ctx, key, func(_ interface{}) (out interface{}, retry bool, err error) {
-		return data, true, nil
-	})
-
-	if err != nil {
-		_ = level.Error(c.Logger).Log("msg", "Failed to update KV store after retries", "key", key, "err", err)
-	}
-}
+// =================== CERTIFICATES ===================
 
 // GenerateCertificateKey creates a hierarchical key for certificates
 func GenerateCertificateKey(owner, issuer, domain string) string {
 	return fmt.Sprintf("%s/%s/%s/%s", CertificatePrefix, owner, issuer, domain)
-}
-
-// GenerateTokenKey creates a hierarchical key for tokens
-func GenerateTokenKey(tokenID string) string {
-	return fmt.Sprintf("%s/%s", TokenPrefix, tokenID)
-}
-
-// GenerateChallengeKey creates a hierarchical key for challenges
-func GenerateChallengeKey(challengeID string) string {
-	return fmt.Sprintf("%s/%s", ChallengePrefix, challengeID)
-}
-
-// ParseTokenKey extracts components from a token key
-func ParseTokenKey(key string) (tokenID string, err error) {
-	parts := strings.Split(key, "/")
-	if len(parts) != 2 || parts[0] != TokenPrefix {
-		return "", fmt.Errorf("invalid token key format: %s", key)
-	}
-	return parts[1], nil
 }
 
 // GetCertificateKeysForOwner generates a prefix to list all certificates for an owner
@@ -114,271 +39,371 @@ func GetCertificateKeysForOwnerAndIssuer(owner, issuer string) string {
 	return fmt.Sprintf("%s/%s/%s/", CertificatePrefix, owner, issuer)
 }
 
+func (c *CertStore) ListCertificateKVRingKeys(prefix string) ([]string, error) {
+	return c.RingConfig.CertificateClient.List(context.Background(), prefix)
+}
+
+// Store certificate
+func (c *CertStore) PutCertificate(cert *models.Certificate) error {
+	key := GenerateCertificateKey(cert.Owner, cert.Issuer, cert.Domain)
+
+	// Update the timestamp
+	cert.UpdatedAt = timestamp.FromTime(time.Now())
+
+	ctx := context.Background()
+	err := c.RingConfig.CertificateClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
+		return cert, true, nil
+	})
+
+	if err != nil {
+		_ = level.Error(c.Logger).Log("msg", "Failed to store certificate", "key", key, "err", err)
+	}
+	return err
+}
+
+// Get certificate
+func (c *CertStore) GetCertificate(owner, issuer, domain string) (*models.Certificate, error) {
+	key := GenerateCertificateKey(owner, issuer, domain)
+
+	ctx := context.Background()
+	cached, err := c.RingConfig.CertificateClient.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+
+	if cached == nil {
+		return nil, fmt.Errorf("certificate '%s/%s/%s' not found", owner, issuer, domain)
+	}
+
+	cert := cached.(*models.Certificate)
+
+	// Check for deletion
+	if cert.DeletedAt > 0 {
+		return nil, fmt.Errorf("certificate '%s/%s/%s' is pending deletion", owner, issuer, domain)
+	}
+
+	return cert, nil
+}
+
+// Delete certificate
+func (c *CertStore) DeleteCertificate(owner, issuer, domain string) error {
+	key := GenerateCertificateKey(owner, issuer, domain)
+
+	ctx := context.Background()
+
+	// First retrieve the existing certificate
+	cached, err := c.RingConfig.CertificateClient.Get(ctx, key)
+	if err != nil {
+		return err
+	}
+
+	if cached == nil {
+		return fmt.Errorf("certificate not found")
+	}
+
+	cert := cached.(*models.Certificate)
+
+	// Mark as deleted
+	cert.DeletedAt = timestamp.FromTime(time.Now())
+	cert.UpdatedAt = timestamp.FromTime(time.Now())
+
+	// Notify the deletion
+	err = c.RingConfig.CertificateClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
+		return cert, true, nil
+	})
+
+	if err != nil {
+		_ = level.Error(c.Logger).Log("msg", "Failed to mark certificate for deletion", "key", key, "err", err)
+		return err
+	}
+
+	// Delete from ring
+	return c.RingConfig.CertificateClient.Delete(ctx, key)
+}
+
+// List all certificates for an owner
+func (c *CertStore) ListCertificatesForOwner(owner string) ([]*models.Certificate, error) {
+	prefix := GetCertificateKeysForOwner(owner)
+	keys, err := c.ListCertificateKVRingKeys(prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	var certificates []*models.Certificate
+	ctx := context.Background()
+
+	for _, key := range keys {
+		cached, err := c.RingConfig.CertificateClient.Get(ctx, key)
+		if err != nil {
+			_ = level.Error(c.Logger).Log("msg", "Failed to get certificate", "key", key, "err", err)
+			continue
+		}
+
+		if cached == nil {
+			continue
+		}
+
+		cert := cached.(*models.Certificate)
+
+		// Skip deleted certificates (pending deletion)
+		if cert.DeletedAt == 0 {
+			certificates = append(certificates, cert)
+		}
+	}
+
+	return certificates, nil
+}
+
+// List all certificates
+func (c *CertStore) ListAllCertificates() (map[string]*models.Certificate, error) {
+	keys, err := c.ListCertificateKVRingKeys(CertificatePrefix + "/")
+	if err != nil {
+		return nil, err
+	}
+
+	certificates := make(map[string]*models.Certificate, len(keys))
+	ctx := context.Background()
+
+	for _, key := range keys {
+		cached, err := c.RingConfig.CertificateClient.Get(ctx, key)
+		if err != nil {
+			_ = level.Error(c.Logger).Log("msg", "Failed to get certificate", "key", key, "err", err)
+			continue
+		}
+
+		if cached == nil {
+			continue
+		}
+
+		cert := cached.(*models.Certificate)
+
+		if cert.DeletedAt == 0 {
+			certificates[key] = cert
+		}
+	}
+
+	return certificates, nil
+}
+
+// =================== TOKENS ===================
+
+// GenerateTokenKey creates a hierarchical key for tokens
+func GenerateTokenKey(tokenID string) string {
+	return fmt.Sprintf("%s/%s", TokenPrefix, tokenID)
+}
+
+// ParseTokenKey extracts components from a token key
+func ParseTokenKey(key string) (tokenID string, err error) {
+	parts := strings.Split(key, "/")
+	if len(parts) != 2 || parts[0] != TokenPrefix {
+		return "", fmt.Errorf("invalid token key format: %s", key)
+	}
+	return parts[1], nil
+}
+
 // GetTokenKeysForOwner generates a prefix to list all tokens for an owner
 func GetTokenKeysForOwner(owner string) string {
 	return fmt.Sprintf("%s/%s/", TokenPrefix, owner)
 }
 
-// Store individual certificate
-func (c *CertStore) PutCertificate(cert Certificate) error {
-	key := GenerateCertificateKey(cert.Owner, cert.Issuer, cert.Domain)
-	c.PutKVRing(key, cert)
-	return nil
+func (c *CertStore) ListTokenKVRingKeys() ([]string, error) {
+	return c.RingConfig.TokenClient.List(context.Background(), TokenPrefix+"/")
 }
 
-// Get individual certificate
-func (c *CertStore) GetCertificate(owner, issuer, domain string, isLeader bool) (Certificate, error) {
-	var cert Certificate
-	key := GenerateCertificateKey(owner, issuer, domain)
-	
-	content, err := c.GetKVRing(key, isLeader)
+// Store token
+func (c *CertStore) PutToken(tokenID string, token *models.Token) error {
+	key := GenerateTokenKey(tokenID)
+
+	// Update the timestamp
+	token.UpdatedAt = timestamp.FromTime(time.Now())
+
+	ctx := context.Background()
+	err := c.RingConfig.TokenClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
+		return token, true, nil
+	})
+
 	if err != nil {
-		return cert, err
+		_ = level.Error(c.Logger).Log("msg", "Failed to store token", "key", key, "err", err)
 	}
-	
-	if content == "" {
-		return cert, fmt.Errorf("certificate '%s/%s' not found", issuer,domain)
-	}
-	
-	err = json.Unmarshal([]byte(content), &cert)
-	return cert, err
+	return err
 }
 
-// Delete individual certificate
-func (c *CertStore) DeleteCertificate(owner, issuer, domain string) error {
-	key := GenerateCertificateKey(owner, issuer, domain)
-	return c.DeleteKVRing(key)
-}
+// Get token
+func (c *CertStore) GetToken(tokenID string) (*models.Token, error) {
+	key := GenerateTokenKey(tokenID)
 
-// List all certificates for an owner
-func (c *CertStore) ListCertificatesForOwner(owner string, isLeader bool) ([]Certificate, error) {
-	prefix := GetCertificateKeysForOwner(owner)
-	keys, err := c.ListKVRingKeys(prefix, isLeader)
+	ctx := context.Background()
+	cached, err := c.RingConfig.TokenClient.Get(ctx, key)
 	if err != nil {
 		return nil, err
 	}
-	
-	var certificates []Certificate
-	for _, key := range keys {
-		content, err := c.GetKVRing(key, isLeader)
-		if err != nil {
-			_ = level.Error(c.Logger).Log("msg", "Failed to get certificate", "key", key, "err", err)
-			continue
-		}
-		
-		var cert Certificate
-		if err := json.Unmarshal([]byte(content), &cert); err != nil {
-			_ = level.Error(c.Logger).Log("msg", "Failed to unmarshal certificate", "key", key, "err", err)
-			continue
-		}
-		
-		certificates = append(certificates, cert)
+
+	if cached == nil {
+		return nil, fmt.Errorf("token id '%s' not found", tokenID)
 	}
-	
-	return certificates, nil
+
+	token := cached.(*models.Token)
+
+	// Check for deletion
+	if token.DeletedAt > 0 {
+		return nil, fmt.Errorf("token id '%s' is pending deletion", tokenID)
+	}
+
+	return token, nil
 }
 
-// List all certificates (for backward compatibility and monitoring)
-func (c *CertStore) ListAllCertificates(isLeader bool) (map[string]Certificate, error) {
-	keys, err := c.ListKVRingKeys(CertificatePrefix+"/", isLeader)
+// Delete token
+func (c *CertStore) DeleteToken(tokenID string) error {
+	key := GenerateTokenKey(tokenID)
+
+	ctx := context.Background()
+
+	// Retrieve the existing token
+	cached, err := c.RingConfig.TokenClient.Get(ctx, key)
+	if err != nil {
+		return err
+	}
+
+	if cached == nil {
+		return fmt.Errorf("token not found")
+	}
+
+	token := cached.(*models.Token)
+
+	// Mark as deleted
+	token.DeletedAt = timestamp.FromTime(time.Now())
+	token.UpdatedAt = timestamp.FromTime(time.Now())
+
+	// Update
+	err = c.RingConfig.TokenClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
+		return token, true, nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	// Delete from ring
+	return c.RingConfig.TokenClient.Delete(ctx, key)
+}
+
+// List all tokens
+func (c *CertStore) ListAllTokens() (map[string]*models.Token, error) {
+	keys, err := c.ListTokenKVRingKeys()
 	if err != nil {
 		return nil, err
 	}
-	
-	certificates := make(map[string]Certificate, len(keys))
-	for _, key := range keys {
-		content, err := c.GetKVRing(key, isLeader)
-		if err != nil {
-			_ = level.Error(c.Logger).Log("msg", "Failed to get certificate", "key", key, "err", err)
-			continue
-		}
-		
-		var cert Certificate
-		if err := json.Unmarshal([]byte(content), &cert); err != nil {
-			_ = level.Error(c.Logger).Log("msg", "Failed to unmarshal certificate", "key", key, "err", err)
-			continue
-		}
-		
-		certificates[key] = cert
-	}
-	
-	return certificates, nil
-}
 
-// List all tokens (for backward compatibility and monitoring)
-func (c *CertStore) ListAllTokens(isLeader bool) (map[string]Token, error) {
-	keys, err := c.ListKVRingKeys(TokenPrefix+"/", isLeader)
-	if err != nil {
-		return nil, err
-	}
-	
-	tokens := make(map[string]Token, len(keys))
+	tokens := make(map[string]*models.Token, len(keys))
+	ctx := context.Background()
+
 	for _, key := range keys {
-		content, err := c.GetKVRing(key, isLeader)
+		cached, err := c.RingConfig.TokenClient.Get(ctx, key)
 		if err != nil {
 			_ = level.Error(c.Logger).Log("msg", "Failed to get token", "key", key, "err", err)
 			continue
 		}
-		
-		var token Token
-		if err := json.Unmarshal([]byte(content), &token); err != nil {
-			_ = level.Error(c.Logger).Log("msg", "Failed to unmarshal token", "key", key, "err", err)
+
+		if cached == nil {
 			continue
 		}
-		
+
+		token := cached.(*models.Token)
 		tokens[key] = token
 	}
-	
+
 	return tokens, nil
 }
 
-// List all challenges (for backward compatibility and monitoring)
-func (c *CertStore) ListAllChallenges(isLeader bool) (map[string]string, error) {
-	keys, err := c.ListKVRingKeys(ChallengePrefix+"/", isLeader)
+// =================== CHALLENGES ===================
+
+// GenerateChallengeKey creates a hierarchical key for challenges
+func GenerateChallengeKey(challengeID string) string {
+	return fmt.Sprintf("%s/%s", ChallengePrefix, challengeID)
+}
+
+func (c *CertStore) ListChallengeKVRingKeys() ([]string, error) {
+	return c.RingConfig.ChallengeClient.List(context.Background(), ChallengePrefix+"/")
+}
+
+// Store challenge
+func (c *CertStore) PutChallenge(challengeID string, keyAuth string) error {
+	key := GenerateChallengeKey(challengeID)
+
+	challenge := &models.Challenge{
+		KeyAuth:   keyAuth,
+		UpdatedAt: timestamp.FromTime(time.Now()),
+	}
+
+	ctx := context.Background()
+	err := c.RingConfig.ChallengeClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
+		return challenge, true, nil
+	})
+
+	if err != nil {
+		_ = level.Error(c.Logger).Log("msg", "Failed to store challenge", "key", key, "err", err)
+	}
+	return err
+}
+
+// Get challenge
+func (c *CertStore) GetChallenge(challengeID string) (string, error) {
+	key := GenerateChallengeKey(challengeID)
+
+	ctx := context.Background()
+	cached, err := c.RingConfig.ChallengeClient.Get(ctx, key)
+	if err != nil {
+		return "", err
+	}
+
+	if cached == nil {
+		return "", fmt.Errorf("challenge id '%s' not found", challengeID)
+	}
+
+	challenge := cached.(*models.Challenge)
+
+	// Check for deletion
+	if challenge.DeletedAt > 0 {
+		return "", fmt.Errorf("challenge id '%s' is pending deletion", challengeID)
+	}
+
+	return challenge.KeyAuth, nil
+}
+
+// Delete challenge
+func (c *CertStore) DeleteChallenge(challengeID string) error {
+	key := GenerateChallengeKey(challengeID)
+
+	ctx := context.Background()
+	return c.RingConfig.ChallengeClient.Delete(ctx, key)
+}
+
+// List all challenges
+func (c *CertStore) ListAllChallenges() (map[string]string, error) {
+	keys, err := c.ListChallengeKVRingKeys()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	challenges := make(map[string]string, len(keys))
+	ctx := context.Background()
+
 	for _, key := range keys {
-		content, err := c.GetKVRing(key, isLeader)
+		cached, err := c.RingConfig.ChallengeClient.Get(ctx, key)
 		if err != nil {
 			_ = level.Error(c.Logger).Log("msg", "Failed to get challenge", "key", key, "err", err)
 			continue
 		}
-		
-		challenges[key] = content
+
+		if cached == nil {
+			continue
+		}
+
+		challenge := cached.(*models.Challenge)
+		if challenge.DeletedAt == 0 {
+			challenges[key] = challenge.KeyAuth
+		}
 	}
-	
+
 	return challenges, nil
-}
-
-// Similar methods for tokens
-func (c *CertStore) PutToken(tokenID string, token Token) error {
-	key := GenerateTokenKey(tokenID)
-	c.PutKVRing(key, token)
-	return nil
-}
-
-func (c *CertStore) GetToken(tokenID string, isLeader bool) (Token, error) {
-	var token Token
-	key := GenerateTokenKey(tokenID)
-
-	content, err := c.GetKVRing(key, isLeader)
-	if err != nil {
-		return token, err
-	}
-	
-	if content == "" {
-		return token, fmt.Errorf("token id '%s' not found", tokenID)
-	}
-	
-	err = json.Unmarshal([]byte(content), &token)
-	return token, err
-}
-
-func (c *CertStore) DeleteToken(tokenID string) error {
-	key := GenerateTokenKey(tokenID)
-	return c.DeleteKVRing(key)
-}
-
-func (c *CertStore) ListTokensForOwner(owner string, isLeader bool) (map[string]Token, error) {
-	prefix := GetTokenKeysForOwner(owner)
-	keys, err := c.ListKVRingKeys(prefix, isLeader)
-	if err != nil {
-		return nil, err
-	}
-	
-	tokens := make(map[string]Token)
-	for _, key := range keys {
-		content, err := c.GetKVRing(key, isLeader)
-		if err != nil {
-			_ = level.Error(c.Logger).Log("msg", "Failed to get token", "key", key, "err", err)
-			continue
-		}
-		
-		var token Token
-		if err := json.Unmarshal([]byte(content), &token); err != nil {
-			_ = level.Error(c.Logger).Log("msg", "Failed to unmarshal token", "key", key, "err", err)
-			continue
-		}
-		
-		// Extract tokenID from key
-		tokenID, err := ParseTokenKey(key)
-		if err != nil {
-			_ = level.Error(c.Logger).Log("msg", "Failed to parse token key", "key", key, "err", err)
-			continue
-		}
-		
-		tokens[tokenID] = token
-	}
-	
-	return tokens, nil
-}
-
-// Similar methods for challenges
-func (c *CertStore) PutChallenge(challengeID string, challenge string) error {
-	key := GenerateChallengeKey(challengeID)
-	c.PutKVRing(key, challenge)
-	return nil
-}
-
-func (c *CertStore) GetChallenge(challengeID string, isLeader bool) (string, error) {
-	key := GenerateChallengeKey(challengeID)
-	data, err := c.GetKVRing(key, isLeader)
-	if err != nil {
-		return "", err
-	}
-	
-	if data == "" {
-		return data, fmt.Errorf("challenge id '%s' not found", challengeID)
-	}
-	return data, nil
-}
-
-func (c *CertStore) DeleteChallenge(challengeID string) error {
-	key := GenerateChallengeKey(challengeID)
-	return c.DeleteKVRing(key)
-}
-
-// Add methods you'll need for key listing and deletion
-func (c *CertStore) ListKVRingKeys(prefix string, isLeader bool) ([]string, error) {
-	// This method needs to be implemented based on your KV store backend
-	// For etcd/consul, you'd use prefix listing
-	// Implementation depends on your ring.DataClient interface
-	ctx := context.Background()
-	
-	if isLeader {
-		// For leader, might need to scan local cache
-		return c.listKeysFromCache(prefix), nil
-	}
-	// For non-leader, use the ring client to list keys
-	return c.RingConfig.DataClient.List(ctx, prefix)
-}
-
-func (c *CertStore) listKeysFromCache(prefix string) []string {
-	allKeys := localCache.GetAllKeys()
-	var matchingKeys []string
-	
-	for _, key := range allKeys {
-		if strings.HasPrefix(key, prefix) {
-			matchingKeys = append(matchingKeys, key)
-		}
-	}
-	
-	return matchingKeys
-}
-
-func (c *CertStore) DeleteKVRing(key string) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	
-	// Remove from local cache
-	localCache.Del(key)
-
-	fmt.Printf("Deleted key %s", key)
-	
-	// Remove from ring
-	ctx := context.Background()
-	return c.RingConfig.DataClient.Delete(ctx, key)
 }

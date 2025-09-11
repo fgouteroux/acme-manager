@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/fgouteroux/acme_manager/certstore"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/testhelper"
 	"net/http"
@@ -191,12 +192,13 @@ func TestRevokeTokenHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data := certstore.Token{
-		Scope:    []string{"create", "read", "update", "delete"},
-		Username: "testuser",
-		Expires:  "Never",
+	token := &models.Token{
+		TokenHash: "abc123def456",
+		Scope:     []string{"create", "read", "update", "delete"},
+		Username:  "testuser",
+		Expires:   "Never",
 	}
-	certstore.AmStore.PutToken("valid-id", data)
+	certstore.AmStore.PutToken("valid-id", token)
 	// wait for cert kv store
 	time.Sleep(1 * time.Second)
 

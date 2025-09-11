@@ -6,16 +6,45 @@ import (
 
 	"github.com/prometheus/common/model"
 
-	"github.com/fgouteroux/acme_manager/certstore"
 	cfg "github.com/fgouteroux/acme_manager/config"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/utils"
 )
 
+type CertConfig struct {
+	Domain        string `yaml:"domain"`
+	Issuer        string `yaml:"issuer"`
+	Bundle        bool   `yaml:"bundle,omitempty"`
+	San           string `yaml:"san,omitempty"`
+	Days          int32  `yaml:"days,omitempty"`
+	RenewalDays   string `yaml:"renewal_days,omitempty"`
+	DNSChallenge  string `yaml:"dns_challenge,omitempty"`
+	HTTPChallenge string `yaml:"http_challenge,omitempty"`
+	KeyType       string `yaml:"key_type,omitempty"`
+	Labels        string `yaml:"labels,omitempty"`
+}
+
+// Convert to models.Certificate
+func (cc CertConfig) ToModelsCertificate() models.Certificate {
+	return models.Certificate{
+		Domain:        cc.Domain,
+		Issuer:        cc.Issuer,
+		Bundle:        cc.Bundle,
+		San:           cc.San,
+		Days:          cc.Days,
+		RenewalDays:   cc.RenewalDays,
+		DnsChallenge:  cc.DNSChallenge,
+		HttpChallenge: cc.HTTPChallenge,
+		KeyType:       cc.KeyType,
+		Labels:        cc.Labels,
+	}
+}
+
 // Config represents certificate config.
 type Config struct {
-	Common      Common                  `yaml:"common"`
-	Certificate []certstore.Certificate `yaml:"certificate"`
-	Storage     cfg.Storage             `yaml:"storage"`
+	Common      Common       `yaml:"common"`
+	Certificate []CertConfig `yaml:"certificate"`
+	Storage     cfg.Storage  `yaml:"storage"`
 }
 
 // Common represents common config.

@@ -19,6 +19,7 @@ import (
 
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/config"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -57,6 +58,7 @@ type TokenResponseGet struct {
 // manage token
 
 // getToken godoc
+//
 //	@Summary		Read token
 //	@Description	Return token infos like scope, expiration...
 //	@Tags			token
@@ -96,7 +98,7 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 
 		ID := r.PathValue("id")
 		if ID != "" {
-			data, err := certstore.AmStore.GetToken(ID, false)
+			data, err := certstore.AmStore.GetToken(ID)
 			if err != nil {
 				if strings.Contains(err.Error(), "not found") {
 					responseJSON(w, nil, err, http.StatusNotFound)
@@ -109,7 +111,7 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 
 			responseJSON(w, data, nil, http.StatusOK)
 			return
-			
+
 		}
 		http.Error(w, "Missing token ID", http.StatusBadRequest)
 	})
@@ -118,6 +120,7 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 // manage token
 
 // createToken godoc
+//
 //	@Summary		Create token
 //	@Description	Create token for a given username, scope and expiration time.
 //	@Tags			token
@@ -228,7 +231,7 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		newToken := certstore.Token{
+		newToken := &models.Token{
 			TokenHash: tokenHash,
 			Scope:     token.Scope,
 			Username:  token.Username,
@@ -249,6 +252,7 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 // manage token
 
 // updateToken godoc
+//
 //	@Summary		Update token
 //	@Description	Update token for a given username, scope and expiration time, it will generate a new token.
 //	@Tags			token
@@ -288,9 +292,12 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		data, err := certstore.AmStore.GetToken(token.ID, false)
+		data, err := certstore.AmStore.GetToken(token.ID)
 		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			if strings.Contains(err.Error(), "pending deletion") {
+				responseJSON(w, nil, err, http.StatusConflict)
+				return
+			} else if strings.Contains(err.Error(), "not found") {
 				responseJSON(w, nil, fmt.Errorf("token ID '%s' not found", token.ID), http.StatusNotFound)
 				return
 			}
@@ -376,7 +383,7 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		data.Username = token.Username
 		data.Expires = expires
 		data.Duration = token.Duration
-	
+
 		err = certstore.AmStore.PutToken(token.ID, data)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -390,6 +397,7 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 // manage token
 
 // revokeToken godoc
+//
 //	@Summary		Revoke token
 //	@Description	Revoke token for a given ID.
 //	@Tags			token
@@ -423,9 +431,12 @@ func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 
 		ID := r.PathValue("id")
 		if ID != "" {
-			data, err := certstore.AmStore.GetToken(ID, false)
+			data, err := certstore.AmStore.GetToken(ID)
 			if err != nil {
-				if strings.Contains(err.Error(), "not found") {
+				if strings.Contains(err.Error(), "pending deletion") {
+					responseJSON(w, nil, err, http.StatusConflict)
+					return
+				} else if strings.Contains(err.Error(), "not found") {
 					responseJSON(w, nil, err, http.StatusNotFound)
 					return
 				}

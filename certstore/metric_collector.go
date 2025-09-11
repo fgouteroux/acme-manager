@@ -19,7 +19,7 @@ type CertificateCollector struct {
 func (c *CertificateCollector) Describe(_ chan<- *prometheus.Desc) {}
 
 func (c *CertificateCollector) Collect(ch chan<- prometheus.Metric) {
-	data, err := AmStore.ListAllCertificates(false)
+	data, err := AmStore.ListAllCertificates()
 	if err != nil {
 		_ = level.Error(c.Logger).Log("err", err)
 		return
@@ -65,7 +65,6 @@ func (c *CertificateCollector) Collect(ch chan<- prometheus.Metric) {
 func NewCertificateCollector(logger log.Logger) *CertificateCollector {
 	return &CertificateCollector{Logger: logger}
 }
-
 
 type NodeCollector struct {
 	Logger log.Logger

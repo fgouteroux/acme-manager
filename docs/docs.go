@@ -47,7 +47,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api.CertificateParams"
+                            "$ref": "#/definitions/models.CertificateParams"
                         }
                     }
                 ],
@@ -55,7 +55,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/certstore.CertMap"
+                            "$ref": "#/definitions/models.CertMap"
                         }
                     },
                     "400": {
@@ -78,6 +78,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/api.responseErrorJSON"
                         }
@@ -126,7 +132,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api.CertificateParams"
+                            "$ref": "#/definitions/models.CertificateParams"
                         }
                     }
                 ],
@@ -134,7 +140,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/certstore.CertMap"
+                            "$ref": "#/definitions/models.CertMap"
                         }
                     },
                     "400": {
@@ -151,6 +157,12 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/api.responseErrorJSON"
                         }
@@ -216,12 +228,18 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/certstore.Certificate"
+                                "$ref": "#/definitions/models.Certificate"
                             }
                         }
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/api.responseErrorJSON"
                         }
@@ -275,7 +293,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/certstore.CertMap"
+                            "$ref": "#/definitions/models.CertMap"
                         }
                     },
                     "400": {
@@ -298,6 +316,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/api.responseErrorJSON"
                         }
@@ -376,6 +400,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/api.responseErrorJSON"
                         }
@@ -620,55 +650,6 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "api.CertificateParams": {
-            "type": "object",
-            "properties": {
-                "bundle": {
-                    "type": "boolean",
-                    "example": false
-                },
-                "csr": {
-                    "type": "string"
-                },
-                "days": {
-                    "type": "integer",
-                    "example": 90
-                },
-                "dns_challenge": {
-                    "type": "string",
-                    "example": "ns1"
-                },
-                "domain": {
-                    "type": "string",
-                    "example": "testfgx.example.com"
-                },
-                "http_challenge": {
-                    "type": "string",
-                    "example": ""
-                },
-                "issuer": {
-                    "type": "string",
-                    "example": "letsencrypt"
-                },
-                "key_type": {
-                    "type": "string"
-                },
-                "labels": {
-                    "type": "string"
-                },
-                "renewal_days": {
-                    "type": "string",
-                    "example": "30"
-                },
-                "revoke": {
-                    "type": "boolean"
-                },
-                "san": {
-                    "type": "string",
-                    "example": ""
-                }
-            }
-        },
         "api.TokenParams": {
             "type": "object",
             "properties": {
@@ -759,12 +740,11 @@ const docTemplate = `{
                 }
             }
         },
-        "certstore.CertMap": {
+        "models.CertMap": {
             "type": "object",
             "properties": {
                 "bundle": {
-                    "type": "boolean",
-                    "example": false
+                    "type": "boolean"
                 },
                 "ca_issuer": {
                     "type": "string",
@@ -778,60 +758,57 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "days": {
-                    "type": "integer",
-                    "example": 90
+                    "type": "integer"
+                },
+                "deleted_at": {
+                    "description": "Unix timestamp in milliseconds when this entry was marked for deletion.\nReason for doing marking first, and delete later, is to make sure that replica nodes\nwatching the prefix will receive notification on \"marking\" -- at which point they can\nalready remove entry from memory. Actual deletion from KV store does *not* trigger\n\"watch\" notification with a key for all KV stores.",
+                    "type": "integer"
                 },
                 "dns_challenge": {
-                    "type": "string",
-                    "example": "ns1"
+                    "type": "string"
                 },
                 "domain": {
-                    "type": "string",
-                    "example": "testfgx.example.com"
+                    "type": "string"
                 },
                 "encryption": {
                     "type": "string"
                 },
                 "expires": {
-                    "type": "string",
-                    "example": "2025-04-09 09:56:34 +0000 UTC"
+                    "type": "string"
                 },
                 "fingerprint": {
-                    "type": "string",
-                    "example": "3c7bccea1992d5095e7ab8c38f247352cd75ff26cdb95972d34ad54ebcef36af"
+                    "type": "string"
                 },
                 "http_challenge": {
-                    "type": "string",
-                    "example": ""
+                    "type": "string"
                 },
                 "issuer": {
-                    "type": "string",
-                    "example": "letsencrypt"
+                    "type": "string"
                 },
                 "key_type": {
-                    "type": "string",
-                    "example": "ec256"
+                    "type": "string"
                 },
                 "labels": {
                     "type": "string"
                 },
                 "owner": {
-                    "type": "string",
-                    "example": "testfgx"
+                    "type": "string"
                 },
                 "renewal_date": {
                     "type": "string"
                 },
                 "renewal_days": {
-                    "type": "string",
-                    "example": "30"
+                    "type": "string"
                 },
                 "san": {
-                    "type": "string",
-                    "example": ""
+                    "type": "string"
                 },
                 "serial": {
                     "type": "string"
+                },
+                "updated_at": {
+                    "description": "Unix timestamp in milliseconds when we have updated the key.",
+                    "type": "integer"
                 },
                 "url": {
                     "type": "string",
@@ -839,7 +816,71 @@ const docTemplate = `{
                 }
             }
         },
-        "certstore.Certificate": {
+        "models.Certificate": {
+            "type": "object",
+            "properties": {
+                "bundle": {
+                    "type": "boolean"
+                },
+                "csr": {
+                    "type": "string"
+                },
+                "days": {
+                    "type": "integer"
+                },
+                "deleted_at": {
+                    "description": "Unix timestamp in milliseconds when this entry was marked for deletion.\nReason for doing marking first, and delete later, is to make sure that replica nodes\nwatching the prefix will receive notification on \"marking\" -- at which point they can\nalready remove entry from memory. Actual deletion from KV store does *not* trigger\n\"watch\" notification with a key for all KV stores.",
+                    "type": "integer"
+                },
+                "dns_challenge": {
+                    "type": "string"
+                },
+                "domain": {
+                    "type": "string"
+                },
+                "encryption": {
+                    "type": "string"
+                },
+                "expires": {
+                    "type": "string"
+                },
+                "fingerprint": {
+                    "type": "string"
+                },
+                "http_challenge": {
+                    "type": "string"
+                },
+                "issuer": {
+                    "type": "string"
+                },
+                "key_type": {
+                    "type": "string"
+                },
+                "labels": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "renewal_date": {
+                    "type": "string"
+                },
+                "renewal_days": {
+                    "type": "string"
+                },
+                "san": {
+                    "type": "string"
+                },
+                "serial": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "description": "Unix timestamp in milliseconds when we have updated the key.",
+                    "type": "integer"
+                }
+            }
+        },
+        "models.CertificateParams": {
             "type": "object",
             "properties": {
                 "bundle": {
@@ -861,17 +902,6 @@ const docTemplate = `{
                     "type": "string",
                     "example": "testfgx.example.com"
                 },
-                "encryption": {
-                    "type": "string"
-                },
-                "expires": {
-                    "type": "string",
-                    "example": "2025-04-09 09:56:34 +0000 UTC"
-                },
-                "fingerprint": {
-                    "type": "string",
-                    "example": "3c7bccea1992d5095e7ab8c38f247352cd75ff26cdb95972d34ad54ebcef36af"
-                },
                 "http_challenge": {
                     "type": "string",
                     "example": ""
@@ -881,29 +911,21 @@ const docTemplate = `{
                     "example": "letsencrypt"
                 },
                 "key_type": {
-                    "type": "string",
-                    "example": "ec256"
-                },
-                "labels": {
                     "type": "string"
                 },
-                "owner": {
-                    "type": "string",
-                    "example": "testfgx"
-                },
-                "renewal_date": {
+                "labels": {
                     "type": "string"
                 },
                 "renewal_days": {
                     "type": "string",
                     "example": "30"
                 },
+                "revoke": {
+                    "type": "boolean"
+                },
                 "san": {
                     "type": "string",
                     "example": ""
-                },
-                "serial": {
-                    "type": "string"
                 }
             }
         }

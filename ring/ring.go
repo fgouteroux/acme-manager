@@ -19,6 +19,8 @@ import (
 	"github.com/grafana/dskit/services"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/fgouteroux/acme_manager/models"
 )
 
 const (
@@ -49,11 +51,13 @@ const (
 var ringOp = ring.NewOp([]ring.InstanceState{ring.ACTIVE, ring.LEAVING}, nil)
 
 type AcmeManagerRing struct {
-	Client        *ring.Ring
-	Lifecycler    *ring.BasicLifecycler
-	Memberlistsvc *memberlist.KVInitService
-	KvStore       *memberlist.KV
-	DataClient    *memberlist.Client
+	Client            *ring.Ring
+	Lifecycler        *ring.BasicLifecycler
+	Memberlistsvc     *memberlist.KVInitService
+	KvStore           *memberlist.KV
+	CertificateClient *memberlist.Client
+	TokenClient       *memberlist.Client
+	ChallengeClient   *memberlist.Client
 }
 
 // Config holds all ring-related configuration
@@ -92,8 +96,28 @@ func (cfg *Config) RegisterFlagsWithPrefix(fs *flag.FlagSet, prefix string) {
 	fs.DurationVar(&cfg.HeartbeatTimeout, prefix+"heartbeat-timeout", 30*time.Second, "The heartbeat timeout after which instances are assumed unhealthy.")
 }
 
+// Helper function to check if specific flags were set
+func checkSetFlags(fs *flag.FlagSet, prefix string) map[string]bool {
+	setFlags := make(map[string]bool)
+
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case prefix + "memberlist.packet-dial-timeout":
+			setFlags["PacketDialTimeout"] = true
+		case prefix + "memberlist.packet-write-timeout":
+			setFlags["PacketWriteTimeout"] = true
+		case prefix + "memberlist.max-concurrent-writes":
+			setFlags["MaxConcurrentWrites"] = true
+		case prefix + "memberlist.acquire-writer-timeout":
+			setFlags["AcquireWriterTimeout"] = true
+		}
+	})
+
+	return setFlags
+}
+
 // NewWithConfig creates a new AcmeManagerRing using the Config struct
-func NewWithConfig(ringConfig Config, logger log.Logger) (AcmeManagerRing, error) {
+func NewWithConfig(ringConfig Config, logger log.Logger, flagSet *flag.FlagSet, flagPrefix string) (AcmeManagerRing, error) {
 	var config AcmeManagerRing
 	ctx := context.Background()
 
@@ -121,7 +145,7 @@ func NewWithConfig(ringConfig Config, logger log.Logger) (AcmeManagerRing, error
 	reg = prometheus.WrapRegistererWithPrefix("acme_manager_", reg)
 
 	// Use the structured configuration instead of hardcoded values
-	memberlistsvc := NewMemberlistKVWithConfig(ringConfig, instanceID, joinMembersSlice, logger, reg)
+	memberlistsvc := NewMemberlistKVWithConfig(ringConfig, instanceID, joinMembersSlice, logger, reg, flagSet, flagPrefix)
 	if err := services.StartAndAwaitRunning(ctx, memberlistsvc); err != nil {
 		return config, err
 	}
@@ -136,7 +160,17 @@ func NewWithConfig(ringConfig Config, logger log.Logger) (AcmeManagerRing, error
 		return config, err
 	}
 
-	dataClient, err := memberlist.NewClient(store, GetDataCodec())
+	certificateClient, err := memberlist.NewClient(store, models.GetCertificateCodec())
+	if err != nil {
+		return config, err
+	}
+
+	tokenClient, err := memberlist.NewClient(store, models.GetTokenCodec())
+	if err != nil {
+		return config, err
+	}
+
+	challengeClient, err := memberlist.NewClient(store, models.GetChallengeCodec())
 	if err != nil {
 		return config, err
 	}
@@ -161,22 +195,43 @@ func NewWithConfig(ringConfig Config, logger log.Logger) (AcmeManagerRing, error
 	}
 
 	return AcmeManagerRing{
-		Client:        ringsvc,
-		Lifecycler:    lfc,
-		Memberlistsvc: memberlistsvc,
-		KvStore:       store,
-		DataClient:    dataClient,
+		Client:            ringsvc,
+		Lifecycler:        lfc,
+		Memberlistsvc:     memberlistsvc,
+		KvStore:           store,
+		CertificateClient: certificateClient,
+		TokenClient:       tokenClient,
+		ChallengeClient:   challengeClient,
 	}, nil
 }
 
 // NewMemberlistKVWithConfig creates memberlist KV using the structured config
-func NewMemberlistKVWithConfig(ringConfig Config, instanceID string, joinMembers []string, logger log.Logger, reg prometheus.Registerer) *memberlist.KVInitService {
+func NewMemberlistKVWithConfig(ringConfig Config, instanceID string, joinMembers []string, logger log.Logger, reg prometheus.Registerer, flagSet *flag.FlagSet, flagPrefix string) *memberlist.KVInitService {
 	// Start with the provided configuration (which includes all the flags that were set)
 	config := ringConfig.MemberlistKV
 
+	// Check which TCP transport flags were explicitly set
+	setFlags := checkSetFlags(flagSet, flagPrefix)
+
+	// These defaults perform better but may cause long-running packets to be dropped in high-latency networks.
+	// Only apply these defaults if they haven't been explicitly set via command line flags
+	if !setFlags["PacketDialTimeout"] {
+		config.TCPTransport.PacketDialTimeout = 500 * time.Millisecond
+	}
+	if !setFlags["PacketWriteTimeout"] {
+		config.TCPTransport.PacketWriteTimeout = 500 * time.Millisecond
+	}
+	if !setFlags["MaxConcurrentWrites"] {
+		config.TCPTransport.MaxConcurrentWrites = 5
+	}
+	if !setFlags["AcquireWriterTimeout"] {
+		config.TCPTransport.AcquireWriterTimeout = 1 * time.Second
+	}
+
+	fmt.Println(config.TCPTransport)
 	// Codecs is used to tell memberlist library how to serialize/de-serialize the messages between peers.
 	// `ring.GetCode()` uses default, which is protobuf.
-	config.Codecs = []codec.Codec{ring.GetCodec(), GetDataCodec()}
+	config.Codecs = []codec.Codec{ring.GetCodec(), models.GetCertificateCodec(), models.GetTokenCodec(), models.GetChallengeCodec()}
 
 	// TCPTransport defines what addr and port this particular peer should listen for.
 	// These may have been set via flags, but ensure they're set
@@ -228,7 +283,7 @@ func NewMemberlistKVWithConfig(ringConfig Config, instanceID string, joinMembers
 }
 
 // Keep the original New function for backward compatibility
-func New(instanceID, instanceAddr, joinMembers, instanceInterfaceNames string, instancePort int, logger log.Logger) (AcmeManagerRing, error) {
+func New(instanceID, instanceAddr, joinMembers, instanceInterfaceNames string, instancePort int, logger log.Logger, flagSet *flag.FlagSet, flagPrefix string) (AcmeManagerRing, error) {
 	// Convert old parameters to new config structure
 	config := Config{
 		InstanceID:             instanceID,
@@ -241,7 +296,7 @@ func New(instanceID, instanceAddr, joinMembers, instanceInterfaceNames string, i
 	// Initialize MemberlistKV config with defaults
 	flagext.DefaultValues(&config.MemberlistKV)
 
-	return NewWithConfig(config, logger)
+	return NewWithConfig(config, logger, flagSet, flagPrefix)
 }
 
 // SimpleRing returns an instance of `ring.Ring` as a service. Starting and Stopping the service is upto the caller.

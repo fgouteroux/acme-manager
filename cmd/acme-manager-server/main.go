@@ -92,6 +92,9 @@ var commonFlagNames = []string{
 	"cleanup", "cleanup.interval", "cleanup.cert-expire-days", "cleanup.cert-revoke-last-version",
 }
 
+const ChallengePath = "/.well-known/acme-challenge/"
+const RingFlagPrefix = "ring."
+
 func init() {
 	// Initialize ring config with defaults
 	flagext.DefaultValues(&ringConfig.MemberlistKV)
@@ -104,7 +107,7 @@ func init() {
 
 	// Register ring flags with "ring." prefix
 	// This will create all the detailed memberlist flags automatically
-	ringConfig.RegisterFlagsWithPrefix(flag.CommandLine, "ring.")
+	ringConfig.RegisterFlagsWithPrefix(flag.CommandLine, RingFlagPrefix)
 
 	// Mark all flags that start with "ring.memberlist." as advanced
 	flag.CommandLine.VisitAll(func(f *flag.Flag) {
@@ -142,17 +145,17 @@ func printFlags(showAll bool) {
 	})
 }
 
-//	@title						acme manager server
-//	@version					1.0
-//	@description				ACME Manager Server - Manages ACME certificates in cluster mode
-//	@contact.name				François Gouteroux
-//	@contact.email				francois.gouteroux@gmail.com
-//	@license.name				Apache 2.0
-//	@license.url				http://www.apache.org/licenses/LICENSE-2.0.html
-//	@BasePath					/api/v1
-//	@securityDefinitions.apikey	APIKeyAuth
-//	@in							header
-//	@name						X-API-Key
+// @title						acme manager server
+// @version					1.0
+// @description				ACME Manager Server - Manages ACME certificates in cluster mode
+// @contact.name				François Gouteroux
+// @contact.email				francois.gouteroux@gmail.com
+// @license.name				Apache 2.0
+// @license.url				http://www.apache.org/licenses/LICENSE-2.0.html
+// @BasePath					/api/v1
+// @securityDefinitions.apikey	APIKeyAuth
+// @in							header
+// @name						X-API-Key
 func main() {
 	// Custom usage function that shows different help based on --help-all flag
 	flag.Usage = func() {
@@ -303,7 +306,7 @@ func main() {
 	ctx := context.Background()
 
 	// Use the new ring configuration with all the memberlist flags!
-	amring, err := ring.NewWithConfig(*ringConfig, logger)
+	amring, err := ring.NewWithConfig(*ringConfig, logger, flag.CommandLine, RingFlagPrefix)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
@@ -440,7 +443,7 @@ func main() {
 	http.Handle("/certificates", LoggerHandler(certificateListHandler()))
 	http.Handle("/tokens", LoggerHandler(tokenListHandler()))
 
-	http.HandleFunc("/.well-known/acme-challenge/", func(w http.ResponseWriter, req *http.Request) {
+	http.HandleFunc(ChallengePath, func(w http.ResponseWriter, req *http.Request) {
 		httpChallengeHandler(w, req)
 	})
 

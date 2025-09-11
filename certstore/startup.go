@@ -13,6 +13,7 @@ import (
 
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 )
@@ -28,7 +29,7 @@ func OnStartup(logger log.Logger) error {
 	}
 
 	// Handle certificates
-	certificateData, err := AmStore.ListAllCertificates(isLeaderNow)
+	certificateData, err := AmStore.ListAllCertificates()
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "Failed to list certificates from KV ring", "err", err)
 		return err
@@ -47,7 +48,7 @@ func OnStartup(logger log.Logger) error {
 		for _, certData := range vaultCertList {
 			err := AmStore.PutCertificate(certData)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", "Failed to store certificate", 
+				_ = level.Error(logger).Log("msg", "Failed to store certificate",
 					"domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
 				continue
 			}
@@ -56,14 +57,13 @@ func OnStartup(logger log.Logger) error {
 	} else if len(certificateData) > 0 {
 		// Data exists, update local cache
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing certificates in KV ring", len(certificateData)))
-		for k,v := range certificateData {
-			content, _ := json.Marshal(v)
-			localCache.Set(k, string(content))
+		for k, v := range certificateData {
+			localCache.Set(k, v)
 		}
 	}
 
 	// Handle tokens
-	tokenData, err := AmStore.ListAllTokens(isLeaderNow)
+	tokenData, err := AmStore.ListAllTokens()
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "Failed to get token data from KV ring", "err", err)
 		return err
@@ -80,9 +80,24 @@ func OnStartup(logger log.Logger) error {
 
 		// Store in ring (this will also update local cache via PutKVRing)
 		for tokenID, token := range tokens {
-			err := AmStore.PutToken(tokenID, token)
+			fmt.Println(tokenID)
+
+			existing, err := AmStore.GetToken(tokenID)
+			if err != nil && !strings.Contains(err.Error(), "not found") {
+				_ = level.Error(logger).Log("msg", "Failed to check token existence",
+					"tokenID", tokenID, "err", err)
+				continue
+			}
+
+			// Si le token existe déjà, skip
+			if existing != nil {
+				_ = level.Debug(logger).Log("msg", "Token already exists, skipping", "tokenID", tokenID)
+				continue
+			}
+
+			err = AmStore.PutToken(tokenID, token)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", "Failed to store token", 
+				_ = level.Error(logger).Log("msg", "Failed to store token",
 					"tokenID", tokenID, "owner", token.Username, "err", err)
 				continue
 			}
@@ -90,14 +105,13 @@ func OnStartup(logger log.Logger) error {
 	} else if len(tokenData) > 0 {
 		// Data exists, update local cache
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing tokens in KV ring", len(tokenData)))
-		for k,v := range tokenData {
-			content, _ := json.Marshal(v)
-			localCache.Set(k, string(content))
+		for k, v := range tokenData {
+			localCache.Set(k, v)
 		}
 	}
 
 	// Handle challenges
-	challengeData, err := AmStore.ListAllChallenges(isLeaderNow)
+	challengeData, err := AmStore.ListAllChallenges()
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "Failed to get challenge data from KV ring", "err", err)
 		return err
@@ -105,7 +119,7 @@ func OnStartup(logger log.Logger) error {
 
 	if len(challengeData) > 0 {
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing challenges in KV ring", len(challengeData)))
-		for k,v := range challengeData {
+		for k, v := range challengeData {
 			localCache.Set(k, v)
 		}
 	}
@@ -113,10 +127,10 @@ func OnStartup(logger log.Logger) error {
 	return nil
 }
 
-func getVaultAllCertificate(logger log.Logger) ([]Certificate, error) {
+func getVaultAllCertificate(logger log.Logger) ([]*models.Certificate, error) {
 	_ = level.Info(logger).Log("msg", "Retrieving certificates from vault")
 
-	var vaultCertList []Certificate
+	var vaultCertList []*models.Certificate
 	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(config.GlobalConfig.Storage.Vault.CertPrefix + "/")
 	if err != nil {
 		return vaultCertList, err
@@ -144,7 +158,7 @@ func getVaultAllCertificate(logger log.Logger) ([]Certificate, error) {
 				continue
 			}
 
-			var vaultCert Certificate
+			var vaultCert *models.Certificate
 			err = json.Unmarshal(cert, &vaultCert)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -162,10 +176,10 @@ func getVaultAllCertificate(logger log.Logger) ([]Certificate, error) {
 	return vaultCertList, nil
 }
 
-func getVaultAllToken(logger log.Logger) (map[string]Token, error) {
+func getVaultAllToken(logger log.Logger) (map[string]*models.Token, error) {
 	_ = level.Info(logger).Log("msg", "Retrieving tokens from vault")
 
-	tokenMap := make(map[string]Token)
+	tokenMap := make(map[string]*models.Token)
 	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(
 		config.GlobalConfig.Storage.Vault.TokenPrefix + "/",
 	)
@@ -198,7 +212,7 @@ func getVaultAllToken(logger log.Logger) (map[string]Token, error) {
 				continue
 			}
 
-			var token Token
+			var token *models.Token
 			err = json.Unmarshal(val, &token)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
