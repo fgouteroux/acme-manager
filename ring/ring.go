@@ -228,7 +228,6 @@ func NewMemberlistKVWithConfig(ringConfig Config, instanceID string, joinMembers
 		config.TCPTransport.AcquireWriterTimeout = 1 * time.Second
 	}
 
-	fmt.Println(config.TCPTransport)
 	// Codecs is used to tell memberlist library how to serialize/de-serialize the messages between peers.
 	// `ring.GetCode()` uses default, which is protobuf.
 	config.Codecs = []codec.Codec{ring.GetCodec(), models.GetCertificateCodec(), models.GetTokenCodec(), models.GetChallengeCodec()}

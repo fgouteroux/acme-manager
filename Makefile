@@ -39,13 +39,13 @@ test: compose-up
 	rm -rf api/tests
 	mkdir -p api/tests/accounts/pebble
 	mkdir -p api/tests/certificates
-	[ ! -f /tmp/pebble.minica.pem ] && curl -s -L -o /tmp/pebble.minica.pem https://raw.githubusercontent.com/letsencrypt/pebble/main/test/certs/pebble.minica.pem  && echo "pebble.minica.pem downloaded." || echo "pebble.minica.pem already exists."
 	[ ! -f api/tests/accounts/pebble/private_key.pem ] && openssl ecparam -name prime256v1 -genkey -noout -out api/tests/accounts/pebble/private_key.pem && echo "private_key.pem generated." || echo "private_key.pem already exists."
-
-	LEGO_CA_CERTIFICATES=/tmp/pebble.minica.pem go test -v -timeout 60s -coverprofile=cover.out -cover $(TEST)
+	LEGO_CA_CERTIFICATES=/tmp/pebble/test/certs/pebble.minica.pem go test -v -timeout 60s -coverprofile=cover.out -cover $(TEST)
 	go tool cover -func=cover.out
 
 compose-up: compose-down
+	rm -rf /tmp/pebble
+	git clone https://github.com/letsencrypt/pebble.git /tmp/pebble
 	docker compose -f ./docker-compose.yml up -d
 	sleep 5  # Wait for containers to initialize
 

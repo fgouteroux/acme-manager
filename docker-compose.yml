@@ -8,3 +8,5 @@ services:
     environment:
       PEBBLE_VA_ALWAYS_VALID: 1
       PEBBLE_WFE_NONCEREJECT: 0
+    volumes:
+      - /tmp/pebble/test:/test
