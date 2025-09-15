@@ -1,8 +1,6 @@
 package certstore
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -82,7 +80,7 @@ func WatchCertExpiration(logger log.Logger, interval time.Duration) {
 		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 		if isLeaderNow {
 			_ = level.Info(logger).Log("msg", "check certificates expiration")
-			err := CheckCertExpiration(AmStore, logger, isLeaderNow)
+			err := CheckCertExpiration(AmStore, logger)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "Certificate check renewal failed", "err", err)
 			}
@@ -100,11 +98,10 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
 		if isLeaderNow {
 			_ = level.Info(logger).Log("msg", "check tokens expiration")
-			data, err := AmStore.GetKVRingToken(AmTokenRingKey, isLeaderNow)
+			data, err := AmStore.ListAllTokens()
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 			}
-			var hasChange bool
 			for tokenID, tokenData := range data {
 
 				if tokenData.Expires == "Never" {
@@ -129,13 +126,11 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 						_ = level.Error(logger).Log("err", err)
 						continue
 					}
-					hasChange = true
-					delete(data, tokenID)
+					err = AmStore.DeleteToken(tokenID)
+					if err != nil {
+						_ = level.Error(logger).Log("err", err)
+					}
 				}
-			}
-			if hasChange {
-				// udpate kv store
-				AmStore.PutKVRing(AmTokenRingKey, data)
 			}
 			_ = level.Info(logger).Log("msg", "check tokens expiration done")
 		}
@@ -178,53 +173,4 @@ func WatchIssuerHealth(logger log.Logger, customLogger *logrus.Logger, interval 
 		}
 		_ = level.Info(logger).Log("msg", "check issuer health done")
 	}
-}
-
-func WatchRingKvStoreChanges(ringConfig ring.AcmeManagerRing, logger log.Logger) {
-	go ringConfig.KvStore.WatchKey(context.Background(), AmCertificateRingKey, ring.JSONCodec, func(in interface{}) bool {
-		isLeaderNow, _ := ring.IsLeader(ringConfig)
-		if !isLeaderNow {
-			val := in.(*ring.Data)
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("key '%s' changed", AmCertificateRingKey)) // #nosec G104
-			localCache.Set(AmCertificateRingKey, val.Content)
-			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", AmCertificateRingKey)) // #nosec G104
-
-			// update managed certificate metric
-			var data []Certificate
-			err := json.Unmarshal([]byte(val.Content), &data)
-			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to decode kv store key '%s' value", AmCertificateRingKey), "err", err, "content", val.Content)
-			} else {
-				for _, certData := range data {
-					metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
-				}
-			}
-			metrics.SetKVDataUpdateTime(AmCertificateRingKey, float64(val.UpdatedAt.Unix()))
-		}
-		return true // yes, keep watching
-	})
-
-	go ringConfig.KvStore.WatchKey(context.Background(), AmTokenRingKey, ring.JSONCodec, func(in interface{}) bool {
-		isLeaderNow, _ := ring.IsLeader(ringConfig)
-		if !isLeaderNow {
-			val := in.(*ring.Data)
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("key '%s' changed", AmTokenRingKey)) // #nosec G104
-			localCache.Set(AmTokenRingKey, val.Content)
-			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", AmTokenRingKey)) // #nosec G104
-			metrics.SetKVDataUpdateTime(AmTokenRingKey, float64(val.UpdatedAt.Unix()))
-		}
-		return true // yes, keep watching
-	})
-
-	go ringConfig.KvStore.WatchKey(context.Background(), AmChallengeRingKey, ring.JSONCodec, func(in interface{}) bool {
-		isLeaderNow, _ := ring.IsLeader(ringConfig)
-		if !isLeaderNow {
-			val := in.(*ring.Data)
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("key '%s' changed", AmChallengeRingKey)) // #nosec G104
-			localCache.Set(AmChallengeRingKey, val.Content)
-			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", AmChallengeRingKey)) // #nosec G104
-			metrics.SetKVDataUpdateTime(AmChallengeRingKey, float64(val.UpdatedAt.Unix()))
-		}
-		return true // yes, keep watching
-	})
 }

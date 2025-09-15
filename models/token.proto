@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package models;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/fgouteroux/acme_manager/models";
+
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+message Token {
+  string tokenHash = 1;
+  repeated string scope = 2;
+  string username = 3;
+  string expires = 4;
+  string duration = 5;
+  // Unix timestamp in milliseconds when we have updated the key.
+  int64 updated_at = 6;
+  // Unix timestamp in milliseconds when this entry was marked for deletion.
+  // Reason for doing marking first, and delete later, is to make sure that replica nodes
+  // watching the prefix will receive notification on "marking" -- at which point they can
+  // already remove entry from memory. Actual deletion from KV store does *not* trigger
+  // "watch" notification with a key for all KV stores.
+  int64 deleted_at = 7;
+}

@@ -20,7 +20,7 @@ import (
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
-	"github.com/fgouteroux/acme_manager/queue"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -31,22 +31,6 @@ var certLockMap sync.Map
 // responseErrorJSON example
 type responseErrorJSON struct {
 	Error string `json:"error" example:"error"`
-}
-
-// used only for swagger
-type CertificateParams struct {
-	Domain        string `json:"domain" example:"testfgx.example.com"`
-	Issuer        string `json:"issuer" example:"letsencrypt"`
-	Bundle        bool   `json:"bundle" example:"false"`
-	SAN           string `json:"san,omitempty" example:""`
-	CSR           string `json:"csr,omitempty"`
-	Days          int    `json:"days,omitempty" example:"90"`
-	RenewalDays   string `json:"renewal_days,omitempty" example:"30"`
-	DNSChallenge  string `json:"dns_challenge,omitempty" example:"ns1"`
-	HTTPChallenge string `json:"http_challenge,omitempty" example:""`
-	Revoke        bool   `json:"revoke"`
-	Labels        string `json:"labels"`
-	KeyType       string `json:"key_type"`
 }
 
 func responseJSON(w http.ResponseWriter, data interface{}, err error, statusCode int) {
@@ -77,8 +61,8 @@ func responseJSON(w http.ResponseWriter, data interface{}, err error, statusCode
 	}
 }
 
-func checkAuth(r *http.Request) (certstore.Token, error) {
-	var tokenData certstore.Token
+func checkAuth(r *http.Request) (*models.Token, error) {
+	var tokenData *models.Token
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		return tokenData, fmt.Errorf("authorization Header is missing or empty")
@@ -98,19 +82,12 @@ func checkAuth(r *http.Request) (certstore.Token, error) {
 		return tokenData, fmt.Errorf("invalid token format")
 	}
 
-	tokens, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, false)
+	tokenData, err = certstore.AmStore.GetToken(token[0])
 	if err != nil {
 		return tokenData, err
 	}
 
-	var tokenExists bool
-	tokenData, tokenExists = tokens[token[0]]
-	if !tokenExists {
-		return tokenData, fmt.Errorf("token not found")
-	}
-
-	reqTokenHash := utils.SHA1Hash(token[1])
-	if tokenExists && reqTokenHash != tokenData.TokenHash {
+	if tokenData.TokenHash != utils.SHA1Hash(token[1]) {
 		return tokenData, fmt.Errorf("invalid token")
 	}
 
@@ -132,18 +109,20 @@ func checkAuth(r *http.Request) (certstore.Token, error) {
 // manage metadata certificate
 
 // certificateMetadata godoc
-// @Summary Read metadata certificate
-// @Description Return certificate metadata like SAN,expiration, fingerprint...
-// @Tags metadata certificate
-// @Produce  application/json
-// @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
-// @Param issuer query string false "Certificate issuer" default(letsencrypt)
-// @Param domain query string false "Certificate domain" default(testfgx.example.com)
-// @Success 200 {object} []certstore.Certificate
-// @Success 404 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Router /certificate/metadata [get]
-func CertificateMetadataHandler(logger log.Logger) http.HandlerFunc {
+//
+//	@Summary		Read metadata certificate
+//	@Description	Return certificate metadata like SAN,expiration, fingerprint...
+//	@Tags			metadata certificate
+//	@Produce		application/json
+//	@Param			Authorization	header		string	true	"Access token"			default(Bearer <Add access token here>)
+//	@Param			issuer			query		string	false	"Certificate issuer"	default(letsencrypt)
+//	@Param			domain			query		string	false	"Certificate domain"	default(testfgx.example.com)
+//	@Success		200				{object}	[]models.Certificate
+//	@Success		404				{object}	responseErrorJSON
+//	@Success		409				{object}	responseErrorJSON
+//	@Success		500				{object}	responseErrorJSON
+//	@Router			/certificate/metadata [get]
+func CertificateMetadataHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		tokenValue, err := checkAuth(r)
@@ -153,35 +132,49 @@ func CertificateMetadataHandler(logger log.Logger) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("user", tokenValue.Username)
-
-		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, false)
+		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
 
+		if !isLeaderNow {
+			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
+			forwardRequest(logger, proxyClient, host, w, r)
+			return
+		}
+
+		owner := tokenValue.Username
+		w.Header().Set("user", owner)
+
 		issuer := r.URL.Query().Get("issuer")
 		domain := r.URL.Query().Get("domain")
 
-		var metadata []certstore.Certificate
+		var metadata []*models.Certificate
 		if issuer != "" && domain != "" {
-			idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
-				return c.Domain == domain && c.Issuer == issuer && c.Owner == tokenValue.Username
-			})
-			if idx == -1 {
-				responseJSON(w, nil, fmt.Errorf("certificate '%s' with issuer '%s' not found", domain, issuer), http.StatusNotFound)
+			data, err := certstore.AmStore.GetCertificate(tokenValue.Username, issuer, domain)
+			if err != nil {
+				if strings.Contains(err.Error(), "pending deletion") {
+					responseJSON(w, nil, err, http.StatusConflict)
+					return
+				} else if strings.Contains(err.Error(), "not found") {
+					responseJSON(w, nil, err, http.StatusNotFound)
+					return
+				}
+				_ = level.Error(logger).Log("err", err)
+				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
-			metadata = append(metadata, data[idx])
+			metadata = append(metadata, data)
 		} else {
-			for _, item := range data {
-
-				if item.Owner == tokenValue.Username {
-					metadata = append(metadata, item)
-				}
+			metadata, err = certstore.AmStore.ListCertificatesForOwner(owner)
+			if err != nil {
+				responseJSON(w, metadata, err, http.StatusInternalServerError)
+				return
 			}
+
 		}
 		responseJSON(w, metadata, nil, http.StatusOK)
 	})
@@ -190,21 +183,23 @@ func CertificateMetadataHandler(logger log.Logger) http.HandlerFunc {
 // manage certificate
 
 // certificate godoc
-// @Summary Read certificate
-// @Description Return certificate and issuer ca certificate.
-// @Tags certificate
-// @Produce  application/json
-// @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
-// @Param issuer path string true "Certificate issuer" default(letsencrypt)
-// @Param domain path string true "Certificate domain" default(testfgx.example.com)
-// @Success 200 {object} certstore.CertMap
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 403 {object} responseErrorJSON
-// @Success 404 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Router /certificate/{issuer}/{domain} [get]
-func GetCertificateHandler(logger log.Logger) http.HandlerFunc {
+//
+//	@Summary		Read certificate
+//	@Description	Return certificate and issuer ca certificate.
+//	@Tags			certificate
+//	@Produce		application/json
+//	@Param			Authorization	header		string	true	"Access token"			default(Bearer <Add access token here>)
+//	@Param			issuer			path		string	true	"Certificate issuer"	default(letsencrypt)
+//	@Param			domain			path		string	true	"Certificate domain"	default(testfgx.example.com)
+//	@Success		200				{object}	models.CertMap
+//	@Success		400				{object}	responseErrorJSON
+//	@Success		401				{object}	responseErrorJSON
+//	@Success		403				{object}	responseErrorJSON
+//	@Success		404				{object}	responseErrorJSON
+//	@Success		409				{object}	responseErrorJSON
+//	@Success		500				{object}	responseErrorJSON
+//	@Router			/certificate/{issuer}/{domain} [get]
+func GetCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
 		if err != nil {
@@ -215,7 +210,12 @@ func GetCertificateHandler(logger log.Logger) http.HandlerFunc {
 
 		w.Header().Set("user", tokenValue.Username)
 
-		certData := &certstore.Certificate{
+		if !slices.Contains(tokenValue.Scope, "read") {
+			responseJSON(w, nil, fmt.Errorf("invalid scope, missing 'read' scope"), http.StatusForbidden)
+			return
+		}
+
+		certData := &models.Certificate{
 			Domain: r.PathValue("domain"),
 			Issuer: r.PathValue("issuer"),
 			Owner:  tokenValue.Username,
@@ -226,35 +226,45 @@ func GetCertificateHandler(logger log.Logger) http.HandlerFunc {
 			return
 		}
 
-		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, false)
+		jsonData := map[string]string{
+			"user":   certData.Owner,
+			"domain": certData.Domain,
+			"issuer": certData.Issuer,
+		}
+
+		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
 
-		idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
-			return c.Domain == certData.Domain && c.Issuer == certData.Issuer && c.Owner == certData.Owner
-		})
-
-		var owner string
-		if idx != -1 {
-			owner = data[idx].Owner
-		}
-
-		if !slices.Contains(tokenValue.Scope, "read") {
-			responseJSON(w, nil, fmt.Errorf("invalid scope, missing 'read' scope"), http.StatusForbidden)
+		if !isLeaderNow {
+			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
+			forwardRequest(logger, proxyClient, host, w, r)
 			return
 		}
-		if idx == -1 || certData.Owner != owner {
-			responseJSON(w, nil, fmt.Errorf("certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
+
+		_, err = certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Domain)
+		if err != nil {
+			if strings.Contains(err.Error(), "pending deletion") {
+				responseJSON(w, nil, err, http.StatusConflict)
+				return
+			} else if strings.Contains(err.Error(), "not found") {
+				responseJSON(w, jsonData, err, http.StatusNotFound)
+				return
+			}
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
+
 		secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
 
@@ -265,20 +275,22 @@ func GetCertificateHandler(logger log.Logger) http.HandlerFunc {
 // manage certificate
 
 // certificate godoc
-// @Summary Create certificate
-// @Description Create certificate for a given issuer and domain name.
-// @Tags certificate
-// @Produce  application/json
-// @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
-// @Param body body CertificateParams true "Certificate body"
-// @Success 201 {object} certstore.CertMap
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 403 {object} responseErrorJSON
-// @Success 429 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Success 502 {object} responseErrorJSON
-// @Router /certificate [post]
+//
+//	@Summary		Create certificate
+//	@Description	Create certificate for a given issuer and domain name.
+//	@Tags			certificate
+//	@Produce		application/json
+//	@Param			Authorization	header		string				true	"Access token"	default(Bearer <Add access token here>)
+//	@Param			body			body		models.CertificateParams	true	"Certificate body"
+//	@Success		201				{object}	models.CertMap
+//	@Success		400				{object}	responseErrorJSON
+//	@Success		401				{object}	responseErrorJSON
+//	@Success		403				{object}	responseErrorJSON
+//	@Success		409				{object}	responseErrorJSON
+//	@Success		429				{object}	responseErrorJSON
+//	@Success		500				{object}	responseErrorJSON
+//	@Success		502				{object}	responseErrorJSON
+//	@Router			/certificate [post]
 func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
@@ -291,7 +303,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		w.Header().Set("user", tokenValue.Username)
 
 		// validate the request body
-		var certParams CertificateParams
+		var certParams models.CertificateParams
 		err = json.NewDecoder(r.Body).Decode(&certParams)
 		if err != nil {
 			responseJSON(w, nil, err, http.StatusBadRequest)
@@ -347,7 +359,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		// convert request params to certificate object
 		certBytes, _ := json.Marshal(certParams)
-		var certData certstore.Certificate
+		var certData *models.Certificate
 		err = json.Unmarshal(certBytes, &certData)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -370,28 +382,24 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, jsonData, err, http.StatusInternalServerError)
-			return
-		}
-
-		idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
-			return c.Domain == certData.Domain && c.Issuer == certData.Issuer && c.Owner == certData.Owner
-		})
-
-		if idx >= 0 {
-			responseJSON(w, jsonData, fmt.Errorf("certificate already exists"), http.StatusBadRequest)
-			return
-		}
-
 		if !isLeaderNow {
 			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
 			body, _ := json.Marshal(certData)
 			r.Body = io.NopCloser(bytes.NewReader(body))
 			forwardRequest(logger, proxyClient, host, w, r)
+			return
+		}
+
+		_, err = certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Domain)
+		if err == nil {
+			responseJSON(w, jsonData, fmt.Errorf("certificate already exists"), http.StatusConflict)
+			return
+		} else if strings.Contains(err.Error(), "pending deletion") {
+			responseJSON(w, nil, err, http.StatusConflict)
+			return
+		} else if !strings.Contains(err.Error(), "not found") {
+			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
 
@@ -430,23 +438,12 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		_ = level.Info(logger).Log("msg", "created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 		metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 
-		action := func() error {
-			data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
-			if err != nil {
-				return err
-			}
-
-			data = append(data, newCert)
-
-			// udpate kv store
-			certstore.AmStore.PutKVRing(certstore.AmCertificateRingKey, data)
-			return nil
+		err = certstore.AmStore.PutCertificate(newCert)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
+			return
 		}
-
-		certstore.CertificateQueue.AddJob(queue.Job{
-			Name:   fmt.Sprintf("%s/%s/%s", certData.Owner, certData.Issuer, certData.Domain),
-			Action: action,
-		}, logger)
 
 		secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
@@ -463,21 +460,23 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 // manage certificate
 
 // certificate godoc
-// @Summary Update certificate
-// @Description Update certificate will revoke the old and create a new certificate with given parameters.
-// @Tags certificate
-// @Produce  application/json
-// @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
-// @Param body body CertificateParams true "Certificate body"
-// @Success 200 {object} certstore.CertMap
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 403 {object} responseErrorJSON
-// @Success 404 {object} responseErrorJSON
-// @Success 429 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Success 502 {object} responseErrorJSON
-// @Router /certificate [put]
+//
+//	@Summary		Update certificate
+//	@Description	Update certificate will revoke the old and create a new certificate with given parameters.
+//	@Tags			certificate
+//	@Produce		application/json
+//	@Param			Authorization	header		string				true	"Access token"	default(Bearer <Add access token here>)
+//	@Param			body			body		models.CertificateParams	true	"Certificate body"
+//	@Success		200				{object}	models.CertMap
+//	@Success		400				{object}	responseErrorJSON
+//	@Success		401				{object}	responseErrorJSON
+//	@Success		403				{object}	responseErrorJSON
+//	@Success		404				{object}	responseErrorJSON
+//	@Success		409				{object}	responseErrorJSON
+//	@Success		429				{object}	responseErrorJSON
+//	@Success		500				{object}	responseErrorJSON
+//	@Success		502				{object}	responseErrorJSON
+//	@Router			/certificate [put]
 func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
@@ -490,7 +489,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		w.Header().Set("user", tokenValue.Username)
 
 		// validate the request body
-		var certParams CertificateParams
+		var certParams models.CertificateParams
 		err = json.NewDecoder(r.Body).Decode(&certParams)
 		if err != nil {
 			responseJSON(w, nil, err, http.StatusBadRequest)
@@ -550,7 +549,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		// convert request params to certificate object
 		certBytes, _ := json.Marshal(certParams)
-		var certData certstore.Certificate
+		var certData *models.Certificate
 		err = json.Unmarshal(certBytes, &certData)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -573,22 +572,6 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, jsonData, err, http.StatusInternalServerError)
-			return
-		}
-
-		idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
-			return c.Domain == certData.Domain && c.Issuer == certData.Issuer && c.Owner == certData.Owner
-		})
-
-		if idx == -1 {
-			responseJSON(w, jsonData, fmt.Errorf("certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
-			return
-		}
-
 		if !isLeaderNow {
 			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
@@ -598,8 +581,22 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
+		existingCert, err := certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Domain)
+		if err != nil {
+			if strings.Contains(err.Error(), "pending deletion") {
+				responseJSON(w, nil, err, http.StatusConflict)
+				return
+			} else if strings.Contains(err.Error(), "not found") {
+				responseJSON(w, nil, err, http.StatusNotFound)
+				return
+			}
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, nil, err, http.StatusInternalServerError)
+			return
+		}
+
 		// no concurrent task for the same certificate here
-		certLockKey := certData.Issuer + "/" + certData.Domain
+		certLockKey := certData.Owner + "/" + certData.Issuer + "/" + certData.Domain
 
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
@@ -620,29 +617,29 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 
 		var recreateCert bool
-		if certData.SAN != data[idx].SAN {
+		if certData.San != existingCert.San {
 			recreateCert = true
 		}
-		if certData.Days != data[idx].Days {
+		if certData.Days != existingCert.Days {
 			recreateCert = true
 		}
-		if certData.Bundle != data[idx].Bundle {
+		if certData.Bundle != existingCert.Bundle {
 			recreateCert = true
 		}
-		if certData.DNSChallenge != data[idx].DNSChallenge {
+		if certData.DnsChallenge != existingCert.DnsChallenge {
 			recreateCert = true
 		}
-		if certData.HTTPChallenge != data[idx].HTTPChallenge {
+		if certData.HttpChallenge != existingCert.HttpChallenge {
 			recreateCert = true
 		}
-		if certData.CSR != data[idx].CSR {
+		if certData.Csr != existingCert.Csr {
 			recreateCert = true
 		}
-		if certData.KeyType != data[idx].KeyType {
+		if certData.KeyType != existingCert.KeyType {
 			recreateCert = true
 		}
 
-		var newCert certstore.Certificate
+		var newCert *models.Certificate
 		var renewalDate string
 		if recreateCert {
 			if certParams.Revoke {
@@ -664,6 +661,13 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				return
 			}
 			_ = level.Info(logger).Log("msg", "re-created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
+
+			err = certstore.AmStore.PutCertificate(newCert)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				responseJSON(w, jsonData, err, http.StatusInternalServerError)
+				return
+			}
 		} else {
 			_ = level.Info(logger).Log("msg", "updating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 			secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
@@ -685,37 +689,19 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
+			// Update existing certificate metadata
+			existingCert.RenewalDate = renewalDate
+			existingCert.RenewalDays = certData.RenewalDays
+			existingCert.Labels = certData.Labels
+
+			err = certstore.AmStore.PutCertificate(existingCert)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				responseJSON(w, jsonData, err, http.StatusInternalServerError)
+				return
+			}
 			_ = level.Info(logger).Log("msg", "updated certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 		}
-
-		action := func() error {
-			data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
-			if err != nil {
-				return err
-			}
-
-			idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
-				return c.Domain == certData.Domain && c.Issuer == certData.Issuer && c.Owner == certData.Owner
-			})
-
-			if recreateCert {
-				data = slices.Delete(data, idx, idx+1)
-				data = append(data, newCert)
-			} else {
-				data[idx].RenewalDate = renewalDate
-				data[idx].RenewalDays = certData.RenewalDays
-				data[idx].Labels = certData.Labels
-			}
-
-			// udpate kv store
-			certstore.AmStore.PutKVRing(certstore.AmCertificateRingKey, data)
-			return nil
-		}
-
-		certstore.CertificateQueue.AddJob(queue.Job{
-			Name:   fmt.Sprintf("%s/%s/%s", certData.Owner, certData.Issuer, certData.Domain),
-			Action: action,
-		}, logger)
 
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 		if err != nil {
@@ -731,23 +717,25 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 // manage certificate
 
 // certificate godoc
-// @Summary Delete certificate
-// @Description Delete certificate for the given issuer and domain name.
-// @Tags certificate
-// @Produce  application/json
-// @Param Authorization header string true "Access token" default(Bearer <Add access token here>)
-// @Param issuer path string true "Certificate issuer" default(letsencrypt)
-// @Param domain path string true "Certificate domain" default(testfgx.example.com)
-// @Param revoke query bool false "Revoke Certificate" default(false)
-// @Success 204
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 403 {object} responseErrorJSON
-// @Success 404 {object} responseErrorJSON
-// @Success 429 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Success 502 {object} responseErrorJSON
-// @Router /certificate/{issuer}/{domain} [delete]
+//
+//	@Summary		Delete certificate
+//	@Description	Delete certificate for the given issuer and domain name.
+//	@Tags			certificate
+//	@Produce		application/json
+//	@Param			Authorization	header	string	true	"Access token"			default(Bearer <Add access token here>)
+//	@Param			issuer			path	string	true	"Certificate issuer"	default(letsencrypt)
+//	@Param			domain			path	string	true	"Certificate domain"	default(testfgx.example.com)
+//	@Param			revoke			query	bool	false	"Revoke Certificate"	default(false)
+//	@Success		204
+//	@Success		400	{object}	responseErrorJSON
+//	@Success		401	{object}	responseErrorJSON
+//	@Success		403	{object}	responseErrorJSON
+//	@Success		404	{object}	responseErrorJSON
+//	@Success		409	{object}	responseErrorJSON
+//	@Success		429	{object}	responseErrorJSON
+//	@Success		500	{object}	responseErrorJSON
+//	@Success		502	{object}	responseErrorJSON
+//	@Router			/certificate/{issuer}/{domain} [delete]
 func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokenValue, err := checkAuth(r)
@@ -765,7 +753,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		w.Header().Set("user", tokenValue.Username)
 
-		certData := certstore.Certificate{
+		certData := &models.Certificate{
 			Domain: r.PathValue("domain"),
 			Issuer: r.PathValue("issuer"),
 			Owner:  tokenValue.Username,
@@ -789,22 +777,6 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, jsonData, err, http.StatusInternalServerError)
-			return
-		}
-
-		idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
-			return c.Domain == certData.Domain && c.Issuer == certData.Issuer && c.Owner == certData.Owner
-		})
-
-		if idx == -1 {
-			responseJSON(w, jsonData, fmt.Errorf("certificate '%s' with issuer '%s' not found", certData.Domain, certData.Issuer), http.StatusNotFound)
-			return
-		}
-
 		if !isLeaderNow {
 			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
@@ -814,8 +786,22 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
+		_, err = certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Domain)
+		if err != nil {
+			if strings.Contains(err.Error(), "pending deletion") {
+				responseJSON(w, nil, err, http.StatusConflict)
+				return
+			} else if strings.Contains(err.Error(), "not found") {
+				responseJSON(w, nil, err, http.StatusNotFound)
+				return
+			}
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, nil, err, http.StatusInternalServerError)
+			return
+		}
+
 		// no concurrent task for the same certificate here
-		certLockKey := certData.Issuer + "/" + certData.Domain
+		certLockKey := certData.Owner + "/" + certData.Issuer + "/" + certData.Domain
 
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
@@ -855,27 +841,12 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 		metrics.DecManagedCertificate(certData.Issuer, certData.Owner)
 
-		action := func() error {
-			data, err := certstore.AmStore.GetKVRingCert(certstore.AmCertificateRingKey, isLeaderNow)
-			if err != nil {
-				return err
-			}
-
-			idx := slices.IndexFunc(data, func(c certstore.Certificate) bool {
-				return c.Domain == certData.Domain && c.Issuer == certData.Issuer && c.Owner == certData.Owner
-			})
-
-			data = slices.Delete(data, idx, idx+1)
-
-			// udpate kv store
-			certstore.AmStore.PutKVRing(certstore.AmCertificateRingKey, data)
-			return nil
+		err = certstore.AmStore.DeleteCertificate(certData.Owner, certData.Issuer, certData.Domain)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
+			return
 		}
-
-		certstore.CertificateQueue.AddJob(queue.Job{
-			Name:   fmt.Sprintf("%s/%s/%s", certData.Owner, certData.Issuer, certData.Domain),
-			Action: action,
-		}, logger)
 
 		w.WriteHeader(http.StatusNoContent)
 	})
@@ -919,12 +890,12 @@ func forwardRequest(logger log.Logger, proxyClient *http.Client, host string, w 
 	}
 }
 
-func checkCSR(certParams CertificateParams) error {
-	if certParams.CSR == "" {
+func checkCSR(certParams models.CertificateParams) error {
+	if certParams.Csr == "" {
 		return fmt.Errorf("missing 'csr' parameter")
 	}
 
-	csrDecoded, err := base64.StdEncoding.DecodeString(certParams.CSR)
+	csrDecoded, err := base64.StdEncoding.DecodeString(certParams.Csr)
 	if err != nil {
 		return fmt.Errorf("invalid 'csr' parameter, bad format: %v", err)
 	}
@@ -938,15 +909,15 @@ func checkCSR(certParams CertificateParams) error {
 	domains := certcrypto.ExtractDomainsCSR(csr)
 
 	var san []string
-	if certParams.SAN != "" {
-		san = strings.Split(certParams.SAN, ",")
+	if certParams.San != "" {
+		san = strings.Split(certParams.San, ",")
 	}
 
 	if certParams.Domain != domains[0] {
 		return fmt.Errorf("CSR Common Name should match 'domain' parameter. Domain '%s' - Common Name '%s'", certParams.Domain, domains[0])
 	}
 
-	if len(domains) > 1 && certParams.SAN == "" {
+	if len(domains) > 1 && certParams.San == "" {
 		return fmt.Errorf("CSR Domains should match 'SAN' parameter. SAN: %v - CSR domains: %v", san, domains[1:])
 	}
 

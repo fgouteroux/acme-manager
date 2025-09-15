@@ -16,8 +16,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/sirupsen/logrus"
 
-	"github.com/fgouteroux/acme_manager/api"
-	"github.com/fgouteroux/acme_manager/certstore"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/utils"
 )
 
@@ -123,8 +122,8 @@ func (c *Client) decodeJSON(resp *http.Response, v interface{}) error {
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
-func (c *Client) GetAllCertificateMetadata(timeout int) ([]certstore.Certificate, error) {
-	var certificate []certstore.Certificate
+func (c *Client) GetAllCertificateMetadata(timeout int) ([]models.Certificate, error) {
+	var certificate []models.Certificate
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
@@ -149,8 +148,8 @@ func (c *Client) GetAllCertificateMetadata(timeout int) ([]certstore.Certificate
 	return certificate, nil
 }
 
-func (c *Client) GetCertificateMetadata(issuer, domain string, timeout int) (certstore.Certificate, error) {
-	var certificate certstore.Certificate
+func (c *Client) GetCertificateMetadata(issuer, domain string, timeout int) (models.Certificate, error) {
+	var certificate models.Certificate
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
@@ -181,8 +180,8 @@ func (c *Client) GetCertificateMetadata(issuer, domain string, timeout int) (cer
 	return certificate, nil
 }
 
-func (c *Client) ReadCertificate(data certstore.Certificate, timeout int) (certstore.CertMap, error) {
-	var certificate certstore.CertMap
+func (c *Client) ReadCertificate(data models.Certificate, timeout int) (models.CertMap, error) {
+	var certificate models.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
@@ -216,8 +215,8 @@ func (c *Client) ReadCertificate(data certstore.Certificate, timeout int) (certs
 	return certificate, nil
 }
 
-func (c *Client) CreateCertificate(data api.CertificateParams, timeout int) (certstore.CertMap, error) {
-	var certificate certstore.CertMap
+func (c *Client) CreateCertificate(data models.CertificateParams, timeout int) (models.CertMap, error) {
+	var certificate models.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
@@ -251,8 +250,8 @@ func (c *Client) CreateCertificate(data api.CertificateParams, timeout int) (cer
 	return certificate, nil
 }
 
-func (c *Client) UpdateCertificate(data api.CertificateParams, timeout int) (certstore.CertMap, error) {
-	var certificate certstore.CertMap
+func (c *Client) UpdateCertificate(data models.CertificateParams, timeout int) (models.CertMap, error) {
+	var certificate models.CertMap
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
@@ -311,8 +310,8 @@ func (c *Client) DeleteCertificate(issuer, domain string, revoke bool, timeout i
 	return nil
 }
 
-func (c *Client) GetSelfToken(timeout int) (certstore.Token, error) {
-	var token certstore.Token
+func (c *Client) GetSelfToken(timeout int) (models.Token, error) {
+	var token models.Token
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 

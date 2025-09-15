@@ -1,55 +1,5 @@
 basePath: /api/v1
 definitions:
-  api.CertificateParams:
-    properties:
-      bundle:
-        example: false
-        type: boolean
-      csr:
-        type: string
-      days:
-        example: 90
-        type: integer
-      dns_challenge:
-        example: ns1
-        type: string
-      domain:
-        example: testfgx.example.com
-        type: string
-      http_challenge:
-        example: ""
-        type: string
-      issuer:
-        example: letsencrypt
-        type: string
-      key_type:
-        type: string
-      labels:
-        type: string
-      renewal_days:
-        example: "30"
-        type: string
-      revoke:
-        type: boolean
-      san:
-        example: ""
-        type: string
-    type: object
-  api.KVSyncResponse:
-    properties:
-      failed_keys:
-        items:
-          type: string
-        type: array
-      synced_keys:
-        items:
-          type: string
-        type: array
-      timestamp:
-        type: string
-      total_keys:
-        type: integer
-    type: object
   api.TokenParams:
     properties:
       duration:
@@ -111,10 +61,9 @@ definitions:
         example: error
         type: string
     type: object
-  certstore.CertMap:
+  models.CertMap:
     properties:
       bundle:
-        example: false
         type: boolean
       ca_issuer:
         example: |-
@@ -129,51 +78,99 @@ definitions:
       csr:
         type: string
       days:
-        example: 90
+        type: integer
+      deleted_at:
+        description: |-
+          Unix timestamp in milliseconds when this entry was marked for deletion.
+          Reason for doing marking first, and delete later, is to make sure that replica nodes
+          watching the prefix will receive notification on "marking" -- at which point they can
+          already remove entry from memory. Actual deletion from KV store does *not* trigger
+          "watch" notification with a key for all KV stores.
         type: integer
       dns_challenge:
-        example: ns1
         type: string
       domain:
-        example: testfgx.example.com
         type: string
       encryption:
         type: string
       expires:
-        example: 2025-04-09 09:56:34 +0000 UTC
         type: string
       fingerprint:
-        example: 3c7bccea1992d5095e7ab8c38f247352cd75ff26cdb95972d34ad54ebcef36af
         type: string
       http_challenge:
-        example: ""
         type: string
       issuer:
-        example: letsencrypt
         type: string
       key_type:
-        example: ec256
         type: string
       labels:
         type: string
       owner:
-        example: testfgx
         type: string
       renewal_date:
         type: string
       renewal_days:
-        example: "30"
         type: string
       san:
-        example: ""
         type: string
       serial:
         type: string
+      updated_at:
+        description: Unix timestamp in milliseconds when we have updated the key.
+        type: integer
       url:
         example: https://acme-staging-v02.api.letsencrypt.org/acme/cert/4b63b4e8b6109
         type: string
     type: object
-  certstore.Certificate:
+  models.Certificate:
+    properties:
+      bundle:
+        type: boolean
+      csr:
+        type: string
+      days:
+        type: integer
+      deleted_at:
+        description: |-
+          Unix timestamp in milliseconds when this entry was marked for deletion.
+          Reason for doing marking first, and delete later, is to make sure that replica nodes
+          watching the prefix will receive notification on "marking" -- at which point they can
+          already remove entry from memory. Actual deletion from KV store does *not* trigger
+          "watch" notification with a key for all KV stores.
+        type: integer
+      dns_challenge:
+        type: string
+      domain:
+        type: string
+      encryption:
+        type: string
+      expires:
+        type: string
+      fingerprint:
+        type: string
+      http_challenge:
+        type: string
+      issuer:
+        type: string
+      key_type:
+        type: string
+      labels:
+        type: string
+      owner:
+        type: string
+      renewal_date:
+        type: string
+      renewal_days:
+        type: string
+      san:
+        type: string
+      serial:
+        type: string
+      updated_at:
+        description: Unix timestamp in milliseconds when we have updated the key.
+        type: integer
+    type: object
+  models.CertificateParams:
     properties:
       bundle:
         example: false
@@ -189,14 +186,6 @@ definitions:
       domain:
         example: testfgx.example.com
         type: string
-      encryption:
-        type: string
-      expires:
-        example: 2025-04-09 09:56:34 +0000 UTC
-        type: string
-      fingerprint:
-        example: 3c7bccea1992d5095e7ab8c38f247352cd75ff26cdb95972d34ad54ebcef36af
-        type: string
       http_challenge:
         example: ""
         type: string
@@ -204,33 +193,27 @@ definitions:
         example: letsencrypt
         type: string
       key_type:
-        example: ec256
         type: string
       labels:
-        type: string
-      owner:
-        example: testfgx
-        type: string
-      renewal_date:
         type: string
       renewal_days:
         example: "30"
         type: string
+      revoke:
+        type: boolean
       san:
         example: ""
-        type: string
-      serial:
         type: string
     type: object
 info:
   contact:
     email: francois.gouteroux@gmail.com
     name: François Gouteroux
-  description: Manages acme certificate and deploy them on servers
+  description: ACME Manager Server - Manages ACME certificates in cluster mode
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
-  title: acme manager
+  title: acme manager server
   version: "1.0"
 paths:
   /certificate:
@@ -248,14 +231,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api.CertificateParams'
+          $ref: '#/definitions/models.CertificateParams'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/certstore.CertMap'
+            $ref: '#/definitions/models.CertMap'
         "400":
           description: Bad Request
           schema:
@@ -266,6 +249,10 @@ paths:
             $ref: '#/definitions/api.responseErrorJSON'
         "403":
           description: Forbidden
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/api.responseErrorJSON'
         "429":
@@ -298,14 +285,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api.CertificateParams'
+          $ref: '#/definitions/models.CertificateParams'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/certstore.CertMap'
+            $ref: '#/definitions/models.CertMap'
         "400":
           description: Bad Request
           schema:
@@ -320,6 +307,10 @@ paths:
             $ref: '#/definitions/api.responseErrorJSON'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/api.responseErrorJSON'
         "429":
@@ -385,6 +376,10 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/api.responseErrorJSON'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
         "429":
           description: Too Many Requests
           schema:
@@ -427,7 +422,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/certstore.CertMap'
+            $ref: '#/definitions/models.CertMap'
         "400":
           description: Bad Request
           schema:
@@ -442,6 +437,10 @@ paths:
             $ref: '#/definitions/api.responseErrorJSON'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/api.responseErrorJSON'
         "500":
@@ -478,10 +477,14 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/certstore.Certificate'
+              $ref: '#/definitions/models.Certificate'
             type: array
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/api.responseErrorJSON'
         "500":
@@ -491,42 +494,6 @@ paths:
       summary: Read metadata certificate
       tags:
       - metadata certificate
-  /kv/sync:
-    post:
-      description: Sync kv keys data across all nodes from leader kv data
-      parameters:
-      - description: kv keys to sync
-        in: query
-        name: keys
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.KVSyncResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.responseErrorJSON'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.responseErrorJSON'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.responseErrorJSON'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.responseErrorJSON'
-      security:
-      - APIKeyAuth: []
-      summary: Sync kv data across all nodes
-      tags:
-      - kv
   /token:
     post:
       description: Create token for a given username, scope and expiration time.

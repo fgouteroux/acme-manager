@@ -8,6 +8,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/fgouteroux/acme_manager/ring"
 )
 
 type CertificateCollector struct {
@@ -17,7 +19,7 @@ type CertificateCollector struct {
 func (c *CertificateCollector) Describe(_ chan<- *prometheus.Desc) {}
 
 func (c *CertificateCollector) Collect(ch chan<- prometheus.Metric) {
-	data, err := AmStore.GetKVRingCert(AmCertificateRingKey, false)
+	data, err := AmStore.ListAllCertificates()
 	if err != nil {
 		_ = level.Error(c.Logger).Log("err", err)
 		return
@@ -62,4 +64,39 @@ func (c *CertificateCollector) Collect(ch chan<- prometheus.Metric) {
 
 func NewCertificateCollector(logger log.Logger) *CertificateCollector {
 	return &CertificateCollector{Logger: logger}
+}
+
+type NodeCollector struct {
+	Logger log.Logger
+}
+
+func (nc *NodeCollector) Describe(_ chan<- *prometheus.Desc) {}
+
+func (nc *NodeCollector) Collect(ch chan<- prometheus.Metric) {
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			"acme_manager_node_role",
+			"Node role, 0 = unknown, 1 = leader, 2 = follower", nil, nil,
+		),
+		prometheus.GaugeValue,
+		nc.getRole(),
+	)
+}
+
+func NewNodeCollector(logger log.Logger) *NodeCollector {
+	return &NodeCollector{Logger: logger}
+}
+
+// getRole determines if this node is leader or follower
+func (nc *NodeCollector) getRole() float64 {
+	isLeader, err := ring.IsLeader(AmStore.RingConfig)
+	if err != nil {
+		_ = level.Warn(nc.Logger).Log("msg", "Failed to determine role", "err", err)
+		return 0
+	}
+
+	if isLeader {
+		return 1
+	}
+	return 2
 }

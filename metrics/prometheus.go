@@ -156,47 +156,6 @@ var (
 		},
 		[]string{"issuer"},
 	)
-
-	// Metrics for KV data consistency monitoring
-	kvDataHashGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "acme_manager_kv_data_hash",
-			Help: "SHA256 hash of KV data content for consistency checking (first 8 bytes as float64)",
-		},
-		[]string{"key", "source"},
-	)
-
-	kvDataLengthGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "acme_manager_kv_data_length",
-			Help: "Length of KV data content in bytes",
-		},
-		[]string{"key", "source"},
-	)
-
-	kvHashErrorsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_kv_hash_errors_total",
-			Help: "Total number of errors while calculating KV data hashes",
-		},
-		[]string{"key", "source", "error_type"},
-	)
-
-	kvDataUpdateTimeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "acme_manager_kv_data_update_time_seconds",
-			Help: "Unix timestamp of when KV data was last updated",
-		},
-		[]string{"key"},
-	)
-
-	nodeRole = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "acme_manager_node_role",
-			Help: "Node role, 0 = unknown, 1 = leader, 2 = follower",
-		},
-		[]string{},
-	)
 )
 
 func IncManagedCertificate(issuer, owner string) {
@@ -279,26 +238,6 @@ func SetIssuerConfigError(issuer string, value float64) {
 	issuerConfigError.WithLabelValues(issuer).Set(value)
 }
 
-func SetKvDataHashGauge(key, source string, value float64) {
-	kvDataHashGauge.WithLabelValues(key, source).Set(value)
-}
-
-func SetKvDataLengthGauge(key, source string, value float64) {
-	kvDataLengthGauge.WithLabelValues(key, source).Set(value)
-}
-
-func IncKvHashErrorsTotal(key, source, errorType string) {
-	kvHashErrorsTotal.WithLabelValues(key, source, errorType).Inc()
-}
-
-func SetKVDataUpdateTime(key string, value float64) {
-	kvDataUpdateTimeGauge.WithLabelValues(key).Set(value)
-}
-
-func SetNodeRole(value float64) {
-	nodeRole.WithLabelValues().Set(value)
-}
-
 func init() {
 	collectors := []prometheus.Collector{
 		managedCertificate,
@@ -320,11 +259,6 @@ func init() {
 		configReload,
 		configError,
 		issuerConfigError,
-		kvDataHashGauge,
-		kvDataLengthGauge,
-		kvHashErrorsTotal,
-		kvDataUpdateTimeGauge,
-		nodeRole,
 	}
 
 	for _, collector := range collectors {

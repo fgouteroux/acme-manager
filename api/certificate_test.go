@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/config"
-	"github.com/fgouteroux/acme_manager/queue"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/testhelper"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -86,10 +87,10 @@ func TestMain(m *testing.M) {
 	})
 
 	// certificate
-	mux.Handle("GET /api/v1/certificate/metadata", CertificateMetadataHandler(logger))
+	mux.Handle("GET /api/v1/certificate/metadata", CertificateMetadataHandler(logger, nil))
 	mux.Handle("PUT /api/v1/certificate", UpdateCertificateHandler(logger, nil))
 	mux.Handle("POST /api/v1/certificate", CreateCertificateHandler(logger, nil))
-	mux.Handle("GET /api/v1/certificate/{issuer}/{domain}", GetCertificateHandler(logger))
+	mux.Handle("GET /api/v1/certificate/{issuer}/{domain}", GetCertificateHandler(logger, nil))
 	mux.Handle("DELETE /api/v1/certificate/{issuer}/{domain}", DeleteCertificateHandler(logger, nil))
 
 	// token
@@ -97,21 +98,6 @@ func TestMain(m *testing.M) {
 	mux.Handle("POST /api/v1/token", CreateTokenHandler(logger, nil))
 	mux.Handle("GET /api/v1/token/{id}", GetTokenHandler(logger))
 	mux.Handle("DELETE /api/v1/token/{id}", RevokeTokenHandler(logger, nil))
-
-	// init queues
-	certstore.CertificateQueue = queue.NewQueue("certificate")
-	certstore.ChallengeQueue = queue.NewQueue("challenge")
-	certstore.TokenQueue = queue.NewQueue("token")
-
-	// init workers
-	tokenWorker := queue.NewWorker(certstore.TokenQueue, logger)
-	challengeWorker := queue.NewWorker(certstore.ChallengeQueue, logger)
-	certificateWorker := queue.NewWorker(certstore.CertificateQueue, logger)
-
-	// start workers
-	go tokenWorker.DoWork()
-	go certificateWorker.DoWork()
-	go challengeWorker.DoWork()
 
 	// Run the tests
 	code := m.Run()
@@ -121,14 +107,13 @@ func TestMain(m *testing.M) {
 }
 
 func initKVStoreToken() {
-	data := make(map[string]certstore.Token, 1)
-	data["testuser"] = certstore.Token{
+	token := &models.Token{
 		TokenHash: "206c80413b9a96c1312cc346b7d2517b84463edd",
 		Scope:     []string{"create", "read", "update", "delete"},
 		Username:  "testuser",
 		Expires:   "Never",
 	}
-	certstore.AmStore.PutKVRing(certstore.AmTokenRingKey, data)
+	certstore.AmStore.PutToken("testuser", token)
 	// wait for cert kv store
 	time.Sleep(1 * time.Second)
 }
@@ -177,20 +162,21 @@ func TestAPICheckAuth(t *testing.T) {
 func TestAPICertificateMetadataHandler(t *testing.T) {
 
 	// init kv store with cert
-	var certs []certstore.Certificate
-	data := certstore.Certificate{
-		Domain: "testfgx.example.com",
+	expected := &models.Certificate{
+		Domain: "testfgx1.example.com",
 		Issuer: "pebble",
 		Owner:  "testuser",
 	}
-	certs = append(certs, data)
-	certstore.AmStore.PutKVRing(certstore.AmCertificateRingKey, certs)
+	err := certstore.AmStore.PutCertificate(expected)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// wait for cert kv store
 	time.Sleep(1 * time.Second)
 
 	// init the request
-	req, err := http.NewRequest("GET", "/api/v1/certificate/metadata?issuer=pebble&domain=testfgx.example.com", nil)
+	req, err := http.NewRequest("GET", "/api/v1/certificate/metadata?issuer=pebble&domain=testfgx1.example.com", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,10 +189,10 @@ func TestAPICertificateMetadataHandler(t *testing.T) {
 		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
 	}
 
-	expected := `[{"domain":"testfgx.example.com","issuer":"pebble","bundle":false,"expires":"","fingerprint":"","owner":"testuser","csr":"","labels":"","encryption":"","serial":"","key_type":""}]`
-	if rr.Body.String() != expected {
-		t.Errorf("handler returned unexpected body: got %v want %v", rr.Body.String(), expected)
-	}
+	var cert []models.Certificate
+	json.Unmarshal(rr.Body.Bytes(), &cert)
+
+	assert.Equal(t, *expected, cert[0], "Certificate should match expected values")
 }
 
 // TestAPIGetCertificateHandler checks that the handler returns the correct certificate
@@ -219,27 +205,25 @@ func TestAPIGetCertificateHandler(t *testing.T) {
 	vault.GlobalClient = &vaultTest.Client
 
 	issuer := "pebble"
-	domain := "testfgx.example.com"
+	domain := "testfgx2.example.com"
 
 	// init kv store with cert
-	var certs []certstore.Certificate
-	data := certstore.Certificate{
+	cert := &models.Certificate{
 		Domain: domain,
 		Issuer: issuer,
 		Owner:  "testuser",
 	}
-	certs = append(certs, data)
-	certstore.AmStore.PutKVRing(certstore.AmCertificateRingKey, certs)
+	certstore.AmStore.PutCertificate(cert)
 
 	// wait for cert kv store
 	time.Sleep(1 * time.Second)
 
-	err := vault.GlobalClient.PutSecretWithAppRole("/testuser/pebble/testfgx.example.com", utils.StructToMapInterface(data))
+	err := vault.GlobalClient.PutSecretWithAppRole("/testuser/pebble/testfgx2.example.com", utils.StructToMapInterface(cert))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	req, err := http.NewRequest("GET", "/api/v1/certificate/pebble/testfgx.example.com", nil)
+	req, err := http.NewRequest("GET", "/api/v1/certificate/pebble/testfgx2.example.com", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +239,7 @@ func TestAPIGetCertificateHandler(t *testing.T) {
 		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
 	}
 
-	var result certstore.CertMap
+	var result models.CertMap
 	err = json.Unmarshal(rr.Body.Bytes(), &result)
 	if err != nil {
 		t.Fatal(err)
@@ -276,25 +260,17 @@ func TestAPICreateCertificateHandler(t *testing.T) {
 
 	vault.GlobalClient = &vaultTest.Client
 
-	// init kv store with cert
-	var certs []certstore.Certificate
-	data := certstore.Certificate{
-		Domain: "testfgx2.example.com",
+	cert := &models.Certificate{
+		Domain: "testfgx.example.com",
 		Issuer: "pebble",
-		Owner:  "testuser",
+		Csr:    "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJRENUQ0NBZkVDQVFBd2daSXhIREFhQmdOVkJBTU1FM1JsYzNSbVozZ3VaWGhoYlhCc1pTNWpiMjB4SGpBYwpCZ2txaGtpRzl3MEJDUUVXRDNOemJFQmxlR0Z0Y0d4bExtTnZiVEVRTUE0R0ExVUVDZ3dIVTI5amFXVjBaVEVVCk1CSUdBMVVFQ3d3TFJHVndZWEowWlcxbGJuUXhEakFNQmdOVkJBY01CVlpwYkd4bE1RMHdDd1lEVlFRSURBUkYKZEdGME1Rc3dDUVlEVlFRR0V3SkdVakNDQVNJd0RRWUpLb1pJaHZjTkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQgpBTDRodjNORGE1K2hMc215VTlyODB1NWtkc0pxcTFQTXl3RkR5UXFNZ0NFTEUwWHhHOTg4eFNONGFiV24wQ09KCjJ2K0pqKzljcXdvYkVsZ0dJR21YS3FFYXR3SldUT0tUdHBrU3g1M0dkVGZvbklXeFRzTDJxa2F5VWNuanVEakMKWnNGSjJuMXBlOVdINzVEMklzRFduTVJmUU1McjBWUnd4K1o3YWJYWW05L1ltcndSS3FwS1hKR09DbVRQb3ZHaApMTFo5M1lCSkh3UjhJOWJSVDI1cWJXeFVvNEl1YnljTjRKRlYwR04yZklTOVNHd0N5ZEhtczlGN0F4N3ZLaGdPCjFxRVBOeEJaVHdYZFA0cmhOWTh3bEM3Z2tWckFUdmZTT1pDeWxYbm50bER3RUdkWmhwcmNDUThIZlRIUWVteE8KUDV2dEJYSXlJTFJLL1hpdjJpd3hUUHNDQXdFQUFhQXhNQzhHQ1NxR1NJYjNEUUVKRGpFaU1DQXdIZ1lEVlIwUgpCQmN3RllJVGRHVnpkR1puZUM1bGVHRnRjR3hsTG1OdmJUQU5CZ2txaGtpRzl3MEJBUXNGQUFPQ0FRRUFkQk5pClBYNHREVGtocVRRdVAvSlB3ZkRIemRBTDhpamV0NHhNaVBxZEdqdkhaWWh6WVg0WEVvYWtnREF2VmNQN2d0N24KeGRnU2pJUWFxckg2cU9BZGd4WERoWHkwUjlzUG9kaDVqV0w0Qk01aDJEOU5UOXU3cXdUaEhONVp1RmxDbzBBeAoxbnEwTVdmRmU4a2wyY3lMMVFrUWhNQW1OTG5KTWRzN2NuU0R2TVRCUDVwSUV1TndIZGRUMVZNWnJmYUZJejJuCkw3aFJmeWhKMVpRcEFyaE5rTno5Nk1XU2VhcytOZGNSWWVhcWg3M01NS0VBaU4zU0R1OFV5eUlHQUY1UzFvTVIKVzlCMUhEanBOV3VaNWlOUXRSMVNzMGZpUEpxY1dPelJMSUcvSHlIb0l1YkVSNi82K3dEQ255Z0hLOUpudHFlbAo4V2JzSVJrbEpHalY1S0dEbFE9PQotLS0tLUVORCBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0K",
 	}
-	certs = append(certs, data)
-	certstore.AmStore.PutKVRing(certstore.AmCertificateRingKey, certs)
+	data, err := json.Marshal(cert)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// wait for cert kv store
-	time.Sleep(1 * time.Second)
-
-	issuer := "pebble"
-	domain := "testfgx.example.com"
-	csr := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJRENUQ0NBZkVDQVFBd2daSXhIREFhQmdOVkJBTU1FM1JsYzNSbVozZ3VaWGhoYlhCc1pTNWpiMjB4SGpBYwpCZ2txaGtpRzl3MEJDUUVXRDNOemJFQmxlR0Z0Y0d4bExtTnZiVEVRTUE0R0ExVUVDZ3dIVTI5amFXVjBaVEVVCk1CSUdBMVVFQ3d3TFJHVndZWEowWlcxbGJuUXhEakFNQmdOVkJBY01CVlpwYkd4bE1RMHdDd1lEVlFRSURBUkYKZEdGME1Rc3dDUVlEVlFRR0V3SkdVakNDQVNJd0RRWUpLb1pJaHZjTkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQgpBTDRodjNORGE1K2hMc215VTlyODB1NWtkc0pxcTFQTXl3RkR5UXFNZ0NFTEUwWHhHOTg4eFNONGFiV24wQ09KCjJ2K0pqKzljcXdvYkVsZ0dJR21YS3FFYXR3SldUT0tUdHBrU3g1M0dkVGZvbklXeFRzTDJxa2F5VWNuanVEakMKWnNGSjJuMXBlOVdINzVEMklzRFduTVJmUU1McjBWUnd4K1o3YWJYWW05L1ltcndSS3FwS1hKR09DbVRQb3ZHaApMTFo5M1lCSkh3UjhJOWJSVDI1cWJXeFVvNEl1YnljTjRKRlYwR04yZklTOVNHd0N5ZEhtczlGN0F4N3ZLaGdPCjFxRVBOeEJaVHdYZFA0cmhOWTh3bEM3Z2tWckFUdmZTT1pDeWxYbm50bER3RUdkWmhwcmNDUThIZlRIUWVteE8KUDV2dEJYSXlJTFJLL1hpdjJpd3hUUHNDQXdFQUFhQXhNQzhHQ1NxR1NJYjNEUUVKRGpFaU1DQXdIZ1lEVlIwUgpCQmN3RllJVGRHVnpkR1puZUM1bGVHRnRjR3hsTG1OdmJUQU5CZ2txaGtpRzl3MEJBUXNGQUFPQ0FRRUFkQk5pClBYNHREVGtocVRRdVAvSlB3ZkRIemRBTDhpamV0NHhNaVBxZEdqdkhaWWh6WVg0WEVvYWtnREF2VmNQN2d0N24KeGRnU2pJUWFxckg2cU9BZGd4WERoWHkwUjlzUG9kaDVqV0w0Qk01aDJEOU5UOXU3cXdUaEhONVp1RmxDbzBBeAoxbnEwTVdmRmU4a2wyY3lMMVFrUWhNQW1OTG5KTWRzN2NuU0R2TVRCUDVwSUV1TndIZGRUMVZNWnJmYUZJejJuCkw3aFJmeWhKMVpRcEFyaE5rTno5Nk1XU2VhcytOZGNSWWVhcWg3M01NS0VBaU4zU0R1OFV5eUlHQUY1UzFvTVIKVzlCMUhEanBOV3VaNWlOUXRSMVNzMGZpUEpxY1dPelJMSUcvSHlIb0l1YkVSNi82K3dEQ255Z0hLOUpudHFlbAo4V2JzSVJrbEpHalY1S0dEbFE9PQotLS0tLUVORCBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0K"
-
-	jsonBody := []byte(fmt.Sprintf("{\"domain\":\"%s\",\"issuer\":\"%s\",\"csr\":\"%s\"}", domain, issuer, csr))
-	req, err := http.NewRequest("POST", "/api/v1/certificate", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest("POST", "/api/v1/certificate", bytes.NewBuffer(data))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,14 +287,14 @@ func TestAPICreateCertificateHandler(t *testing.T) {
 		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusCreated)
 	}
 
-	var result certstore.CertMap
+	var result models.CertMap
 	err = json.Unmarshal(rr.Body.Bytes(), &result)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	assert.Equal(t, result.Domain, domain)
-	assert.Equal(t, result.Issuer, issuer)
+	assert.Equal(t, result.Domain, cert.Domain)
+	assert.Equal(t, result.Issuer, cert.Issuer)
 	assert.Equal(t, result.Owner, "testuser")
 
 	// Assert that each field is not empty
@@ -354,16 +330,14 @@ func TestAPIUpdateCertificateHandler(t *testing.T) {
 	csr := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJRENUQ0NBZkVDQVFBd2daSXhIREFhQmdOVkJBTU1FM1JsYzNSbVozZ3VaWGhoYlhCc1pTNWpiMjB4SGpBYwpCZ2txaGtpRzl3MEJDUUVXRDNOemJFQmxlR0Z0Y0d4bExtTnZiVEVRTUE0R0ExVUVDZ3dIVTI5amFXVjBaVEVVCk1CSUdBMVVFQ3d3TFJHVndZWEowWlcxbGJuUXhEakFNQmdOVkJBY01CVlpwYkd4bE1RMHdDd1lEVlFRSURBUkYKZEdGME1Rc3dDUVlEVlFRR0V3SkdVakNDQVNJd0RRWUpLb1pJaHZjTkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQgpBTDRodjNORGE1K2hMc215VTlyODB1NWtkc0pxcTFQTXl3RkR5UXFNZ0NFTEUwWHhHOTg4eFNONGFiV24wQ09KCjJ2K0pqKzljcXdvYkVsZ0dJR21YS3FFYXR3SldUT0tUdHBrU3g1M0dkVGZvbklXeFRzTDJxa2F5VWNuanVEakMKWnNGSjJuMXBlOVdINzVEMklzRFduTVJmUU1McjBWUnd4K1o3YWJYWW05L1ltcndSS3FwS1hKR09DbVRQb3ZHaApMTFo5M1lCSkh3UjhJOWJSVDI1cWJXeFVvNEl1YnljTjRKRlYwR04yZklTOVNHd0N5ZEhtczlGN0F4N3ZLaGdPCjFxRVBOeEJaVHdYZFA0cmhOWTh3bEM3Z2tWckFUdmZTT1pDeWxYbm50bER3RUdkWmhwcmNDUThIZlRIUWVteE8KUDV2dEJYSXlJTFJLL1hpdjJpd3hUUHNDQXdFQUFhQXhNQzhHQ1NxR1NJYjNEUUVKRGpFaU1DQXdIZ1lEVlIwUgpCQmN3RllJVGRHVnpkR1puZUM1bGVHRnRjR3hsTG1OdmJUQU5CZ2txaGtpRzl3MEJBUXNGQUFPQ0FRRUFkQk5pClBYNHREVGtocVRRdVAvSlB3ZkRIemRBTDhpamV0NHhNaVBxZEdqdkhaWWh6WVg0WEVvYWtnREF2VmNQN2d0N24KeGRnU2pJUWFxckg2cU9BZGd4WERoWHkwUjlzUG9kaDVqV0w0Qk01aDJEOU5UOXU3cXdUaEhONVp1RmxDbzBBeAoxbnEwTVdmRmU4a2wyY3lMMVFrUWhNQW1OTG5KTWRzN2NuU0R2TVRCUDVwSUV1TndIZGRUMVZNWnJmYUZJejJuCkw3aFJmeWhKMVpRcEFyaE5rTno5Nk1XU2VhcytOZGNSWWVhcWg3M01NS0VBaU4zU0R1OFV5eUlHQUY1UzFvTVIKVzlCMUhEanBOV3VaNWlOUXRSMVNzMGZpUEpxY1dPelJMSUcvSHlIb0l1YkVSNi82K3dEQ255Z0hLOUpudHFlbAo4V2JzSVJrbEpHalY1S0dEbFE9PQotLS0tLUVORCBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0K"
 
 	// init kv store with cert
-	var certs []certstore.Certificate
-	data := certstore.Certificate{
+	cert := &models.Certificate{
 		Domain: domain,
 		Issuer: issuer,
 		Owner:  "testuser",
-		CSR:    csr,
+		Csr:    csr,
 		Days:   30,
 	}
-	certs = append(certs, data)
-	certstore.AmStore.PutKVRing(certstore.AmCertificateRingKey, certs)
+	certstore.AmStore.PutCertificate(cert)
 
 	// wait for cert kv store
 	time.Sleep(1 * time.Second)
@@ -386,7 +360,7 @@ func TestAPIUpdateCertificateHandler(t *testing.T) {
 		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
 	}
 
-	var result certstore.CertMap
+	var result models.CertMap
 	err = json.Unmarshal(rr.Body.Bytes(), &result)
 	if err != nil {
 		t.Fatal(err)
@@ -395,7 +369,7 @@ func TestAPIUpdateCertificateHandler(t *testing.T) {
 	assert.Equal(t, result.Domain, domain)
 	assert.Equal(t, result.Issuer, issuer)
 	assert.Equal(t, result.Owner, "testuser")
-	assert.Equal(t, result.CSR, csr)
+	assert.Equal(t, result.Csr, csr)
 
 	// Assert that each field is not empty
 	assertFieldNotEmpty(t, result.RenewalDate, "RenewalDate")
@@ -423,20 +397,18 @@ func TestAPIDeleteCertificateHandler(t *testing.T) {
 	csr := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJRENUQ0NBZkVDQVFBd2daSXhIREFhQmdOVkJBTU1FM1JsYzNSbVozZ3VaWGhoYlhCc1pTNWpiMjB4SGpBYwpCZ2txaGtpRzl3MEJDUUVXRDNOemJFQmxlR0Z0Y0d4bExtTnZiVEVRTUE0R0ExVUVDZ3dIVTI5amFXVjBaVEVVCk1CSUdBMVVFQ3d3TFJHVndZWEowWlcxbGJuUXhEakFNQmdOVkJBY01CVlpwYkd4bE1RMHdDd1lEVlFRSURBUkYKZEdGME1Rc3dDUVlEVlFRR0V3SkdVakNDQVNJd0RRWUpLb1pJaHZjTkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQgpBTDRodjNORGE1K2hMc215VTlyODB1NWtkc0pxcTFQTXl3RkR5UXFNZ0NFTEUwWHhHOTg4eFNONGFiV24wQ09KCjJ2K0pqKzljcXdvYkVsZ0dJR21YS3FFYXR3SldUT0tUdHBrU3g1M0dkVGZvbklXeFRzTDJxa2F5VWNuanVEakMKWnNGSjJuMXBlOVdINzVEMklzRFduTVJmUU1McjBWUnd4K1o3YWJYWW05L1ltcndSS3FwS1hKR09DbVRQb3ZHaApMTFo5M1lCSkh3UjhJOWJSVDI1cWJXeFVvNEl1YnljTjRKRlYwR04yZklTOVNHd0N5ZEhtczlGN0F4N3ZLaGdPCjFxRVBOeEJaVHdYZFA0cmhOWTh3bEM3Z2tWckFUdmZTT1pDeWxYbm50bER3RUdkWmhwcmNDUThIZlRIUWVteE8KUDV2dEJYSXlJTFJLL1hpdjJpd3hUUHNDQXdFQUFhQXhNQzhHQ1NxR1NJYjNEUUVKRGpFaU1DQXdIZ1lEVlIwUgpCQmN3RllJVGRHVnpkR1puZUM1bGVHRnRjR3hsTG1OdmJUQU5CZ2txaGtpRzl3MEJBUXNGQUFPQ0FRRUFkQk5pClBYNHREVGtocVRRdVAvSlB3ZkRIemRBTDhpamV0NHhNaVBxZEdqdkhaWWh6WVg0WEVvYWtnREF2VmNQN2d0N24KeGRnU2pJUWFxckg2cU9BZGd4WERoWHkwUjlzUG9kaDVqV0w0Qk01aDJEOU5UOXU3cXdUaEhONVp1RmxDbzBBeAoxbnEwTVdmRmU4a2wyY3lMMVFrUWhNQW1OTG5KTWRzN2NuU0R2TVRCUDVwSUV1TndIZGRUMVZNWnJmYUZJejJuCkw3aFJmeWhKMVpRcEFyaE5rTno5Nk1XU2VhcytOZGNSWWVhcWg3M01NS0VBaU4zU0R1OFV5eUlHQUY1UzFvTVIKVzlCMUhEanBOV3VaNWlOUXRSMVNzMGZpUEpxY1dPelJMSUcvSHlIb0l1YkVSNi82K3dEQ255Z0hLOUpudHFlbAo4V2JzSVJrbEpHalY1S0dEbFE9PQotLS0tLUVORCBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0K"
 
 	// init kv store with cert
-	var certs []certstore.Certificate
-	data := certstore.Certificate{
+	cert := &models.Certificate{
 		Domain: domain,
 		Issuer: issuer,
 		Owner:  "testuser",
-		CSR:    csr,
+		Csr:    csr,
 	}
-	certs = append(certs, data)
-	certstore.AmStore.PutKVRing(certstore.AmCertificateRingKey, certs)
+	certstore.AmStore.PutCertificate(cert)
 
 	// wait for cert kv store
 	time.Sleep(1 * time.Second)
 
-	err := vault.GlobalClient.PutSecretWithAppRole("/testuser/pebble/testfgx.example.com", utils.StructToMapInterface(data))
+	err := vault.GlobalClient.PutSecretWithAppRole("/testuser/pebble/testfgx.example.com", utils.StructToMapInterface(cert))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -456,14 +428,15 @@ func TestAPIDeleteCertificateHandler(t *testing.T) {
 }
 
 func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := certstore.AmStore.GetKVRingMapString(certstore.AmChallengeRingKey, false)
+	data, err := certstore.AmStore.GetChallenge(r.RequestURI)
 	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		_ = level.Error(logger).Log("err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-
-	if val, ok := data[r.RequestURI]; ok {
-		_, _ = io.WriteString(w, val)
-	} else {
-		http.Error(w, fmt.Sprintf("key %s not found", r.RequestURI), http.StatusNotFound)
-	}
+	_, _ = io.WriteString(w, data)
 }

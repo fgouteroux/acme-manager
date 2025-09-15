@@ -9,8 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/fgouteroux/acme_manager/api"
-	"github.com/fgouteroux/acme_manager/certstore"
+	"github.com/fgouteroux/acme_manager/models"
 )
 
 // MockHTTPClient is a mock implementation of http.Client
@@ -104,7 +103,7 @@ func TestReadCertificate(t *testing.T) {
 
 	mockClient.On("Do", mock.Anything).Return(response, nil)
 
-	certData := certstore.Certificate{Issuer: "issuer1", Domain: "domain1"}
+	certData := models.Certificate{Issuer: "issuer1", Domain: "domain1"}
 	certificate, err := client.ReadCertificate(certData, 30)
 	assert.NoError(t, err)
 	assert.Equal(t, "cert-value", certificate.Cert)
@@ -130,7 +129,7 @@ func TestCreateCertificate(t *testing.T) {
 
 	mockClient.On("Do", mock.Anything).Return(response, nil)
 
-	certData := api.CertificateParams{Issuer: "issuer1", Domain: "domain1"}
+	certData := models.CertificateParams{Issuer: "issuer1", Domain: "domain1"}
 	certificate, err := client.CreateCertificate(certData, 30)
 	assert.NoError(t, err)
 	assert.Equal(t, "cert-value", certificate.Cert)
@@ -156,7 +155,7 @@ func TestUpdateCertificate(t *testing.T) {
 
 	mockClient.On("Do", mock.Anything).Return(response, nil)
 
-	certData := api.CertificateParams{Issuer: "issuer1", Domain: "domain1"}
+	certData := models.CertificateParams{Issuer: "issuer1", Domain: "domain1"}
 	certificate, err := client.UpdateCertificate(certData, 30)
 	assert.NoError(t, err)
 	assert.Equal(t, "cert-value", certificate.Cert)

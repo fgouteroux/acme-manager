@@ -13,34 +13,14 @@ import (
 
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
-	"github.com/fgouteroux/acme_manager/queue"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 )
 
-var (
-	CertificateQueue *queue.Queue
-	ChallengeQueue   *queue.Queue
-	TokenQueue       *queue.Queue
-)
-
 func OnStartup(logger log.Logger) error {
 	_ = prometheus.Register(NewCertificateCollector(logger))
-
-	// init queues
-	CertificateQueue = queue.NewQueue("certificate")
-	ChallengeQueue = queue.NewQueue("challenge")
-	TokenQueue = queue.NewQueue("token")
-
-	// init workers
-	tokenWorker := queue.NewWorker(TokenQueue, logger)
-	challengeWorker := queue.NewWorker(ChallengeQueue, logger)
-	certificateWorker := queue.NewWorker(CertificateQueue, logger)
-
-	// start workers
-	go tokenWorker.DoWork()
-	go certificateWorker.DoWork()
-	go challengeWorker.DoWork()
+	_ = prometheus.Register(NewNodeCollector(logger))
 
 	isLeaderNow, err := ring.IsLeader(AmStore.RingConfig)
 	if err != nil {
@@ -49,37 +29,37 @@ func OnStartup(logger log.Logger) error {
 	}
 
 	// Handle certificates
-	certificateData, err := AmStore.GetKVRingCert(AmCertificateRingKey, isLeaderNow)
+	certificateData, err := AmStore.ListAllCertificates()
 	if err != nil {
-		_ = level.Error(logger).Log("msg", "Failed to get certificate data from KV ring", "err", err)
+		_ = level.Error(logger).Log("msg", "Failed to list certificates from KV ring", "err", err)
 		return err
 	}
 
 	if len(certificateData) == 0 && isLeaderNow {
 		// if leader and no data exists, populate from vault
 		_ = level.Info(logger).Log("msg", "Leader node with empty certificate data, populating from vault")
-		vaultCertList := getVaultAllCertificate(logger)
-
-		for _, certData := range vaultCertList {
-			metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
+		vaultCertList, err := getVaultAllCertificate(logger)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
 		}
 
-		// Store in ring (this will also update local cache via PutKVRing)
-		AmStore.PutKVRing(AmCertificateRingKey, vaultCertList)
+		// Store each certificate with its own key
+		for _, certData := range vaultCertList {
+			err := AmStore.PutCertificate(certData)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", "Failed to store certificate",
+					"domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
+				continue
+			}
+			metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
+		}
 	} else if len(certificateData) > 0 {
-		// Data exists, update local cache
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing certificates in KV ring", len(certificateData)))
-		content, _ := json.Marshal(certificateData)
-		localCache.Set(AmCertificateRingKey, string(content))
-	} else {
-		// Non-leader with empty data - this is normal, will be populated by ring updates
-		_ = level.Info(logger).Log("msg", "Non-leader node with empty certificate data, waiting for ring updates")
-		// Initialize with empty slice JSON
-		localCache.Set(AmCertificateRingKey, "[]")
 	}
 
 	// Handle tokens
-	tokenData, err := AmStore.GetKVRingToken(AmTokenRingKey, isLeaderNow)
+	tokenData, err := AmStore.ListAllTokens()
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "Failed to get token data from KV ring", "err", err)
 		return err
@@ -88,24 +68,41 @@ func OnStartup(logger log.Logger) error {
 	if len(tokenData) == 0 && isLeaderNow {
 		// if leader and no data exists, populate from vault
 		_ = level.Info(logger).Log("msg", "Leader node with empty token data, populating from vault")
-		tokens := getVaultAllToken(logger)
+		tokens, err := getVaultAllToken(logger)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
 
-		// Store in ring (this will also update local cache via PutKVRing)
-		AmStore.PutKVRing(AmTokenRingKey, tokens)
+		// Store in ring
+		for tokenID, token := range tokens {
+			fmt.Println(tokenID)
+
+			existing, err := AmStore.GetToken(tokenID)
+			if err != nil && !strings.Contains(err.Error(), "not found") {
+				_ = level.Error(logger).Log("msg", "Failed to check token existence",
+					"tokenID", tokenID, "err", err)
+				continue
+			}
+
+			if existing != nil {
+				_ = level.Debug(logger).Log("msg", "Token already exists, skipping", "tokenID", tokenID)
+				continue
+			}
+
+			err = AmStore.PutToken(tokenID, token)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", "Failed to store token",
+					"tokenID", tokenID, "owner", token.Username, "err", err)
+				continue
+			}
+		}
 	} else if len(tokenData) > 0 {
-		// Data exists, update local cache
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing tokens in KV ring", len(tokenData)))
-		content, _ := json.Marshal(tokenData)
-		localCache.Set(AmTokenRingKey, string(content))
-	} else {
-		// Non-leader with empty data - this is normal, will be populated by ring updates
-		_ = level.Info(logger).Log("msg", "Non-leader node with empty token data, waiting for ring updates")
-		// Initialize with empty map JSON
-		localCache.Set(AmTokenRingKey, "{}")
 	}
 
 	// Handle challenges
-	challengeData, err := AmStore.GetKVRingMapString(AmChallengeRingKey, isLeaderNow)
+	challengeData, err := AmStore.ListAllChallenges()
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "Failed to get challenge data from KV ring", "err", err)
 		return err
@@ -113,35 +110,21 @@ func OnStartup(logger log.Logger) error {
 
 	if len(challengeData) > 0 {
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing challenges in KV ring", len(challengeData)))
-		content, _ := json.Marshal(challengeData)
-		localCache.Set(AmChallengeRingKey, string(content))
-	} else {
-		// Initialize with empty map JSON
-		_ = level.Info(logger).Log("msg", "No challenge data found, initializing with empty map")
-		emptyMap := make(map[string]string)
-
-		// If we're leader, populate the ring too
-		if isLeaderNow {
-			AmStore.PutKVRing(AmChallengeRingKey, emptyMap) // This updates both ring and cache
-		} else {
-			localCache.Set(AmChallengeRingKey, "{}") // Non-leader just initializes cache
-		}
 	}
 
 	return nil
 }
 
-func getVaultAllCertificate(logger log.Logger) []Certificate {
+func getVaultAllCertificate(logger log.Logger) ([]*models.Certificate, error) {
 	_ = level.Info(logger).Log("msg", "Retrieving certificates from vault")
 
+	var vaultCertList []*models.Certificate
 	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(config.GlobalConfig.Storage.Vault.CertPrefix + "/")
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
-		os.Exit(1)
+		return vaultCertList, err
 	}
 	_ = level.Debug(logger).Log("msg", fmt.Sprintf("vault certificate secrets list: %v", vaultSecrets))
 
-	var vaultCertList []Certificate
 	if len(vaultSecrets) > 0 {
 
 		var vaultCertCount int
@@ -163,7 +146,7 @@ func getVaultAllCertificate(logger log.Logger) []Certificate {
 				continue
 			}
 
-			var vaultCert Certificate
+			var vaultCert *models.Certificate
 			err = json.Unmarshal(cert, &vaultCert)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -178,23 +161,21 @@ func getVaultAllCertificate(logger log.Logger) []Certificate {
 	} else {
 		_ = level.Warn(logger).Log("msg", "No certificates found from vault")
 	}
-	return vaultCertList
+	return vaultCertList, nil
 }
 
-func getVaultAllToken(logger log.Logger) map[string]Token {
+func getVaultAllToken(logger log.Logger) (map[string]*models.Token, error) {
 	_ = level.Info(logger).Log("msg", "Retrieving tokens from vault")
 
+	tokenMap := make(map[string]*models.Token)
 	vaultSecrets, err := vault.GlobalClient.ListSecretWithAppRole(
 		config.GlobalConfig.Storage.Vault.TokenPrefix + "/",
 	)
+	if err != nil {
+		return tokenMap, err
+	}
 	_ = level.Debug(logger).Log("msg", fmt.Sprintf("vault token secrets list: %v", vaultSecrets))
 
-	if err != nil {
-		_ = level.Error(logger).Log("err", err)
-		os.Exit(1)
-	}
-
-	tokenMap := make(map[string]Token)
 	if len(vaultSecrets) > 0 {
 
 		var vaultTokenCount int
@@ -219,7 +200,7 @@ func getVaultAllToken(logger log.Logger) map[string]Token {
 				continue
 			}
 
-			var token Token
+			var token *models.Token
 			err = json.Unmarshal(val, &token)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -234,5 +215,5 @@ func getVaultAllToken(logger log.Logger) map[string]Token {
 	} else {
 		_ = level.Warn(logger).Log("msg", "No tokens found from vault")
 	}
-	return tokenMap
+	return tokenMap, nil
 }

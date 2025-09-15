@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/fgouteroux/acme_manager/certstore"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/testhelper"
 	"net/http"
@@ -191,16 +192,13 @@ func TestRevokeTokenHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, true)
-	if err != nil {
-		t.Fatal(err)
+	token := &models.Token{
+		TokenHash: "abc123def456",
+		Scope:     []string{"create", "read", "update", "delete"},
+		Username:  "testuser",
+		Expires:   "Never",
 	}
-	data["valid-id"] = certstore.Token{
-		Scope:    []string{"create", "read", "update", "delete"},
-		Username: "testuser",
-		Expires:  "Never",
-	}
-	certstore.AmStore.PutKVRing(certstore.AmTokenRingKey, data)
+	certstore.AmStore.PutToken("valid-id", token)
 	// wait for cert kv store
 	time.Sleep(1 * time.Second)
 

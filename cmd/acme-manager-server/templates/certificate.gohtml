@@ -1,0 +1,198 @@
+{{- /*gotype: main.Certificate */ -}}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Acme Manager</title>
+    <link rel="stylesheet" href="{{ AddPathPrefix "/static/bootstrap-5.1.3.min.css" }}">
+    <link rel="stylesheet" href="{{ AddPathPrefix "/static/styles.css" }}">
+    <script src="{{ AddPathPrefix "/static/bootstrap-5.1.3.bundle.min.js" }}"></script>
+</head>
+<body>
+<body class="d-flex flex-column h-100">
+<main class="flex-shrink-0">
+    <div class="container-xxl">
+        <div class="header row border-bottom py-3 flex-column-reverse flex-sm-row">
+            <div class="col-12 col-sm-9 text-center text-sm-start">
+                <h1><a href="/">Acme Manager</a></h1>
+            </div>
+            <div class="col-12 col-sm-3 text-center text-sm-end mb-3 mb-sm-0">
+                <img alt="Acme Manager logo" class="threshold-brand" src="{{ AddPathPrefix "/static/acme-manager.png" }}">
+            </div>
+        </div>
+<br>
+<h2>Managed certificates</h2>
+<div class="row mb-3 align-items-center">
+    <div class="col-12 col-md-6">
+        <span class="text-muted">Total: <span class="badge bg-primary" id="totalCount">{{ len .Certificates }}</span></span>
+    </div>
+    <div class="col-12 col-md-6">
+        <div class="float-md-end">
+            <div class="btn-group me-2">
+                <input class="form-control search-input" type="search" placeholder="Search certificates..." autocomplete="on" id="tableSearch">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Show/Hide Columns">
+                    ☰
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="0" checked> Owner</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="1" checked> Domain</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="2" checked> Issuer</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="3" checked> Expires</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="4">  Key type</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="5"> Encryption</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="6"> Serial</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="7"> Bundle</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="8" checked> SAN</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="9"> Duration</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="10"> Renew days</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="11"> Renewal date</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="12" checked> Labels</label></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-bordered table-hover table-striped" id="certificateTable">
+    <thead>
+      <tr>
+        <th data-column="0">Owner</th>
+        <th data-column="1">Domain</th>
+        <th data-column="2">Issuer</th>
+        <th data-column="3">Expires</th>
+        <th data-column="4">Key type</th>
+        <th data-column="5">Encryption</th>
+        <th data-column="6">Serial</th>
+        <th data-column="7">Bundle</th>
+        <th data-column="8">SAN</th>
+        <th data-column="9">Duration</th>
+        <th data-column="10">Renew days</th>
+        <th data-column="11">Renewal date</th>
+        <th data-column="12">Labels</th>
+      </tr>
+    </thead>
+    <tbody>
+    {{$out := .}}
+    {{ range $cert := .Certificates }}
+      <tr data-searchable="{{ $cert.Owner }} {{ $cert.Domain }} {{ $cert.Issuer }} {{ $cert.KeyType }}">
+        <td data-column="0">{{ $cert.Owner }}</td>
+        <td data-column="1">{{ $cert.Domain }}</td>
+        <td data-column="2">{{ $cert.Issuer }}</td>
+        <td data-column="3">{{ $cert.Expires }}</td>
+        <td data-column="4">{{ $cert.KeyType }}</td>
+        <td data-column="5">{{ $cert.Encryption }}</td>
+        <td data-column="6">{{ $cert.Serial }}</td>
+        <td data-column="7">{{ $cert.Bundle }}</td>
+        {{ if $cert.San }}
+        <td data-column="8">{{ range $item := Split $cert.San "," }}{{ $item }}<br>{{ end }}</td>
+        {{ else }}
+        <td data-column="8"></td>
+        {{ end }}
+        {{ if eq $cert.Days 0 }}
+        <td data-column="9">n/a</td>
+        {{ else }}
+        <td data-column="9">{{ $cert.Days }}d</td>
+        {{ end }}
+        {{ if $cert.RenewalDays }}
+        <td data-column="10">{{ $cert.RenewalDays }}</td>
+        {{ else }}
+        <td data-column="10">20-30</td>
+        {{ end }}
+        <td data-column="11">{{ $cert.RenewalDate }}</td>
+        {{ if $cert.Labels }}
+        <td data-column="12">{{ range $item := Split $cert.Labels "," }}{{ $item }}<br>{{ end }}</td>
+        {{ else }}
+        <td data-column="12"></td>
+        {{ end }}
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+</main>
+<footer class="footer mt-auto py-3 bg-light">
+    <div class="container">
+        <small class="text-muted">Status @ {{ .Now.Format "2006-01-02 15:04:05.000" }}</small>
+    </div>
+</footer>
+<script type="text/javascript">
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
+
+    // Table search functionality with dynamic count
+    document.getElementById('tableSearch').addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const tableRows = document.querySelectorAll('#certificateTable tbody tr');
+        let visibleCount = 0;
+        
+        tableRows.forEach(row => {
+            const searchableText = row.getAttribute('data-searchable').toLowerCase();
+            if (searchableText.includes(searchTerm)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Update the count display
+        document.getElementById('totalCount').textContent = visibleCount;
+    });
+
+    // Column visibility toggle
+    document.querySelectorAll('input[data-column]').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const columnIndex = this.getAttribute('data-column');
+            const isVisible = this.checked;
+            
+            // Toggle header column
+            const headerCell = document.querySelector(`th[data-column="${columnIndex}"]`);
+            if (headerCell) {
+                headerCell.style.display = isVisible ? '' : 'none';
+            }
+            
+            // Toggle body columns
+            const bodyCells = document.querySelectorAll(`td[data-column="${columnIndex}"]`);
+            bodyCells.forEach(cell => {
+                cell.style.display = isVisible ? '' : 'none';
+            });
+        });
+    });
+
+    // Prevent dropdown from closing when clicking checkboxes
+    document.querySelectorAll('.dropdown-menu label').forEach(label => {
+        label.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+    });
+
+    // Hide unchecked columns on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('input[data-column]').forEach(checkbox => {
+            if (!checkbox.checked) {
+                const columnIndex = checkbox.getAttribute('data-column');
+                
+                // Hide header column
+                const headerCell = document.querySelector(`th[data-column="${columnIndex}"]`);
+                if (headerCell) {
+                    headerCell.style.display = 'none';
+                }
+                
+                // Hide body columns
+                const bodyCells = document.querySelectorAll(`td[data-column="${columnIndex}"]`);
+                bodyCells.forEach(cell => {
+                    cell.style.display = 'none';
+                });
+            }
+        });
+    });
+</script>
+</body>
+</html>

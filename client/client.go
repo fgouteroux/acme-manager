@@ -17,10 +17,9 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
-	"github.com/fgouteroux/acme_manager/api"
-	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/memcache"
 	"github.com/fgouteroux/acme_manager/metrics"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/restclient"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -31,16 +30,16 @@ import (
 var (
 	Owner         string
 	GlobalConfig  Config
-	certificates  []certstore.Certificate
+	certificates  []models.Certificate
 	checkCertLock sync.Mutex
 
 	localCache = memcache.NewLocalCache()
 )
 
 type MapDiff struct {
-	Create []certstore.Certificate `json:"create"`
-	Update []certstore.Certificate `json:"update"`
-	Delete []certstore.Certificate `json:"delete"`
+	Create []models.Certificate `json:"create"`
+	Update []models.Certificate `json:"update"`
+	Delete []models.Certificate `json:"delete"`
 }
 
 type CertBackup struct {
@@ -48,12 +47,12 @@ type CertBackup struct {
 	Key  string `json:"key" example:"-----BEGIN PRIVATE KEY-----\n..."`
 }
 
-func checkCertDiff(old, newCertList []certstore.Certificate, logger log.Logger) (MapDiff, bool) {
+func checkCertDiff(old, newCertList []models.Certificate, logger log.Logger) (MapDiff, bool) {
 	var hasChange bool
 	var diff MapDiff
 
 	for _, oldCert := range old {
-		idx := slices.IndexFunc(newCertList, func(c certstore.Certificate) bool {
+		idx := slices.IndexFunc(newCertList, func(c models.Certificate) bool {
 			return c.Domain == oldCert.Domain && c.Issuer == oldCert.Issuer
 		})
 
@@ -69,7 +68,7 @@ func checkCertDiff(old, newCertList []certstore.Certificate, logger log.Logger) 
 	}
 
 	for _, newCert := range newCertList {
-		idx := slices.IndexFunc(old, func(c certstore.Certificate) bool {
+		idx := slices.IndexFunc(old, func(c models.Certificate) bool {
 			return c.Domain == newCert.Domain && c.Issuer == newCert.Issuer
 		})
 
@@ -110,13 +109,13 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		}
 
 		var san []string
-		if certData.SAN != "" {
-			san = strings.Split(certData.SAN, ",")
+		if certData.San != "" {
+			san = strings.Split(certData.San, ",")
 		}
 
 		var privateKey []byte
 		var err error
-		certData.CSR, privateKey, err = utils.GenerateCSRAndPrivateKey(privateKeyPath, certData.KeyType, certData.Domain, san)
+		certData.Csr, privateKey, err = utils.GenerateCSRAndPrivateKey(privateKeyPath, certData.KeyType, certData.Domain, san)
 		if err != nil {
 			hasErrors = true
 			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
@@ -125,7 +124,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 
 		certDataBytes, _ := json.Marshal(certData)
 
-		var certParams api.CertificateParams
+		var certParams models.CertificateParams
 		err = json.Unmarshal(certDataBytes, &certParams)
 		if err != nil {
 			hasErrors = true
@@ -183,10 +182,10 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		keyFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertKeyFileExt
 
 		var initCSR string
-		if certData.CSR == "" {
+		if certData.Csr == "" {
 			var san []string
-			if certData.SAN != "" {
-				san = strings.Split(certData.SAN, ",")
+			if certData.San != "" {
+				san = strings.Split(certData.San, ",")
 			}
 
 			var privateKeyPath string
@@ -201,12 +200,12 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				continue
 			}
-			certData.CSR = initCSR
+			certData.Csr = initCSR
 		}
 
 		certDataBytes, _ := json.Marshal(certData)
 
-		var certParams api.CertificateParams
+		var certParams models.CertificateParams
 		err := json.Unmarshal(certDataBytes, &certParams)
 		if err != nil {
 			hasErrors = true
@@ -236,7 +235,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			_ = level.Info(logger).Log("msg", "certificate and private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 		}
 
-		if GlobalConfig.Common.CertDeploy && initCSR == newCert.CSR {
+		if GlobalConfig.Common.CertDeploy && initCSR == newCert.Csr {
 			hasChange = true
 			err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+newCert.Issuer, GlobalConfig.Common.CertDirPerm)
 			if err != nil {
@@ -330,7 +329,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 	}
 }
 
-func createLocalCertificateFile(certData certstore.CertMap) error {
+func createLocalCertificateFile(certData models.CertMap) error {
 	folderPath := GlobalConfig.Common.CertDir + certData.Issuer
 	err := utils.CreateNonExistingFolder(folderPath, GlobalConfig.Common.CertDirPerm)
 	if err != nil {
@@ -406,11 +405,14 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 		return
 	}
 
-	var newCertList []certstore.Certificate
+	var newCertList []models.Certificate
 	var hasChange bool
 	var patterns []string
 
-	for _, certData := range GlobalConfig.Certificate {
+	for _, certConfig := range GlobalConfig.Certificate {
+
+		certData := certConfig.ToModelsCertificate() // Convert to models.Certificate
+
 		patterns = append(patterns, certData.Issuer+"/"+certData.Domain)
 
 		err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
@@ -421,7 +423,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 
 		// Setting default days
 		if certData.Days == 0 {
-			certData.Days = GlobalConfig.Common.CertDays
+			certData.Days = int32(GlobalConfig.Common.CertDays)
 		}
 
 		// Setting default key type
@@ -429,7 +431,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 			certData.KeyType = "ec256"
 		}
 
-		idx := slices.IndexFunc(old, func(c certstore.Certificate) bool {
+		idx := slices.IndexFunc(old, func(c models.Certificate) bool {
 			return c.Domain == certData.Domain && c.Issuer == certData.Issuer
 		})
 
@@ -440,7 +442,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 			var toUpdate bool
 			var toRecreate bool
 
-			var tmp certstore.Certificate
+			var tmp models.Certificate
 
 			certFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertFileExt
 			certFileExists := utils.FileExists(certFilePath)
@@ -469,7 +471,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 				}
 
 				var err error
-				var certificate certstore.CertMap
+				var certificate models.CertMap
 
 				if utils.GenerateFingerprint(currentCertBytes) != old[idx].Fingerprint {
 
@@ -515,7 +517,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 				} else {
 					_ = level.Info(logger).Log("msg", "local certificate file deleted", "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 				}
-				certData.CSR = ""
+				certData.Csr = ""
 
 			} else {
 
@@ -556,14 +558,14 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 				}
 			}
 
-			if certData.SAN != old[idx].SAN {
+			if certData.San != old[idx].San {
 				toRecreate = true
 				_ = level.Info(logger).Log("msg", fmt.Sprintf(
-					"certificate issuer '%s' for domain '%s' SAN changed from '%s' to '%s'.",
+					"certificate issuer '%s' for domain '%s' San changed from '%s' to '%s'.",
 					certData.Issuer,
 					certData.Domain,
-					old[idx].SAN,
-					certData.SAN,
+					old[idx].San,
+					certData.San,
 				),
 					"domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			}
@@ -589,25 +591,25 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 				),
 					"domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			}
-			if certData.DNSChallenge != old[idx].DNSChallenge {
+			if certData.DnsChallenge != old[idx].DnsChallenge {
 				toRecreate = true
 				_ = level.Info(logger).Log("msg", fmt.Sprintf(
 					"certificate issuer '%s' for domain '%s' dns_challenge changed from '%s' to '%s'.",
 					certData.Issuer,
 					certData.Domain,
-					old[idx].DNSChallenge,
-					certData.DNSChallenge,
+					old[idx].DnsChallenge,
+					certData.DnsChallenge,
 				),
 					"domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			}
-			if certData.HTTPChallenge != old[idx].HTTPChallenge {
+			if certData.HttpChallenge != old[idx].HttpChallenge {
 				toRecreate = true
 				_ = level.Info(logger).Log("msg", fmt.Sprintf(
 					"certificate issuer '%s' for domain '%s' http_challenge changed from '%s' to '%s'.",
 					certData.Issuer,
 					certData.Domain,
-					old[idx].HTTPChallenge,
-					certData.HTTPChallenge,
+					old[idx].HttpChallenge,
+					certData.HttpChallenge,
 				),
 					"domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			}
@@ -743,7 +745,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 			}
 
 			var err error
-			var certificate certstore.CertMap
+			var certificate models.CertMap
 
 			if utils.GenerateFingerprint(currentCertBytes) != certData.Fingerprint {
 

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-kit/log"
@@ -18,7 +19,7 @@ import (
 
 	"github.com/fgouteroux/acme_manager/certstore"
 	"github.com/fgouteroux/acme_manager/config"
-	"github.com/fgouteroux/acme_manager/queue"
+	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 	"github.com/fgouteroux/acme_manager/utils"
@@ -57,18 +58,19 @@ type TokenResponseGet struct {
 // manage token
 
 // getToken godoc
-// @Summary Read token
-// @Description Return token infos like scope, expiration...
-// @Tags token
-// @Produce  application/json
-// @Param id path string true "Token ID"
-// @Success 200 {object} TokenResponseGet
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 404 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Router /token/{id} [get]
-// @security APIKeyAuth
+//
+//	@Summary		Read token
+//	@Description	Return token infos like scope, expiration...
+//	@Tags			token
+//	@Produce		application/json
+//	@Param			id	path		string	true	"Token ID"
+//	@Success		200	{object}	TokenResponseGet
+//	@Success		400	{object}	responseErrorJSON
+//	@Success		401	{object}	responseErrorJSON
+//	@Success		404	{object}	responseErrorJSON
+//	@Success		500	{object}	responseErrorJSON
+//	@Router			/token/{id} [get]
+//	@security		APIKeyAuth
 func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -96,20 +98,20 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 
 		ID := r.PathValue("id")
 		if ID != "" {
-			data, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, false)
+			data, err := certstore.AmStore.GetToken(ID)
 			if err != nil {
+				if strings.Contains(err.Error(), "not found") {
+					responseJSON(w, nil, err, http.StatusNotFound)
+					return
+				}
 				_ = level.Error(logger).Log("err", err)
 				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
 
-			tokenData, tokenExists := data[ID]
-			if tokenExists {
-				responseJSON(w, tokenData, nil, http.StatusOK)
-				return
-			}
-			responseJSON(w, nil, fmt.Errorf("token ID '%s' not found", ID), http.StatusNotFound)
+			responseJSON(w, data, nil, http.StatusOK)
 			return
+
 		}
 		http.Error(w, "Missing token ID", http.StatusBadRequest)
 	})
@@ -118,17 +120,18 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 // manage token
 
 // createToken godoc
-// @Summary Create token
-// @Description Create token for a given username, scope and expiration time.
-// @Tags token
-// @Produce  application/json
-// @Param body body TokenParams true "Token Body"
-// @Success 201 {object} TokenResponse
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Router /token [post]
-// @security APIKeyAuth
+//
+//	@Summary		Create token
+//	@Description	Create token for a given username, scope and expiration time.
+//	@Tags			token
+//	@Produce		application/json
+//	@Param			body	body		TokenParams	true	"Token Body"
+//	@Success		201		{object}	TokenResponse
+//	@Success		400		{object}	responseErrorJSON
+//	@Success		401		{object}	responseErrorJSON
+//	@Success		500		{object}	responseErrorJSON
+//	@Router			/token [post]
+//	@security		APIKeyAuth
 func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
@@ -228,34 +231,20 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		action := func() error {
-			data, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, isLeaderNow)
-			if err != nil {
-				return err
-			}
-
-			if len(data) == 0 {
-				data = make(map[string]certstore.Token, 1)
-			}
-
-			data[ID] = certstore.Token{
-				TokenHash: tokenHash,
-				Scope:     token.Scope,
-				Username:  token.Username,
-				Expires:   expires,
-				Duration:  token.Duration,
-			}
-
-			// udpate kv store
-			certstore.AmStore.PutKVRing(certstore.AmTokenRingKey, data)
-			return nil
+		newToken := &models.Token{
+			TokenHash: tokenHash,
+			Scope:     token.Scope,
+			Username:  token.Username,
+			Expires:   expires,
+			Duration:  token.Duration,
 		}
 
-		certstore.TokenQueue.AddJob(queue.Job{
-			Name:   fmt.Sprintf("%s/%s", token.Username, ID),
-			Action: action,
-		}, logger)
-
+		err = certstore.AmStore.PutToken(ID, newToken)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, nil, err, http.StatusInternalServerError)
+			return
+		}
 		responseJSON(w, newData, nil, http.StatusCreated)
 	})
 }
@@ -263,18 +252,19 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 // manage token
 
 // updateToken godoc
-// @Summary Update token
-// @Description Update token for a given username, scope and expiration time, it will generate a new token.
-// @Tags token
-// @Produce  application/json
-// @Param body body TokenParams true "Token Body"
-// @Success 200 {object} TokenResponse
-// @Success 400 {object} responseErrorJSON
-// @Success 401 {object} responseErrorJSON
-// @Success 429 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Router /token [put]
-// @security APIKeyAuth
+//
+//	@Summary		Update token
+//	@Description	Update token for a given username, scope and expiration time, it will generate a new token.
+//	@Tags			token
+//	@Produce		application/json
+//	@Param			body	body		TokenParams	true	"Token Body"
+//	@Success		200		{object}	TokenResponse
+//	@Success		400		{object}	responseErrorJSON
+//	@Success		401		{object}	responseErrorJSON
+//	@Success		429		{object}	responseErrorJSON
+//	@Success		500		{object}	responseErrorJSON
+//	@Router			/token [put]
+//	@security		APIKeyAuth
 func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
@@ -302,16 +292,17 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		data, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, isLeaderNow)
+		data, err := certstore.AmStore.GetToken(token.ID)
 		if err != nil {
+			if strings.Contains(err.Error(), "pending deletion") {
+				responseJSON(w, nil, err, http.StatusConflict)
+				return
+			} else if strings.Contains(err.Error(), "not found") {
+				responseJSON(w, nil, fmt.Errorf("token ID '%s' not found", token.ID), http.StatusNotFound)
+				return
+			}
 			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, nil, err, http.StatusInternalServerError)
-			return
-		}
-
-		_, tokenExists := data[token.ID]
-		if !tokenExists {
-			responseJSON(w, nil, fmt.Errorf("token ID '%s' not found", token.ID), http.StatusNotFound)
 			return
 		}
 
@@ -387,30 +378,18 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		action := func() error {
-			data, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, isLeaderNow)
-			if err != nil {
-				return err
-			}
+		data.TokenHash = tokenHash
+		data.Scope = token.Scope
+		data.Username = token.Username
+		data.Expires = expires
+		data.Duration = token.Duration
 
-			data[token.ID] = certstore.Token{
-				TokenHash: tokenHash,
-				Scope:     token.Scope,
-				Username:  token.Username,
-				Expires:   expires,
-				Duration:  token.Duration,
-			}
-
-			// udpate kv store
-			certstore.AmStore.PutKVRing(certstore.AmTokenRingKey, data)
-			return nil
+		err = certstore.AmStore.PutToken(token.ID, data)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, nil, err, http.StatusInternalServerError)
+			return
 		}
-
-		certstore.TokenQueue.AddJob(queue.Job{
-			Name:   fmt.Sprintf("%s/%s", token.Username, token.ID),
-			Action: action,
-		}, logger)
-
 		responseJSON(w, newData, nil, http.StatusOK)
 	})
 }
@@ -418,17 +397,18 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 // manage token
 
 // revokeToken godoc
-// @Summary Revoke token
-// @Description Revoke token for a given ID.
-// @Tags token
-// @Produce  application/json
-// @Param id path string true "Token ID"
-// @Success 204
-// @Success 401 {object} responseErrorJSON
-// @Success 404 {object} responseErrorJSON
-// @Success 500 {object} responseErrorJSON
-// @Router /token/{id} [delete]
-// @security APIKeyAuth
+//
+//	@Summary		Revoke token
+//	@Description	Revoke token for a given ID.
+//	@Tags			token
+//	@Produce		application/json
+//	@Param			id	path	string	true	"Token ID"
+//	@Success		204
+//	@Success		401	{object}	responseErrorJSON
+//	@Success		404	{object}	responseErrorJSON
+//	@Success		500	{object}	responseErrorJSON
+//	@Router			/token/{id} [delete]
+//	@security		APIKeyAuth
 func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("X-API-Key")
@@ -449,60 +429,48 @@ func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		data, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, isLeaderNow)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			responseJSON(w, nil, err, http.StatusInternalServerError)
-			return
-		}
-
 		ID := r.PathValue("id")
 		if ID != "" {
-			tokenData, tokenExists := data[ID]
-			if tokenExists {
-
-				if !isLeaderNow {
-					host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
-					_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
-					forwardRequest(logger, proxyClient, host, w, r)
+			data, err := certstore.AmStore.GetToken(ID)
+			if err != nil {
+				if strings.Contains(err.Error(), "pending deletion") {
+					responseJSON(w, nil, err, http.StatusConflict)
+					return
+				} else if strings.Contains(err.Error(), "not found") {
+					responseJSON(w, nil, err, http.StatusNotFound)
 					return
 				}
-
-				secretKeyPathPrefix := config.GlobalConfig.Storage.Vault.TokenPrefix
-				if secretKeyPathPrefix == "" {
-					secretKeyPathPrefix = "token"
-				}
-				secretKeyPath := fmt.Sprintf("%s/%s/%s", secretKeyPathPrefix, tokenData.Username, ID)
-				err = vault.GlobalClient.DestroySecretWithAppRole(secretKeyPath)
-				if err != nil {
-					_ = level.Error(logger).Log("err", err)
-					responseJSON(w, nil, err, http.StatusInternalServerError)
-					return
-				}
-
-				action := func() error {
-					data, err := certstore.AmStore.GetKVRingToken(certstore.AmTokenRingKey, isLeaderNow)
-					if err != nil {
-						return err
-					}
-
-					delete(data, ID)
-
-					// udpate kv store
-					certstore.AmStore.PutKVRing(certstore.AmTokenRingKey, data)
-					return nil
-				}
-
-				certstore.TokenQueue.AddJob(queue.Job{
-					Name:   fmt.Sprintf("%s/%s", tokenData.Username, ID),
-					Action: action,
-				}, logger)
-
-				w.WriteHeader(http.StatusNoContent)
+				_ = level.Error(logger).Log("err", err)
+				responseJSON(w, nil, err, http.StatusInternalServerError)
 				return
 			}
-			responseJSON(w, nil, fmt.Errorf("token ID '%s' not found", ID), http.StatusNotFound)
-			return
+
+			if !isLeaderNow {
+				host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
+				forwardRequest(logger, proxyClient, host, w, r)
+				return
+			}
+
+			secretKeyPathPrefix := config.GlobalConfig.Storage.Vault.TokenPrefix
+			if secretKeyPathPrefix == "" {
+				secretKeyPathPrefix = "token"
+			}
+			secretKeyPath := fmt.Sprintf("%s/%s/%s", secretKeyPathPrefix, data.Username, ID)
+			err = vault.GlobalClient.DestroySecretWithAppRole(secretKeyPath)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				responseJSON(w, nil, err, http.StatusInternalServerError)
+				return
+			}
+
+			err = certstore.AmStore.DeleteToken(ID)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				responseJSON(w, nil, err, http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
 		}
 		http.Error(w, "Missing token ID", http.StatusBadRequest)
 	})
