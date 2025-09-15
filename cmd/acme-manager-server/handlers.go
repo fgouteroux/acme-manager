@@ -190,7 +190,7 @@ func certificateListHandler() http.HandlerFunc {
 
 func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
 	challengeID := strings.Split(ChallengePath, r.RequestURI)[1]
-	data, err := certstore.AmStore.GetChallenge(challengeID)
+	challenge, err := certstore.AmStore.GetChallenge(challengeID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -200,7 +200,7 @@ func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_, _ = io.WriteString(w, data)
+	_, _ = io.WriteString(w, challenge)
 }
 
 //go:embed templates/token.gohtml

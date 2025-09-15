@@ -25,7 +25,7 @@ func GetTestRing(logger log.Logger) ring.AcmeManagerRing {
 
 	// Create a test flag set (empty since we're not parsing any flags)
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
-	
+
 	// Register flags (even though we won't parse any)
 	config.RegisterFlagsWithPrefix(fs, "")
 

@@ -1,7 +1,6 @@
 package certstore
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/fgouteroux/acme_manager/config"
 	"github.com/fgouteroux/acme_manager/metrics"
-	"github.com/fgouteroux/acme_manager/models"
 	"github.com/fgouteroux/acme_manager/ring"
 	"github.com/fgouteroux/acme_manager/storage/vault"
 
@@ -175,45 +173,4 @@ func WatchIssuerHealth(logger log.Logger, customLogger *logrus.Logger, interval 
 		}
 		_ = level.Info(logger).Log("msg", "check issuer health done")
 	}
-}
-
-func WatchRingKvStoreChanges(ringConfig ring.AcmeManagerRing, logger log.Logger) {
-	// Watch for certificate changes - any key under certificates/
-	go ringConfig.KvStore.WatchPrefix(context.Background(), CertificatePrefix+"/", models.GetCertificateCodec(), func(key string, in interface{}) bool {
-		isLeaderNow, _ := ring.IsLeader(ringConfig)
-		if !isLeaderNow {
-			cert := in.(*models.Certificate)
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("certificate key '%s' changed", key))
-			localCache.Set(key, cert)
-			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", key))
-
-			// Update metrics for this specific certificate
-			metrics.IncManagedCertificate(cert.Issuer, cert.Owner)
-		}
-		return true
-	})
-
-	// Watch for token changes - any key under tokens/
-	go ringConfig.KvStore.WatchPrefix(context.Background(), TokenPrefix+"/", models.GetTokenCodec(), func(key string, in interface{}) bool {
-		isLeaderNow, _ := ring.IsLeader(ringConfig)
-		if !isLeaderNow {
-			token := in.(*models.Token)
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("token key '%s' changed", key))
-			localCache.Set(key, token)
-			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", key))
-		}
-		return true
-	})
-
-	// Watch for challenge changes - any key under challenges/
-	go ringConfig.KvStore.WatchPrefix(context.Background(), ChallengePrefix+"/", models.GetChallengeCodec(), func(key string, in interface{}) bool {
-		isLeaderNow, _ := ring.IsLeader(ringConfig)
-		if !isLeaderNow {
-			challenge := in.(*models.Challenge)
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("challenge key '%s' changed", key))
-			localCache.Set(key, challenge)
-			_ = level.Debug(logger).Log("msg", fmt.Sprintf("updated local cache key %s", key))
-		}
-		return true
-	})
 }

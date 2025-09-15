@@ -55,11 +55,7 @@ func OnStartup(logger log.Logger) error {
 			metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 		}
 	} else if len(certificateData) > 0 {
-		// Data exists, update local cache
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing certificates in KV ring", len(certificateData)))
-		for k, v := range certificateData {
-			localCache.Set(k, v)
-		}
 	}
 
 	// Handle tokens
@@ -78,7 +74,7 @@ func OnStartup(logger log.Logger) error {
 			os.Exit(1)
 		}
 
-		// Store in ring (this will also update local cache via PutKVRing)
+		// Store in ring
 		for tokenID, token := range tokens {
 			fmt.Println(tokenID)
 
@@ -89,7 +85,6 @@ func OnStartup(logger log.Logger) error {
 				continue
 			}
 
-			// Si le token existe déjà, skip
 			if existing != nil {
 				_ = level.Debug(logger).Log("msg", "Token already exists, skipping", "tokenID", tokenID)
 				continue
@@ -103,11 +98,7 @@ func OnStartup(logger log.Logger) error {
 			}
 		}
 	} else if len(tokenData) > 0 {
-		// Data exists, update local cache
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing tokens in KV ring", len(tokenData)))
-		for k, v := range tokenData {
-			localCache.Set(k, v)
-		}
 	}
 
 	// Handle challenges
@@ -119,9 +110,6 @@ func OnStartup(logger log.Logger) error {
 
 	if len(challengeData) > 0 {
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("Found %d existing challenges in KV ring", len(challengeData)))
-		for k, v := range challengeData {
-			localCache.Set(k, v)
-		}
 	}
 
 	return nil

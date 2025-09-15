@@ -9,7 +9,6 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/prometheus/model/timestamp"
 
-	"github.com/fgouteroux/acme_manager/memcache"
 	"github.com/fgouteroux/acme_manager/models"
 )
 
@@ -19,8 +18,6 @@ const (
 	TokenPrefix       = "token"
 	ChallengePrefix   = "challenge"
 )
-
-var localCache = memcache.NewLocalCache()
 
 // =================== CERTIFICATES ===================
 

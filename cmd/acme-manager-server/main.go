@@ -418,9 +418,6 @@ func main() {
 	http.Handle("GET /api/v1/token/{id}", LoggerHandler(api.GetTokenHandler(logger)))
 	http.Handle("DELETE /api/v1/token/{id}", LoggerHandler(api.RevokeTokenHandler(logger, proxyClient)))
 
-	// update local cache on kv ring changes
-	certstore.WatchRingKvStoreChanges(amring, logger)
-
 	// check token expired
 	go certstore.WatchTokenExpiration(logger, *checkTokenInterval)
 
