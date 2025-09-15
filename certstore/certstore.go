@@ -195,10 +195,16 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 		}
 	}
 
+	// build all domains in order to validate each domain in plugins
+	certDomains := certData.Domain
+	if certData.San != "" {
+		certDomains = certDomains + "," + certData.San
+	}
+
 	// exec plugins
 	for _, plugin := range config.GlobalConfig.Common.Plugins {
 		if (plugin.Checksum != "" && slices.Contains(config.SecuredPlugins, plugin.Name)) || plugin.Checksum == "" {
-			err = executeCommand(logger, plugin.Path, []string{certData.Domain, certData.Issuer, challengeType}, plugin.Timeout, plugin.Env)
+			err = executeCommand(logger, plugin.Path, []string{certDomains, certData.Issuer, challengeType}, plugin.Timeout, plugin.Env)
 			if err != nil {
 				metrics.SetCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
 				return certData, err
