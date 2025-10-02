@@ -189,7 +189,11 @@ func certificateListHandler() http.HandlerFunc {
 }
 
 func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
-	challengeID := strings.Split(ChallengePath, r.RequestURI)[1]
+	challengeID := strings.TrimPrefix(r.RequestURI, ChallengePath)
+	if challengeID == "" {
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
 	challenge, err := certstore.AmStore.GetChallenge(challengeID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
