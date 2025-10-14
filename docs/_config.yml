@@ -1,0 +1,64 @@
+# GitHub Pages Configuration for ACME Manager Documentation
+
+# Theme
+theme: jekyll-theme-cayman
+
+# Site settings
+title: ACME Manager Documentation
+description: Automated Certificate Management with High Availability Clustering - Version 0.6.1+
+show_downloads: true
+
+# Repository settings
+github:
+  repository_url: https://github.com/fgouteroux/acme-manager
+  is_project_page: true
+
+# Markdown settings
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    default_lang: bash
+
+# Plugin settings
+plugins:
+  - jekyll-relative-links
+  - jekyll-optional-front-matter
+  - jekyll-readme-index
+  - jekyll-titles-from-headings
+  - jekyll-seo-tag
+
+# Relative links configuration
+relative_links:
+  enabled: true
+  collections: false
+
+# Titles from headings
+titles_from_headings:
+  enabled: true
+  strip_title: true
+  collections: false
+
+# Exclude files from processing
+exclude:
+  - "*.go"
+  - "swagger.json"
+  - "swagger.yaml"
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
+  - .bundle
+  - .git
+  - .github
+
+# Include files
+include:
+  - README.md
+  - user-guide.md
+  - admin-guide.md
+
+# Custom head to include Mermaid
+mermaid:
+  enabled: true
