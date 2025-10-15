@@ -979,30 +979,30 @@ sha256sum acme-manager-custom-plugin
 
 ```mermaid
 graph TB
-    subgraph "ACME Manager Instances"
+    subgraph instances["🔧 ACME Manager Instances"]
         I1[Instance 1]
         I2[Instance 2]
         I3[Instance 3]
     end
     
-    subgraph "Vault Authentication"
+    subgraph auth["🔐 Vault Authentication"]
         AppRole[AppRole Auth Method]
         RoleID[Role ID]
         SecretID[Secret ID]
     end
     
-    subgraph "Vault Storage"
+    subgraph vault["🗄️ Vault Storage"]
         KV[KV Secrets Engine v2]
         
-        subgraph "Certificates Path"
-            CertPath[/secret/certificates/]
-            LE[/letsencrypt/]
-            SEC[/sectigo/]
-            Domain1[/example.com<br/>v1, v2, v3]
-            Domain2[/api.example.com<br/>v1, v2]
+        subgraph certs["📜 Certificates Path"]
+            CertPath[/secret/certificates/user/]
+            LE[Let's Encrypt]
+            SEC[Sectigo]
+            Domain1[example.com<br/>versions: v1, v2, v3]
+            Domain2[api.example.com<br/>versions: v1, v2]
         end
         
-        subgraph "Tokens Path"
+        subgraph tokens["🎫 Tokens Path"]
             TokenPath[/secret/tokens/]
             Token1[UUID-1]
             Token2[UUID-2]
@@ -1010,17 +1010,17 @@ graph TB
         end
     end
     
-    I1 --> AppRole
-    I2 --> AppRole
-    I3 --> AppRole
+    I1 -.-> AppRole
+    I2 -.-> AppRole
+    I3 -.-> AppRole
     
     AppRole --> RoleID
     AppRole --> SecretID
     
-    RoleID --> VToken[Vault Token + TTL]
+    RoleID --> VToken[✅ Vault Token + TTL]
     SecretID --> VToken
     
-    VToken --> KV
+    VToken ==> KV
     
     KV --> CertPath
     KV --> TokenPath
@@ -1035,8 +1035,23 @@ graph TB
     TokenPath --> Token2
     TokenPath --> Token3
     
-    style VToken fill:#4CAF50,stroke:#2E7D32,color:#fff
-    style KV fill:#FF9800,stroke:#E65100,color:#fff
+    classDef instanceStyle fill:#2196F3,stroke:#1565C0,stroke-width:2px,color:#fff
+    classDef authStyle fill:#9C27B0,stroke:#6A1B9A,stroke-width:2px,color:#fff
+    classDef tokenStyle fill:#4CAF50,stroke:#2E7D32,stroke-width:3px,color:#fff
+    classDef kvStyle fill:#FF9800,stroke:#E65100,stroke-width:3px,color:#fff
+    classDef certStyle fill:#00BCD4,stroke:#00838F,stroke-width:2px,color:#fff
+    classDef tokenPathStyle fill:#FFC107,stroke:#F57C00,stroke-width:2px,color:#000
+    classDef domainStyle fill:#E1F5FE,stroke:#0277BD,stroke-width:2px,color:#000
+    classDef uuidStyle fill:#FFF9C4,stroke:#F9A825,stroke-width:2px,color:#000
+    
+    class I1,I2,I3 instanceStyle
+    class AppRole,RoleID,SecretID authStyle
+    class VToken tokenStyle
+    class KV kvStyle
+    class CertPath,LE,SEC certStyle
+    class TokenPath tokenPathStyle
+    class Domain1,Domain2 domainStyle
+    class Token1,Token2,Token3 uuidStyle
 ```
 
 **AppRole Authentication:**
