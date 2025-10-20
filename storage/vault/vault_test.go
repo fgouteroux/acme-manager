@@ -3,7 +3,7 @@ package vault_test
 import (
 	"testing"
 
-	"github.com/fgouteroux/acme_manager/testhelper"
+	"github.com/fgouteroux/acme-manager/testhelper"
 )
 
 func TestVaultGetPutSecret(t *testing.T) {

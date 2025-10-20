@@ -16,8 +16,8 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/sirupsen/logrus"
 
-	"github.com/fgouteroux/acme_manager/models"
-	"github.com/fgouteroux/acme_manager/utils"
+	"github.com/fgouteroux/acme-manager/models"
+	"github.com/fgouteroux/acme-manager/utils"
 )
 
 type Client struct {

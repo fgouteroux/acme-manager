@@ -17,12 +17,12 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
-	"github.com/fgouteroux/acme_manager/memcache"
-	"github.com/fgouteroux/acme_manager/metrics"
-	"github.com/fgouteroux/acme_manager/models"
-	"github.com/fgouteroux/acme_manager/restclient"
-	"github.com/fgouteroux/acme_manager/storage/vault"
-	"github.com/fgouteroux/acme_manager/utils"
+	"github.com/fgouteroux/acme-manager/memcache"
+	"github.com/fgouteroux/acme-manager/metrics"
+	"github.com/fgouteroux/acme-manager/models"
+	"github.com/fgouteroux/acme-manager/restclient"
+	"github.com/fgouteroux/acme-manager/storage/vault"
+	"github.com/fgouteroux/acme-manager/utils"
 
 	"gopkg.in/yaml.v3"
 )

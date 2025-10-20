@@ -6,9 +6,9 @@ import (
 
 	"github.com/prometheus/common/model"
 
-	cfg "github.com/fgouteroux/acme_manager/config"
-	"github.com/fgouteroux/acme_manager/models"
-	"github.com/fgouteroux/acme_manager/utils"
+	cfg "github.com/fgouteroux/acme-manager/config"
+	"github.com/fgouteroux/acme-manager/models"
+	"github.com/fgouteroux/acme-manager/utils"
 )
 
 type CertConfig struct {

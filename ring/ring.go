@@ -20,7 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/fgouteroux/acme_manager/models"
+	"github.com/fgouteroux/acme-manager/models"
 )
 
 const (

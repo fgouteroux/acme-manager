@@ -12,9 +12,9 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/sirupsen/logrus"
 
-	"github.com/fgouteroux/acme_manager/config"
-	"github.com/fgouteroux/acme_manager/metrics"
-	"github.com/fgouteroux/acme_manager/utils"
+	"github.com/fgouteroux/acme-manager/config"
+	"github.com/fgouteroux/acme-manager/metrics"
+	"github.com/fgouteroux/acme-manager/utils"
 )
 
 var (

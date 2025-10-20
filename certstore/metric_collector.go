@@ -9,7 +9,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/fgouteroux/acme_manager/ring"
+	"github.com/fgouteroux/acme-manager/ring"
 )
 
 type CertificateCollector struct {

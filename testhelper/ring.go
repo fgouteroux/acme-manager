@@ -7,7 +7,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/grafana/dskit/flagext"
 
-	"github.com/fgouteroux/acme_manager/ring"
+	"github.com/fgouteroux/acme-manager/ring"
 )
 
 func GetTestRing(logger log.Logger) ring.AcmeManagerRing {

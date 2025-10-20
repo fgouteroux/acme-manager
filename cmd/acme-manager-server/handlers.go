@@ -16,9 +16,9 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/kv/memberlist"
 
-	"github.com/fgouteroux/acme_manager/certstore"
-	"github.com/fgouteroux/acme_manager/models"
-	"github.com/fgouteroux/acme_manager/ring"
+	"github.com/fgouteroux/acme-manager/certstore"
+	"github.com/fgouteroux/acme-manager/models"
+	"github.com/fgouteroux/acme-manager/ring"
 )
 
 //go:embed templates/index.gohtml

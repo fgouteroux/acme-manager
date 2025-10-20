@@ -4,7 +4,7 @@ package models;
 
 import "gogoproto/gogo.proto";
 
-option go_package = "github.com/fgouteroux/acme_manager/models";
+option go_package = "github.com/fgouteroux/acme-manager/models";
 
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;

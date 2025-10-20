@@ -1,5 +1,5 @@
 dist
-acme_manager
+acme-manager
 cover.out
 certificate.yml
 client-config.yml

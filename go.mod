@@ -1,4 +1,4 @@
-module github.com/fgouteroux/acme_manager
+module github.com/fgouteroux/acme-manager
 
 go 1.24.0
 

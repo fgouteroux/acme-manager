@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-acme/lego/v4/lego"
 
-	"github.com/fgouteroux/acme_manager/storage/vault"
+	"github.com/fgouteroux/acme-manager/storage/vault"
 )
 
 func Cleanup(logger log.Logger, interval time.Duration, certExpDays int, cleanupCertRevokeLastVersion bool) {

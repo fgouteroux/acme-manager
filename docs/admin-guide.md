@@ -297,7 +297,7 @@ graph LR
 
 ```bash
 # Clone repository
-git clone https://github.com/fgouteroux/acme_manager.git
+git clone https://github.com/fgouteroux/acme-manager.git
 cd acme_manager
 
 # Build server

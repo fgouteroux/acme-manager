@@ -10,8 +10,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
-	"github.com/fgouteroux/acme_manager/metrics"
-	"github.com/fgouteroux/acme_manager/restclient"
+	"github.com/fgouteroux/acme-manager/metrics"
+	"github.com/fgouteroux/acme-manager/restclient"
 )
 
 func WatchCertificateChange(logger log.Logger, interval time.Duration, configPath string, acmeClient *restclient.Client) {

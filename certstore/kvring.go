@@ -9,7 +9,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/prometheus/model/timestamp"
 
-	"github.com/fgouteroux/acme_manager/models"
+	"github.com/fgouteroux/acme-manager/models"
 )
 
 // Key prefixes

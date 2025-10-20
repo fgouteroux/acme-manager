@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/fgouteroux/acme_manager/utils"
+	"github.com/fgouteroux/acme-manager/utils"
 
 	"golang.org/x/exp/maps"
 )

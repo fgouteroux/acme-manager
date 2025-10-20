@@ -17,12 +17,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/common/model"
 
-	"github.com/fgouteroux/acme_manager/certstore"
-	"github.com/fgouteroux/acme_manager/config"
-	"github.com/fgouteroux/acme_manager/models"
-	"github.com/fgouteroux/acme_manager/ring"
-	"github.com/fgouteroux/acme_manager/storage/vault"
-	"github.com/fgouteroux/acme_manager/utils"
+	"github.com/fgouteroux/acme-manager/certstore"
+	"github.com/fgouteroux/acme-manager/config"
+	"github.com/fgouteroux/acme-manager/models"
+	"github.com/fgouteroux/acme-manager/ring"
+	"github.com/fgouteroux/acme-manager/storage/vault"
+	"github.com/fgouteroux/acme-manager/utils"
 )
 
 var (

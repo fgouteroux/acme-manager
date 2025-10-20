@@ -5,8 +5,8 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 
-	"github.com/fgouteroux/acme_manager/config"
-	vaultStorage "github.com/fgouteroux/acme_manager/storage/vault"
+	"github.com/fgouteroux/acme-manager/config"
+	vaultStorage "github.com/fgouteroux/acme-manager/storage/vault"
 
 	vaultApi "github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/builtin/credential/approle"

@@ -17,10 +17,10 @@ import (
 
 	legoLog "github.com/go-acme/lego/v4/log"
 
-	"github.com/fgouteroux/acme_manager/client"
-	"github.com/fgouteroux/acme_manager/restclient"
-	"github.com/fgouteroux/acme_manager/storage/vault"
-	"github.com/fgouteroux/acme_manager/utils"
+	"github.com/fgouteroux/acme-manager/client"
+	"github.com/fgouteroux/acme-manager/restclient"
+	"github.com/fgouteroux/acme-manager/storage/vault"
+	"github.com/fgouteroux/acme-manager/utils"
 
 	"gopkg.in/yaml.v3"
 )

@@ -25,9 +25,9 @@ import (
 	"github.com/go-acme/lego/v4/providers/http/webroot"
 	"github.com/go-acme/lego/v4/registration"
 
-	"github.com/fgouteroux/acme_manager/config"
-	"github.com/fgouteroux/acme_manager/metrics"
-	"github.com/fgouteroux/acme_manager/utils"
+	"github.com/fgouteroux/acme-manager/config"
+	"github.com/fgouteroux/acme-manager/metrics"
+	"github.com/fgouteroux/acme-manager/utils"
 )
 
 var (

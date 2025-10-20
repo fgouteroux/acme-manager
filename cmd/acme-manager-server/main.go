@@ -29,14 +29,14 @@ import (
 
 	legoLog "github.com/go-acme/lego/v4/log"
 
-	"github.com/fgouteroux/acme_manager/api"
-	"github.com/fgouteroux/acme_manager/certstore"
-	"github.com/fgouteroux/acme_manager/config"
-	"github.com/fgouteroux/acme_manager/ring"
-	"github.com/fgouteroux/acme_manager/storage/vault"
-	"github.com/fgouteroux/acme_manager/utils"
+	"github.com/fgouteroux/acme-manager/api"
+	"github.com/fgouteroux/acme-manager/certstore"
+	"github.com/fgouteroux/acme-manager/config"
+	"github.com/fgouteroux/acme-manager/ring"
+	"github.com/fgouteroux/acme-manager/storage/vault"
+	"github.com/fgouteroux/acme-manager/utils"
 
-	_ "github.com/fgouteroux/acme_manager/docs"
+	_ "github.com/fgouteroux/acme-manager/docs"
 
 	"gopkg.in/yaml.v3"
 )

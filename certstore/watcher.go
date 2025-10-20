@@ -12,10 +12,10 @@ import (
 
 	"github.com/go-acme/lego/v4/certcrypto"
 
-	"github.com/fgouteroux/acme_manager/config"
-	"github.com/fgouteroux/acme_manager/metrics"
-	"github.com/fgouteroux/acme_manager/ring"
-	"github.com/fgouteroux/acme_manager/storage/vault"
+	"github.com/fgouteroux/acme-manager/config"
+	"github.com/fgouteroux/acme-manager/metrics"
+	"github.com/fgouteroux/acme-manager/ring"
+	"github.com/fgouteroux/acme-manager/storage/vault"
 
 	"gopkg.in/yaml.v3"
 )
