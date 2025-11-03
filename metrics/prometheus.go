@@ -156,6 +156,48 @@ var (
 		},
 		[]string{"issuer"},
 	)
+
+	httpRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_http_requests_total",
+			Help: "Total number of HTTP requests by method, path and status code",
+		},
+		[]string{"method", "path", "status_code"},
+	)
+
+	httpRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "acme_manager_http_request_duration_seconds",
+			Help:    "HTTP request duration in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"method", "path", "status_code"},
+	)
+
+	httpRequestSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "acme_manager_http_request_size_bytes",
+			Help:    "HTTP request size in bytes",
+			Buckets: prometheus.ExponentialBuckets(100, 10, 8),
+		},
+		[]string{"method", "path"},
+	)
+
+	httpResponseSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "acme_manager_http_response_size_bytes",
+			Help:    "HTTP response size in bytes",
+			Buckets: prometheus.ExponentialBuckets(100, 10, 8),
+		},
+		[]string{"method", "path"},
+	)
+
+	httpRequestsInFlight = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_http_requests_in_flight",
+			Help: "Current number of HTTP requests being processed",
+		},
+	)
 )
 
 func IncManagedCertificate(issuer, owner string) {
@@ -238,6 +280,25 @@ func SetIssuerConfigError(issuer string, value float64) {
 	issuerConfigError.WithLabelValues(issuer).Set(value)
 }
 
+func RecordHTTPRequest(method, path, statusCode string, duration float64, requestSize, responseSize int) {
+	httpRequestsTotal.WithLabelValues(method, path, statusCode).Inc()
+	httpRequestDuration.WithLabelValues(method, path, statusCode).Observe(duration)
+	if requestSize > 0 {
+		httpRequestSize.WithLabelValues(method, path).Observe(float64(requestSize))
+	}
+	if responseSize > 0 {
+		httpResponseSize.WithLabelValues(method, path).Observe(float64(responseSize))
+	}
+}
+
+func IncHTTPRequestsInFlight() {
+	httpRequestsInFlight.Inc()
+}
+
+func DecHTTPRequestsInFlight() {
+	httpRequestsInFlight.Dec()
+}
+
 func init() {
 	collectors := []prometheus.Collector{
 		managedCertificate,
@@ -259,6 +320,11 @@ func init() {
 		configReload,
 		configError,
 		issuerConfigError,
+		httpRequestsTotal,
+		httpRequestDuration,
+		httpRequestSize,
+		httpResponseSize,
+		httpRequestsInFlight,
 	}
 
 	for _, collector := range collectors {

@@ -286,8 +286,8 @@ func main() {
 	_ = level.Info(logger).Log("msg", "Starting acme-manager-server", "version", version.Info())
 	_ = level.Info(logger).Log("msg", "Build context", "build_context", version.BuildContext())
 
-	http.Handle("/metrics", promhttp.Handler())
-	http.Handle("/static/", http.FileServer(http.FS(staticFiles)))
+	http.Handle("/metrics", MetricsHandler(promhttp.Handler()))
+	http.Handle("/static/", MetricsHandler(http.FileServer(http.FS(staticFiles))))
 
 	indexPage := newIndexPageContent()
 	indexPage.AddLinks(certificateWeight, "Certificates", []IndexPageLink{
@@ -372,8 +372,8 @@ func main() {
 		{Desc: "Status", Path: "/memberlist"},
 	})
 
-	http.Handle("/ring", amring.Lifecycler)
-	http.Handle("/memberlist", memberlistStatusHandler("", amring.Memberlistsvc))
+	http.Handle("/ring", MetricsHandler(amring.Lifecycler))
+	http.Handle("/memberlist", MetricsHandler(memberlistStatusHandler("", amring.Memberlistsvc)))
 
 	certstore.AmStore = &certstore.CertStore{
 		RingConfig: amring,
@@ -433,19 +433,19 @@ func main() {
 		go certstore.Cleanup(logger, *cleanupInterval, *cleanupCertExpDays, *cleanupCertRevokeLastVersion)
 	}
 
-	http.Handle("/", indexHandler("", indexPage))
-	http.HandleFunc("/ring/leader", func(w http.ResponseWriter, req *http.Request) {
+	http.Handle("/", MetricsHandler(indexHandler("", indexPage)))
+	http.Handle("/ring/leader", MetricsHandler(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		leaderHandler(w, req)
-	})
+	})))
 	http.Handle("/certificates", LoggerHandler(certificateListHandler()))
 	http.Handle("/tokens", LoggerHandler(tokenListHandler()))
 
-	http.HandleFunc(ChallengePath, func(w http.ResponseWriter, req *http.Request) {
+	http.Handle(ChallengePath, MetricsHandler(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		httpChallengeHandler(w, req)
-	})
+	})))
 
-	http.HandleFunc("/swagger/", httpSwagger.WrapHandler)
-	http.HandleFunc("/health", healthHandler)
+	http.Handle("/swagger/", MetricsHandler(http.HandlerFunc(httpSwagger.WrapHandler)))
+	http.Handle("/health", MetricsHandler(http.HandlerFunc(healthHandler)))
 
 	// Start HTTP server in a goroutine so we can handle shutdown signals
 	server := &http.Server{

@@ -17,6 +17,7 @@ import (
 	"github.com/grafana/dskit/kv/memberlist"
 
 	"github.com/fgouteroux/acme-manager/certstore"
+	"github.com/fgouteroux/acme-manager/metrics"
 	"github.com/fgouteroux/acme-manager/models"
 	"github.com/fgouteroux/acme-manager/ring"
 )
@@ -260,10 +261,14 @@ func tokenListHandler() http.HandlerFunc {
 	})
 }
 
-func LoggerHandler(next http.Handler) http.Handler {
+func MetricsHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Start timer
 		start := time.Now()
+
+		// Track in-flight requests
+		metrics.IncHTTPRequestsInFlight()
+		defer metrics.DecHTTPRequestsInFlight()
 
 		lrw := NewLoggingResponseWriter(w)
 
@@ -271,6 +276,42 @@ func LoggerHandler(next http.Handler) http.Handler {
 
 		// Stop timer
 		stop := time.Now()
+		duration := stop.Sub(start).Seconds()
+
+		// Record metrics
+		statusCode := fmt.Sprintf("%d", lrw.statusCode)
+		requestSize := int(req.ContentLength)
+		if requestSize < 0 {
+			requestSize = 0
+		}
+		metrics.RecordHTTPRequest(req.Method, req.URL.Path, statusCode, duration, requestSize, lrw.length)
+	})
+}
+
+func LoggerHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Start timer
+		start := time.Now()
+
+		// Track in-flight requests
+		metrics.IncHTTPRequestsInFlight()
+		defer metrics.DecHTTPRequestsInFlight()
+
+		lrw := NewLoggingResponseWriter(w)
+
+		next.ServeHTTP(lrw, req)
+
+		// Stop timer
+		stop := time.Now()
+		duration := stop.Sub(start).Seconds()
+
+		// Record metrics
+		statusCode := fmt.Sprintf("%d", lrw.statusCode)
+		requestSize := int(req.ContentLength)
+		if requestSize < 0 {
+			requestSize = 0
+		}
+		metrics.RecordHTTPRequest(req.Method, req.URL.Path, statusCode, duration, requestSize, lrw.length)
 
 		_ = level.Info(logger).Log(
 			"method", req.Method,
