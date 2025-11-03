@@ -438,6 +438,9 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		_ = level.Info(logger).Log("msg", "created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 		metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
 
+		// Reset the renewed metric to ensure consistency (successful creation means no renewal issues)
+		metrics.SetRenewedCertificate(certData.Issuer, certData.Owner, certData.Domain, 1)
+
 		err = certstore.AmStore.PutCertificate(newCert)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -661,6 +664,10 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				return
 			}
 			_ = level.Info(logger).Log("msg", "re-created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
+
+			// Reset the renewed metric since we successfully recreated the certificate
+			// This ensures that if a previous renewal failed (metric=0), it gets reset
+			metrics.SetRenewedCertificate(certData.Issuer, certData.Owner, certData.Domain, 1)
 
 			err = certstore.AmStore.PutCertificate(newCert)
 			if err != nil {

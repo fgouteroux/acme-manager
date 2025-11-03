@@ -353,9 +353,12 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 			err = amStore.PutCertificate(cert)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
+				metrics.SetRenewedCertificate(cert.Issuer, cert.Owner, cert.Domain, 0)
 				continue
 			}
 			metrics.SetRenewedCertificate(cert.Issuer, cert.Owner, cert.Domain, 1)
+			// Reset the created metric to ensure consistency (successful renewal means no creation issues)
+			metrics.SetCreatedCertificate(cert.Issuer, cert.Owner, cert.Domain, 1)
 		}
 	}
 	return nil
