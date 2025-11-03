@@ -23,7 +23,7 @@ var (
 
 	revokedCertificate = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "acme_manager_certificate_revoke",
+			Name: "acme_manager_certificate_revoked",
 			Help: "Revoked certificate by issuer, owner and domain, 1 = revoked, 0 = error",
 		},
 		[]string{"issuer", "owner", "domain"},
@@ -56,7 +56,7 @@ var (
 	runSuccessLocalCmd = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "acme_manager_local_cmd_run_success_total",
-			Help: "Number of success local cmd run",
+			Help: "Number of successful local cmd runs",
 		},
 		[]string{},
 	)
@@ -64,7 +64,7 @@ var (
 	runFailedLocalCmd = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "acme_manager_local_cmd_run_failed_total",
-			Help: "Number of failed local cmd run",
+			Help: "Number of failed local cmd runs",
 		},
 		[]string{},
 	)
@@ -88,7 +88,7 @@ var (
 	deleteSuccessVaultSecret = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "acme_manager_vault_delete_secret_success_total",
-			Help: "Number of created vault secrets",
+			Help: "Number of deleted vault secrets",
 		},
 		[]string{},
 	)
@@ -96,7 +96,7 @@ var (
 	getFailedVaultSecret = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "acme_manager_vault_get_secret_failed_total",
-			Help: "Number of created vault secrets",
+			Help: "Number of failed vault secret retrievals",
 		},
 		[]string{},
 	)
@@ -104,7 +104,7 @@ var (
 	putFailedVaultSecret = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "acme_manager_vault_put_secret_failed_total",
-			Help: "Number of deleted vault secrets",
+			Help: "Number of failed vault secret creations/updates",
 		},
 		[]string{},
 	)
@@ -112,15 +112,15 @@ var (
 	deleteFailedVaultSecret = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "acme_manager_vault_delete_secret_failed_total",
-			Help: "Number of created vault secrets",
+			Help: "Number of failed vault secret deletions",
 		},
 		[]string{},
 	)
 
-	certificateConfigReload = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "acme_manager_certificate_config_reload",
-			Help: "Number of certificate config file reload",
+	certificateConfigReload = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_certificate_config_reload_total",
+			Help: "Total number of certificate config file reloads",
 		},
 		[]string{},
 	)
@@ -133,10 +133,10 @@ var (
 		[]string{},
 	)
 
-	configReload = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "acme_manager_config_reload",
-			Help: "Number of config file reload",
+	configReload = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_config_reload_total",
+			Help: "Total number of config file reloads",
 		},
 		[]string{},
 	)
