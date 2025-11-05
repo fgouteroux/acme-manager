@@ -324,7 +324,14 @@ func setRetryHTTPClient(conf *lego.Config, cfg config.Config, customLogger *logr
 	if customLogger != nil {
 		retryClient.Logger = customLogger
 		// Set the response log hook
-		retryClient.ResponseLogHook = utils.ResponseLogHook(customLogger, false)
+		if cfg.Common.HTTPClientDebug {
+			// Enable full HTTP debug logging for requests and responses
+			retryClient.RequestLogHook = utils.RequestLogHook(customLogger)
+			retryClient.ResponseLogHook = utils.ResponseLogHookDebug(customLogger)
+		} else {
+			// Only log error responses
+			retryClient.ResponseLogHook = utils.ResponseLogHook(customLogger, false)
+		}
 	} else {
 		retryClient.Logger = nil
 	}

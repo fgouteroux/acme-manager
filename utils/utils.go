@@ -335,6 +335,68 @@ func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.Resp
 	}
 }
 
+// ResponseLogHookDebug logs all responses with full details
+func ResponseLogHookDebug(logger *logrus.Logger) retryablehttp.ResponseLogHook {
+	return func(_ retryablehttp.Logger, resp *http.Response) {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			fields := logrus.Fields{
+				"method":      resp.Request.Method,
+				"url":         resp.Request.URL.String(),
+				"status_code": resp.StatusCode,
+				"err":         fmt.Sprintf("body_error: %v", err),
+			}
+			logger.WithFields(fields).Debugf("HTTP Response (failed to read body)")
+			return
+		}
+
+		fields := logrus.Fields{
+			"method":      resp.Request.Method,
+			"url":         resp.Request.URL.String(),
+			"status_code": resp.StatusCode,
+			"body":        string(body),
+		}
+
+		// Log response headers
+		for key, values := range resp.Header {
+			fields[fmt.Sprintf("header_%s", key)] = strings.Join(values, ",")
+		}
+
+		logger.WithFields(fields).Debugf("HTTP Response")
+
+		// Restore the body content to the response
+		resp.Body = io.NopCloser(bytes.NewBuffer(body))
+	}
+}
+
+// RequestLogHook logs outgoing HTTP requests
+func RequestLogHook(logger *logrus.Logger) retryablehttp.RequestLogHook {
+	return func(_ retryablehttp.Logger, req *http.Request, attempt int) {
+		fields := logrus.Fields{
+			"method":  req.Method,
+			"url":     req.URL.String(),
+			"attempt": attempt,
+		}
+
+		// Log request headers
+		for key, values := range req.Header {
+			fields[fmt.Sprintf("header_%s", key)] = strings.Join(values, ",")
+		}
+
+		// Log request body if present
+		if req.Body != nil && req.Body != http.NoBody {
+			bodyBytes, err := io.ReadAll(req.Body)
+			if err == nil && len(bodyBytes) > 0 {
+				fields["body"] = string(bodyBytes)
+				// Restore the body for the actual request
+				req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			}
+		}
+
+		logger.WithFields(fields).Debugf("HTTP Request")
+	}
+}
+
 // CustomTextFormatter is a custom logrus formatter
 type CustomTextFormatter struct {
 	TimestampFormat  string
