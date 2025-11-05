@@ -214,7 +214,7 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 
 	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(request)
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
+		_ = level.Error(logger).Log("msg", "Failed to obtain certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner, "err", err)
 		metrics.SetCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
 		return certData, err
 	}
