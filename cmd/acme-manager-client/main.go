@@ -47,6 +47,8 @@ var (
 	clientManagerTLSSkipVerify = flag.Bool("client.tls-skip-verify", false, "Client manager tls skip verify.")
 	clientConfigPath           = flag.String("client.config-path", "client-config.yml", "Client config path.")
 	clientCheckConfigInterval  = flag.Duration("client.check-config-interval", 5*time.Minute, "Time interval to check if client config file changes and to update local certificate file.")
+	clientCleanupEnabled       = flag.Bool("client.cleanup-enabled", false, "Enable cleanup of local certificate files not found on acme manager server.")
+	clientCleanupInterval      = flag.Duration("client.cleanup-interval", 30*time.Minute, "Time interval to cleanup certificate files not found on acme manager server.")
 
 	// Help flags
 	showVersion = flag.Bool("version", false, "Show version information")
@@ -209,6 +211,11 @@ func main() {
 
 		// listen for config file event change
 		go client.WatchCertificateEventChange(logger, *clientConfigPath, acmeClient)
+	}
+
+	// periodically cleanup local certificate files not found on server
+	if *clientCleanupEnabled {
+		go client.CleanupCertificateFiles(logger, *clientCleanupInterval, *clientConfigPath, acmeClient)
 	}
 
 	http.Handle("/metrics", promhttp.Handler())

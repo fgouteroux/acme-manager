@@ -672,11 +672,6 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 			_ = level.Error(logger).Log("err", err)
 		}
 	}
-	// delete files that don't match patterns
-	_, err = listAndDeleteFiles(logger, patterns)
-	if err != nil {
-		_ = level.Error(logger).Log("err", err)
-	}
 
 	_ = level.Info(logger).Log("msg", "check certificates from config file done")
 }
@@ -799,11 +794,6 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 			_ = level.Error(logger).Log("err", err)
 		}
 	}
-	// delete files that don't match patterns
-	_, err = listAndDeleteFiles(logger, patterns)
-	if err != nil {
-		_ = level.Error(logger).Log("err", err)
-	}
 	_ = level.Info(logger).Log("msg", "pull and check certificates done")
 }
 
@@ -924,4 +914,52 @@ func listAndDeleteFiles(logger log.Logger, patterns []string) (bool, error) {
 		return nil
 	})
 	return hasDelete, err
+}
+
+// CleanupCertificateFiles periodically checks and deletes local certificate files not found on the server
+func CleanupCertificateFiles(logger log.Logger, interval time.Duration, GlobalConfigPath string, acmeClient *restclient.Client) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		_ = level.Info(logger).Log("msg", "cleanup local certificate files not found on server")
+
+		newConfigBytes, err := os.ReadFile(filepath.Clean(GlobalConfigPath))
+		if err != nil {
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to read file %s", GlobalConfigPath), "err", err)
+			continue
+		}
+		var cfg Config
+		err = yaml.Unmarshal(newConfigBytes, &cfg)
+		if err != nil {
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("ignoring file changes %s because of error", GlobalConfigPath), "err", err)
+			continue
+		}
+
+		allCert, err := acmeClient.GetAllCertificateMetadata(60)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			continue
+		}
+
+		var patterns []string
+		for _, certData := range allCert {
+			patterns = append(patterns, certData.Issuer+"/"+certData.Domain)
+		}
+
+		hasDelete, err := listAndDeleteFiles(logger, patterns)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			continue
+		}
+
+		if hasDelete && cfg.Common.CmdEnabled {
+			err := executeCommand(logger, cfg.Common, false)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+			}
+		}
+
+		_ = level.Info(logger).Log("msg", "cleanup done")
+	}
 }
