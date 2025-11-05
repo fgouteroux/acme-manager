@@ -426,7 +426,6 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		_ = level.Info(logger).Log("msg", "creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 		newCert, err := certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
 		if err != nil {
-			_ = level.Error(logger).Log("err", err)
 			statusCode := http.StatusInternalServerError
 			if strings.Contains(err.Error(), "urn:ietf:params:acme:error:malformed") {
 				statusCode = http.StatusBadRequest
@@ -659,7 +658,6 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			_ = level.Info(logger).Log("msg", "re-creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 			newCert, err = certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
 			if err != nil {
-				_ = level.Error(logger).Log("err", err)
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
@@ -830,7 +828,6 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			_ = level.Info(logger).Log("msg", "revoking certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
 			err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
 			if err != nil {
-				_ = level.Error(logger).Log("err", err)
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}

@@ -347,7 +347,7 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 			cert, err := CreateRemoteCertificateResource(certData, logger)
 			if err != nil {
 				metrics.SetRenewedCertificate(cert.Issuer, cert.Owner, cert.Domain, 0)
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to renew certificate owner '%s', issuer '%s' and domain '%s'", certData.Owner, certData.Issuer, certData.Domain), "err", err)
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to renew certificate owner '%s', issuer '%s' and domain '%s'", certData.Owner, certData.Issuer, certData.Domain))
 				continue
 			}
 			err = amStore.PutCertificate(cert)
