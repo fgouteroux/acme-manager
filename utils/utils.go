@@ -298,6 +298,16 @@ func ValidateRenewalDays(value string) (int, int, error) {
 // ResponseLogHook logs the response status code and body
 func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.ResponseLogHook {
 	return func(_ retryablehttp.Logger, resp *http.Response) {
+		// Log order URL at INFO level when a new order is created (status 201 and newOrder endpoint)
+		if resp.StatusCode == 201 && strings.Contains(resp.Request.URL.Path, "/newOrder") {
+			if location := resp.Header.Get("Location"); location != "" {
+				logger.WithFields(logrus.Fields{
+					"order_url": location,
+					"url":       resp.Request.URL.String(),
+				}).Info("ACME order created")
+			}
+		}
+
 		if resp.StatusCode >= 400 {
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
