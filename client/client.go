@@ -407,13 +407,10 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 
 	var newCertList []models.Certificate
 	var hasChange bool
-	var patterns []string
 
 	for _, certConfig := range GlobalConfig.Certificate {
 
 		certData := certConfig.ToModelsCertificate() // Convert to models.Certificate
-
-		patterns = append(patterns, certData.Issuer+"/"+certData.Domain)
 
 		err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
 		if err != nil {
@@ -702,10 +699,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 	}
 
 	var hasChange bool
-	var patterns []string
 	for _, certData := range allCert {
-
-		patterns = append(patterns, certData.Issuer+"/"+certData.Domain)
 
 		err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
 		if err != nil {
