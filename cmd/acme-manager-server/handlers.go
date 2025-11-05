@@ -278,13 +278,15 @@ func MetricsHandler(next http.Handler) http.Handler {
 		stop := time.Now()
 		duration := stop.Sub(start).Seconds()
 
-		// Record metrics
-		statusCode := fmt.Sprintf("%d", lrw.statusCode)
-		requestSize := int(req.ContentLength)
-		if requestSize < 0 {
-			requestSize = 0
+		// Record metrics only if path is not /static/
+		if !strings.HasPrefix(req.URL.Path, "/static/") {
+			statusCode := fmt.Sprintf("%d", lrw.statusCode)
+			requestSize := int(req.ContentLength)
+			if requestSize < 0 {
+				requestSize = 0
+			}
+			metrics.RecordHTTPRequest(req.Method, req.URL.Path, statusCode, duration, requestSize, lrw.length)
 		}
-		metrics.RecordHTTPRequest(req.Method, req.URL.Path, statusCode, duration, requestSize, lrw.length)
 	})
 }
 
@@ -305,23 +307,25 @@ func LoggerHandler(next http.Handler) http.Handler {
 		stop := time.Now()
 		duration := stop.Sub(start).Seconds()
 
-		// Record metrics
-		statusCode := fmt.Sprintf("%d", lrw.statusCode)
-		requestSize := int(req.ContentLength)
-		if requestSize < 0 {
-			requestSize = 0
-		}
-		metrics.RecordHTTPRequest(req.Method, req.URL.Path, statusCode, duration, requestSize, lrw.length)
+		// Record metrics and logs only if path is not /static/
+		if !strings.HasPrefix(req.URL.Path, "/static/") {
+			statusCode := fmt.Sprintf("%d", lrw.statusCode)
+			requestSize := int(req.ContentLength)
+			if requestSize < 0 {
+				requestSize = 0
+			}
+			metrics.RecordHTTPRequest(req.Method, req.URL.Path, statusCode, duration, requestSize, lrw.length)
 
-		_ = level.Info(logger).Log(
-			"method", req.Method,
-			"path", req.URL.Path,
-			"status_code", lrw.statusCode,
-			"user", w.Header().Get("user"),
-			"duration", stop.Sub(start).Milliseconds(),
-			"client_ip", GetClientIP(req),
-			"length", lrw.length,
-		)
+			_ = level.Info(logger).Log(
+				"method", req.Method,
+				"path", req.URL.Path,
+				"status_code", lrw.statusCode,
+				"user", w.Header().Get("user"),
+				"duration", stop.Sub(start).Milliseconds(),
+				"client_ip", GetClientIP(req),
+				"length", lrw.length,
+			)
+		}
 	})
 }
 
