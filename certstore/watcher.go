@@ -29,19 +29,19 @@ func WatchConfigFileChanges(logger log.Logger, customLogger *logrus.Logger, inte
 		_ = level.Info(logger).Log("msg", "check config file changes")
 		newConfigBytes, err := os.ReadFile(filepath.Clean(configPath))
 		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to read file %s", configPath), "err", err)
+			_ = level.Error(logger).Log("msg", "unable to read file", "path", configPath, "err", err)
 			continue
 		}
 		var cfg config.Config
 		err = yaml.Unmarshal(newConfigBytes, &cfg)
 		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring file changes %s because of error", configPath), "err", err)
+			_ = level.Error(logger).Log("msg", "ignoring file changes because of error", "path", configPath, "err", err)
 			continue
 		}
 
 		oldConfigBytes, err := yaml.Marshal(config.GlobalConfig)
 		if err != nil {
-			_ = level.Error(logger).Log("msg", "Unable to yaml marshal the globalconfig", "err", err)
+			_ = level.Error(logger).Log("msg", "unable to yaml marshal the globalconfig", "err", err)
 			continue
 		}
 
@@ -53,14 +53,14 @@ func WatchConfigFileChanges(logger log.Logger, customLogger *logrus.Logger, inte
 
 			err = Setup(logger, customLogger, cfg, version)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring issuer changes in file %s because of error", configPath), "err", err)
+				_ = level.Error(logger).Log("msg", "ignoring issuer changes because of error", "path", configPath, "err", err)
 				metrics.SetConfigError(1)
 				continue
 			}
 
 			vault.GlobalClient, err = vault.InitClient(cfg.Storage.Vault, customLogger)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Ignoring vault changes in file %s because of error", configPath), "err", err)
+				_ = level.Error(logger).Log("msg", "ignoring vault changes because of error", "path", configPath, "err", err)
 				continue
 			}
 			config.GlobalConfig = cfg
@@ -110,7 +110,7 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 				layout := "2006-01-02 15:04:05 -0700 MST"
 				t, err := time.Parse(layout, tokenData.Expires)
 				if err != nil {
-					_ = level.Error(logger).Log("err", err)
+					_ = level.Error(logger).Log("msg", "failed to parse token expiration time", "token_id", tokenID, "err", err)
 					continue
 				}
 
@@ -123,12 +123,12 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 					secretKeyPath := fmt.Sprintf("%s/%s/%s", secretKeyPathPrefix, tokenData.Username, tokenID)
 					err = vault.GlobalClient.DeleteSecretWithAppRole(secretKeyPath)
 					if err != nil {
-						_ = level.Error(logger).Log("err", err)
+						_ = level.Error(logger).Log("msg", "failed to delete token from vault", "token_id", tokenID, "err", err)
 						continue
 					}
 					err = AmStore.DeleteToken(tokenID)
 					if err != nil {
-						_ = level.Error(logger).Log("err", err)
+						_ = level.Error(logger).Log("msg", "failed to delete token from ring", "token_id", tokenID, "err", err)
 					}
 				}
 			}
@@ -152,13 +152,13 @@ func WatchIssuerHealth(logger log.Logger, customLogger *logrus.Logger, interval 
 
 			privateKeyBytes, err := os.ReadFile(filepath.Clean(privateKeyPath))
 			if err != nil {
-				_ = level.Error(logger).Log("err", err)
+				_ = level.Error(logger).Log("msg", "failed to read private key file", "issuer", issuer, "path", privateKeyPath, "err", err)
 				metrics.SetIssuerConfigError(issuer, issuerError)
 				continue
 			}
 			privateKeyPEM, err := certcrypto.ParsePEMPrivateKey(privateKeyBytes)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Errorf("unable parse private key '%s'", privateKeyPath), "err", err)
+				_ = level.Error(logger).Log("msg", "unable to parse private key", "issuer", issuer, "path", privateKeyPath, "err", err)
 				metrics.SetIssuerConfigError(issuer, issuerError)
 				continue
 			}
@@ -166,7 +166,7 @@ func WatchIssuerHealth(logger log.Logger, customLogger *logrus.Logger, interval 
 			userAgent := fmt.Sprintf("acme-manager/%s", version)
 			_, _, err = tryRecoverRegistration(customLogger, config.GlobalConfig, privateKeyPEM, issuerConf.Contact, issuerConf.CADirURL, userAgent)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Errorf("unable to recover registration account for private key '%s'", privateKeyPath), "err", err)
+				_ = level.Error(logger).Log("msg", "unable to recover registration account", "issuer", issuer, "private_key_path", privateKeyPath, "err", err)
 			}
 
 			metrics.SetIssuerConfigError(issuer, 0.0)
