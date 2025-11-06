@@ -39,7 +39,7 @@ func WatchCertificateFromRing(logger log.Logger, interval time.Duration, configP
 func WatchCertificateEventChange(logger log.Logger, configPath string, acmeClient *restclient.Client) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
+		_ = level.Error(logger).Log("msg", "failed to create file watcher", "err", err)
 		os.Exit(1)
 	}
 	defer watcher.Close()
@@ -53,7 +53,7 @@ func WatchCertificateEventChange(logger log.Logger, configPath string, acmeClien
 	// watch the parent dir of the file to catch changes
 	err = watcher.Add(watchDir)
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
+		_ = level.Error(logger).Log("msg", "failed to watch directory", "path", watchDir, "err", err)
 		os.Exit(1)
 	}
 
@@ -70,7 +70,7 @@ func WatchCertificateEventChange(logger log.Logger, configPath string, acmeClien
 				go CheckCertificate(logger, configPath, acmeClient)
 			}
 		case err := <-watcher.Errors:
-			_ = level.Error(logger).Log("err", err)
+			_ = level.Error(logger).Log("msg", "file watcher error", "err", err)
 		}
 	}
 }

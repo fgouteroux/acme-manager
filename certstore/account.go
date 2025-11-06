@@ -96,13 +96,13 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 		accountFilePath := fmt.Sprintf("%s/%s/account.json", cfg.Common.RootPathAccount, issuer)
 		accountBytes, err := os.ReadFile(filepath.Clean(accountFilePath))
 		if err != nil {
-			_ = level.Warn(logger).Log("err", err)
+			_ = level.Warn(logger).Log("msg", "failed to read account file", "issuer", issuer, "path", accountFilePath, "err", err)
 		}
 		var account Account
 		if len(accountBytes) > 0 {
 			err = json.Unmarshal(accountBytes, &account)
 			if err != nil {
-				_ = level.Error(logger).Log("err", err)
+				_ = level.Error(logger).Log("msg", "failed to unmarshal account data", "issuer", issuer, "err", err)
 			}
 		}
 		privateKeyPath := fmt.Sprintf("%s/%s/private_key.pem", cfg.Common.RootPathAccount, issuer)
@@ -115,13 +115,13 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 
 		privateKeyBytes, err := os.ReadFile(filepath.Clean(privateKeyPath))
 		if err != nil {
-			_ = level.Error(logger).Log("err", err)
+			_ = level.Error(logger).Log("msg", "failed to read private key file", "issuer", issuer, "path", privateKeyPath, "err", err)
 			metrics.SetIssuerConfigError(issuer, 1.0)
 			continue
 		}
 		account.key, err = certcrypto.ParsePEMPrivateKey(privateKeyBytes)
 		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Errorf("unable parse private key '%s'", privateKeyPath), "err", err)
+			_ = level.Error(logger).Log("msg", "unable to parse private key", "issuer", issuer, "path", privateKeyPath, "err", err)
 			metrics.SetIssuerConfigError(issuer, 1.0)
 			continue
 		}
@@ -129,14 +129,14 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 		userAgent := fmt.Sprintf("acme-manager/%s", version)
 
 		if account.Registration == nil || account.Registration.Body.Status == "" {
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("Trying to recover registration account for private key '%s'", privateKeyPath))
+			_ = level.Info(logger).Log("msg", "trying to recover registration account", "issuer", issuer, "private_key_path", privateKeyPath)
 			client, reg, err := tryRecoverRegistration(customLogger, cfg, account.key, issuerConf.Contact, issuerConf.CADirURL, userAgent)
 			if err != nil {
 				if strings.Contains(err.Error(), "urn:ietf:params:acme:error:accountDoesNotExist") {
-					_ = level.Warn(logger).Log("err", err.Error())
+					_ = level.Warn(logger).Log("msg", "account does not exist", "issuer", issuer, "err", err.Error())
 				} else {
 					metrics.SetIssuerConfigError(issuer, 1.0)
-					_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to recover registration account for private key '%s'", privateKeyPath), "err", err)
+					_ = level.Error(logger).Log("msg", "unable to recover registration account", "issuer", issuer, "private_key_path", privateKeyPath, "err", err)
 					continue
 				}
 			}
@@ -149,13 +149,13 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 						HmacEncoded:          issuerConf.HMAC,
 					})
 					if err != nil {
-						_ = level.Error(logger).Log("err", err)
+						_ = level.Error(logger).Log("msg", "failed to register with external account binding", "issuer", issuer, "err", err)
 						continue
 					}
 				} else {
 					reg, err = client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
 					if err != nil {
-						_ = level.Error(logger).Log("err", err)
+						_ = level.Error(logger).Log("msg", "failed to register account", "issuer", issuer, "err", err)
 						continue
 					}
 				}
@@ -177,7 +177,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 
 					reg, err = client.Registration.UpdateRegistration(registration.RegisterOptions{TermsOfServiceAgreed: true})
 					if err != nil {
-						_ = level.Error(logger).Log("err", err)
+						_ = level.Error(logger).Log("msg", "failed to update registration", "issuer", issuer, "err", err)
 						continue
 					}
 				}
@@ -190,10 +190,10 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 			account.Registration = reg
 			err = accountSave(&account, accountFilePath)
 			if err != nil {
-				_ = level.Error(logger).Log("err", err)
+				_ = level.Error(logger).Log("msg", "failed to save account file", "issuer", issuer, "path", accountFilePath, "err", err)
 				return err
 			}
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("Account file %s saved", accountFilePath))
+			_ = level.Info(logger).Log("msg", "account file saved", "issuer", issuer, "path", accountFilePath)
 
 		} else if account.Registration != nil && account.Email != issuerConf.Contact {
 
@@ -204,12 +204,12 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 			setRetryHTTPClient(conf, cfg, customLogger)
 			client, err := lego.NewClient(conf)
 			if err != nil {
-				_ = level.Error(logger).Log("err", err)
+				_ = level.Error(logger).Log("msg", "failed to create lego client", "issuer", issuer, "err", err)
 				continue
 			}
 			reg, err := client.Registration.UpdateRegistration(registration.RegisterOptions{TermsOfServiceAgreed: true})
 			if err != nil {
-				_ = level.Error(logger).Log("err", err)
+				_ = level.Error(logger).Log("msg", "failed to update registration", "issuer", issuer, "err", err)
 				continue
 			}
 			var contact string
@@ -220,10 +220,10 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 			account.Registration = reg
 			err = accountSave(&account, accountFilePath)
 			if err != nil {
-				_ = level.Error(logger).Log("err", err)
+				_ = level.Error(logger).Log("msg", "failed to save account file", "issuer", issuer, "path", accountFilePath, "err", err)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("Account file %s updated", accountFilePath))
+			_ = level.Info(logger).Log("msg", "account file updated", "issuer", issuer, "path", accountFilePath)
 		} else if account.Registration != nil && issuerConf.Unregister {
 
 			conf := lego.NewConfig(&Account{key: account.key, Email: issuerConf.Contact, Registration: &registration.Resource{URI: account.Registration.URI}})
@@ -233,33 +233,33 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 			setRetryHTTPClient(conf, cfg, customLogger)
 			client, err := lego.NewClient(conf)
 			if err != nil {
-				_ = level.Error(logger).Log("err", err)
+				_ = level.Error(logger).Log("msg", "failed to create lego client", "issuer", issuer, "err", err)
 				continue
 			}
 
 			err = client.Registration.DeleteRegistration()
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Errorf("unable to unregister '%s' issuer account", issuer), "err", err)
+				_ = level.Error(logger).Log("msg", "unable to unregister issuer account", "issuer", issuer, "err", err)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("account deleted for private key '%s'", privateKeyPath))
+			_ = level.Info(logger).Log("msg", "account deleted", "issuer", issuer, "private_key_path", privateKeyPath)
 
 			if utils.FileExists(accountFilePath) {
 				err := os.Remove(accountFilePath)
 				if err != nil {
-					_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to delete account file '%s'", accountFilePath), "err", err)
+					_ = level.Error(logger).Log("msg", "unable to delete account file", "issuer", issuer, "path", accountFilePath, "err", err)
 				}
 			} else {
-				_ = level.Info(logger).Log("msg", fmt.Sprintf("account file '%s' deleted", accountFilePath))
+				_ = level.Info(logger).Log("msg", "account file deleted", "issuer", issuer, "path", accountFilePath)
 			}
 
 			if utils.FileExists(privateKeyPath) {
 				err := os.Remove(privateKeyPath)
 				if err != nil {
-					_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to delete private key '%s'", privateKeyPath), "err", err)
+					_ = level.Error(logger).Log("msg", "unable to delete private key", "issuer", issuer, "path", privateKeyPath, "err", err)
 				}
 			} else {
-				_ = level.Info(logger).Log("msg", fmt.Sprintf("account private key '%s' deleted", privateKeyPath))
+				_ = level.Info(logger).Log("msg", "account private key deleted", "issuer", issuer, "path", privateKeyPath)
 			}
 			delete(AcmeClient, issuer)
 			continue
@@ -277,7 +277,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 		setRetryHTTPClient(conf, cfg, customLogger)
 		client, err := lego.NewClient(conf)
 		if err != nil {
-			_ = level.Error(logger).Log("err", err)
+			_ = level.Error(logger).Log("msg", "failed to create lego client", "issuer", issuer, "err", err)
 			continue
 		}
 

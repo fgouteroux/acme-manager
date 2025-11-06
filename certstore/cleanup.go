@@ -33,13 +33,13 @@ func CleanupTokens(logger log.Logger) {
 		return
 	}
 
-	_ = level.Debug(logger).Log("msg", fmt.Sprintf("vault token secrets list: %v", secrets))
+	_ = level.Debug(logger).Log("msg", "vault token secrets listed", "count", len(secrets))
 
 	for _, secretPath := range secrets {
 		// Retrieve the list of versions for the secret
 		versions, err := vault.GlobalClient.APIClient.KVv2(vault.GlobalClient.Config.SecretEngine).GetVersionsAsList(context.Background(), secretPath)
 		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to get vault token versions secret %s", secretPath), "err", err)
+			_ = level.Error(logger).Log("msg", "failed to get vault token versions", "secret_path", secretPath, "err", err)
 			continue
 		}
 
@@ -56,9 +56,9 @@ func CleanupTokens(logger log.Logger) {
 		if inactiveSecret {
 			err := vault.GlobalClient.DeleteSecretMetadataWithAppRole(secretPath)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to delete inactive vault token secret %s", secretPath), "err", err)
+				_ = level.Error(logger).Log("msg", "failed to delete inactive vault token secret", "secret_path", secretPath, "err", err)
 			} else {
-				_ = level.Info(logger).Log("msg", fmt.Sprintf("Deleted inactive vault token secret %s", secretPath))
+				_ = level.Info(logger).Log("msg", "deleted inactive vault token secret", "secret_path", secretPath)
 			}
 			continue
 		}
@@ -72,13 +72,13 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 		return
 	}
 
-	_ = level.Debug(logger).Log("msg", fmt.Sprintf("vault certificate secrets list: %v", secrets))
+	_ = level.Debug(logger).Log("msg", "vault certificate secrets listed", "count", len(secrets))
 
 	for _, secretPath := range secrets {
 		// Retrieve the list of versions for the secret
 		versions, err := vault.GlobalClient.APIClient.KVv2(vault.GlobalClient.Config.SecretEngine).GetVersionsAsList(context.Background(), secretPath)
 		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to get vault certificate versions secret %s", secretPath), "err", err)
+			_ = level.Error(logger).Log("msg", "failed to get vault certificate versions", "secret_path", secretPath, "err", err)
 			continue
 		}
 
@@ -98,9 +98,9 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 		if inactiveSecret {
 			err := vault.GlobalClient.DeleteSecretMetadataWithAppRole(secretPath)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to permanently delete inactive vault certificate secret %s", secretPath), "err", err)
+				_ = level.Error(logger).Log("msg", "failed to permanently delete inactive vault certificate secret", "secret_path", secretPath, "err", err)
 			} else {
-				_ = level.Info(logger).Log("msg", fmt.Sprintf("Permanently deleted inactive vault certificate secret %s", secretPath))
+				_ = level.Info(logger).Log("msg", "permanently deleted inactive vault certificate secret", "secret_path", secretPath)
 			}
 			continue
 		}
@@ -108,7 +108,7 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 		if !cleanupCertRevokeLastVersion {
 			// a secret must contain almost 2 versions
 			if len(versions) <= 1 {
-				_ = level.Debug(logger).Log("msg", fmt.Sprintf("Skip secret %s containing less than 2 versions", secretPath))
+				_ = level.Debug(logger).Log("msg", "skipping secret containing less than 2 versions", "secret_path", secretPath)
 				continue
 			}
 
@@ -119,10 +119,10 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 		for _, version := range versions {
 			versionNumber := version.Version
 
-			_ = level.Debug(logger).Log("msg", fmt.Sprintf("Checking version %d of secret %s ", versionNumber, secretPath))
+			_ = level.Debug(logger).Log("msg", "checking version of secret", "version", versionNumber, "secret_path", secretPath)
 
 			if version.Destroyed {
-				_ = level.Debug(logger).Log("msg", fmt.Sprintf("Skip destroyed version %d of secret %s", versionNumber, secretPath))
+				_ = level.Debug(logger).Log("msg", "skipping destroyed version", "version", versionNumber, "secret_path", secretPath)
 				continue
 			}
 
@@ -131,29 +131,29 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 				// Undelete the version if it is deleted
 				err = vault.GlobalClient.APIClient.KVv2(vault.GlobalClient.Config.SecretEngine).Undelete(context.Background(), secretPath, []int{versionNumber})
 				if err != nil {
-					_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to undelete version %d of secret %s", versionNumber, secretPath), "err", err)
+					_ = level.Error(logger).Log("msg", "failed to undelete version", "version", versionNumber, "secret_path", secretPath, "err", err)
 					continue
 				}
-				_ = level.Debug(logger).Log("msg", fmt.Sprintf("Undeleted version %d of secret %s", versionNumber, secretPath))
+				_ = level.Debug(logger).Log("msg", "undeleted version", "version", versionNumber, "secret_path", secretPath)
 
 			}
 
 			// Retrieve the specific version of the secret
 			secretData, err := vault.GlobalClient.APIClient.KVv2(vault.GlobalClient.Config.SecretEngine).GetVersion(context.Background(), secretPath, versionNumber)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to get version %d of secret %s", versionNumber, secretPath), "err", err)
+				_ = level.Error(logger).Log("msg", "failed to get version of secret", "version", versionNumber, "secret_path", secretPath, "err", err)
 				continue
 			}
 
 			data := MapInterfaceToCertMap(secretData.Data)
 			if data.Expires == "" {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to get expires date for version %d of secret %s", versionNumber, secretPath))
+				_ = level.Error(logger).Log("msg", "failed to get expires date for version", "version", versionNumber, "secret_path", secretPath)
 				continue
 			}
 
 			expires, err := time.Parse("2006-01-02 15:04:05 -0700 MST", data.Expires)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to parse expires date for version %d of secret %s", versionNumber, secretPath), "err", err)
+				_ = level.Error(logger).Log("msg", "failed to parse expires date", "version", versionNumber, "secret_path", secretPath, "err", err)
 				continue
 			}
 
@@ -164,11 +164,11 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 				// Destroy the secret version if certificate is expired
 				err = vault.GlobalClient.APIClient.KVv2(vault.GlobalClient.Config.SecretEngine).Destroy(context.Background(), secretPath, []int{versionNumber})
 				if err != nil {
-					_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to destroy version %d of secret %s", versionNumber, secretPath), "err", err)
+					_ = level.Error(logger).Log("msg", "failed to destroy version", "version", versionNumber, "secret_path", secretPath, "err", err)
 
 					continue
 				}
-				_ = level.Info(logger).Log("msg", fmt.Sprintf("Destroyed expired certificate version %d of secret %s", versionNumber, secretPath))
+				_ = level.Info(logger).Log("msg", "destroyed expired certificate version", "version", versionNumber, "secret_path", secretPath)
 
 			} else if expires.Before(daysDelay) {
 				// Revoke the secret if it expires within given days
@@ -183,19 +183,19 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 				if err != nil &&
 					!strings.Contains(err.Error(), "Certificate is expired") &&
 					!strings.Contains(err.Error(), "urn:ietf:params:acme:error:alreadyRevoked") {
-					_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to revoke certificate version %d of secret %s", versionNumber, secretPath), "err", err)
+					_ = level.Error(logger).Log("msg", "failed to revoke certificate version", "version", versionNumber, "secret_path", secretPath, "err", err)
 					continue
 				}
 
-				_ = level.Info(logger).Log("msg", fmt.Sprintf("Certificate domain %s for %s issuer revoked", data.Domain, data.Issuer))
+				_ = level.Info(logger).Log("msg", "certificate revoked", "domain", data.Domain, "issuer", data.Issuer)
 
 				// Destroy the secret version if it is expire soon
 				err = vault.GlobalClient.APIClient.KVv2(vault.GlobalClient.Config.SecretEngine).Destroy(context.Background(), secretPath, []int{versionNumber})
 				if err != nil {
-					_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to destroy expired soon certificate version %d of secret %s", versionNumber, secretPath), "err", err)
+					_ = level.Error(logger).Log("msg", "failed to destroy expired soon certificate version", "version", versionNumber, "secret_path", secretPath, "err", err)
 					continue
 				}
-				_ = level.Info(logger).Log("msg", fmt.Sprintf("Destroyed expired soon certificate version %d of secret %s", versionNumber, secretPath))
+				_ = level.Info(logger).Log("msg", "destroyed expired soon certificate version", "version", versionNumber, "secret_path", secretPath)
 			}
 		}
 	}

@@ -49,13 +49,13 @@ func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resou
 	domain := utils.SanitizedDomain(logger, certRes.Domain)
 	err := os.WriteFile(filepath+domain+".crt", certRes.Certificate, 0600)
 	if err != nil {
-		_ = level.Error(logger).Log("err", "Unable to save Certificate for domain %s\n\t%v", err)
+		_ = level.Error(logger).Log("msg", "unable to save certificate", "domain", domain, "err", err)
 	}
 
 	if certRes.IssuerCertificate != nil {
 		err = os.WriteFile(filepath+domain+".issuer.crt", certRes.IssuerCertificate, 0600)
 		if err != nil {
-			_ = level.Error(logger).Log("err", "Unable to save IssuerCertificate for domain %s\n\t%v", err)
+			_ = level.Error(logger).Log("msg", "unable to save issuer certificate", "domain", domain, "err", err)
 		}
 	}
 }
@@ -124,18 +124,18 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 
 	// Log the selected challenge
 	_ = level.Info(logger).Log(
-		"msg", "Challenge method selected",
+		"msg", "challenge method selected",
 		"challenge_type", challengeType,
 		"provider", map[string]string{"dns": dnsChallenge, "http": httpChallenge}[challengeType],
 		"domain", certData.Domain,
 		"issuer", certData.Issuer,
-		"user", certData.Owner,
+		"owner", certData.Owner,
 	)
 
 	if challengeType == "dns" {
 		dnsProvider, err := dns.NewDNSChallengeProviderByName(dnsChallenge)
 		if err != nil {
-			_ = level.Error(logger).Log("err", err)
+			_ = level.Error(logger).Log("msg", "failed to create DNS challenge provider", "provider", dnsChallenge, "err", err)
 			return certData, err
 		}
 
@@ -148,13 +148,13 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 		wait := time.Duration(dnsPropagationWait) * time.Second
 		if wait < 0 {
 			err := fmt.Errorf("env var'ACME_MANAGER_DNS_PROPAGATIONWAIT' cannot be negative")
-			_ = level.Error(logger).Log("err", err)
+			_ = level.Error(logger).Log("msg", "invalid DNS propagation wait value", "err", err)
 			return certData, err
 		}
 
 		err = checkPropagationExclusiveOptions(dnsPropagationDisableANS, dnsPropagationRNS, wait)
 		if err != nil {
-			_ = level.Error(logger).Log("err", err)
+			_ = level.Error(logger).Log("msg", "invalid DNS propagation options", "err", err)
 			return certData, err
 		}
 
@@ -176,7 +176,7 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 			),
 		)
 		if err != nil {
-			_ = level.Error(logger).Log("err", err)
+			_ = level.Error(logger).Log("msg", "failed to set DNS01 provider", "err", err)
 			return certData, err
 		}
 	}
@@ -184,13 +184,13 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 	if challengeType == "http" {
 		httpProvider, err := NewHTTPChallengeProviderByName(httpChallenge, "", logger)
 		if err != nil {
-			_ = level.Error(logger).Log("err", err)
+			_ = level.Error(logger).Log("msg", "failed to create HTTP challenge provider", "provider", httpChallenge, "err", err)
 			return certData, err
 		}
 
 		err = issuerAcmeClient.Challenge.SetHTTP01Provider(httpProvider)
 		if err != nil {
-			_ = level.Error(logger).Log("err", err)
+			_ = level.Error(logger).Log("msg", "failed to set HTTP01 provider", "err", err)
 			return certData, err
 		}
 	}
@@ -214,7 +214,7 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 
 	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(request)
 	if err != nil {
-		_ = level.Error(logger).Log("msg", "Failed to obtain certificate", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner, "err", err)
+		_ = level.Error(logger).Log("msg", "failed to obtain certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
 		metrics.SetCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
 		return certData, err
 	}
@@ -226,7 +226,7 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 
 	x509Cert, err := certcrypto.ParsePEMCertificate(resource.Certificate)
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
+		_ = level.Error(logger).Log("msg", "failed to parse certificate", "err", err)
 		return certData, err
 	}
 
@@ -238,7 +238,7 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 	case *ecdsa.PublicKey:
 		publicKeyLength = pubKey.Curve.Params().BitSize
 	default:
-		_ = level.Error(logger).Log("err", "unsupported public key algorithm")
+		_ = level.Error(logger).Log("msg", "unsupported public key algorithm")
 	}
 
 	certData.Encryption = fmt.Sprintf("%s-%d", x509Cert.PublicKeyAlgorithm.String(), publicKeyLength)
@@ -271,15 +271,15 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 
 	err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
+		_ = level.Error(logger).Log("msg", "failed to save certificate to vault", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
 		return certData, err
 	}
-	_ = level.Info(logger).Log("msg", "Certificate saved to vault", "domain", certData.Domain, "issuer", certData.Issuer, "user", certData.Owner)
+	_ = level.Info(logger).Log("msg", "certificate saved to vault", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
 
 	// remove local cert once stored in vault
 	err = os.RemoveAll(baseCertificateFilePath)
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
+		_ = level.Error(logger).Log("msg", "failed to remove local certificate directory", "path", baseCertificateFilePath, "err", err)
 	}
 
 	return certData, nil
@@ -289,7 +289,7 @@ func DeleteRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 	vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 	data, err := vault.GlobalClient.GetSecretWithAppRole(vaultSecretPath)
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
+		_ = level.Error(logger).Log("msg", "failed to get certificate from vault", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
 		return err
 	}
 
@@ -304,7 +304,7 @@ func DeleteRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 		if err != nil &&
 			!strings.Contains(err.Error(), "Certificate is expired") &&
 			!strings.Contains(err.Error(), "urn:ietf:params:acme:error:alreadyRevoked") {
-			_ = level.Error(logger).Log("err", err)
+			_ = level.Error(logger).Log("msg", "failed to revoke certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
 			metrics.SetRevokedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
 			return err
 		}
@@ -313,11 +313,11 @@ func DeleteRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 
 		err = vault.GlobalClient.DeleteSecretWithAppRole(vaultSecretPath)
 		if err != nil {
-			_ = level.Error(logger).Log("err", err)
+			_ = level.Error(logger).Log("msg", "failed to delete certificate from vault", "secret_path", vaultSecretPath, "err", err)
 			return err
 		}
 	} else {
-		_ = level.Error(logger).Log("err", fmt.Errorf("no cert found in vault secret key: %s", vaultSecretPath))
+		_ = level.Error(logger).Log("msg", "no certificate found in vault secret", "secret_path", vaultSecretPath)
 	}
 	return nil
 }
@@ -325,7 +325,7 @@ func DeleteRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 	data, err := amStore.ListAllCertificates()
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
+		_ = level.Error(logger).Log("msg", "failed to list certificates", "err", err)
 		return err
 	}
 
@@ -337,22 +337,22 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 		layout := "2006-01-02 15:04:05 -0700 MST"
 		renewalDate, err := time.Parse(layout, certData.RenewalDate)
 		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("Unable to parse renewal date for certificate owner '%s', issuer '%s' and domain '%s'", certData.Owner, certData.Issuer, certData.Domain))
+			_ = level.Error(logger).Log("msg", "unable to parse renewal date for certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
 			continue
 		}
 
 		currentDate := time.Now()
 		if currentDate.After(renewalDate) || currentDate.Equal(renewalDate) {
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("Trying renewal certificate owner '%s', issuer '%s' and domain '%s'", certData.Owner, certData.Issuer, certData.Domain))
+			_ = level.Info(logger).Log("msg", "trying renewal certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
 			cert, err := CreateRemoteCertificateResource(certData, logger)
 			if err != nil {
 				metrics.SetRenewedCertificate(cert.Issuer, cert.Owner, cert.Domain, 0)
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("Failed to renew certificate owner '%s', issuer '%s' and domain '%s'", certData.Owner, certData.Issuer, certData.Domain))
+				_ = level.Error(logger).Log("msg", "failed to renew certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
 				continue
 			}
 			err = amStore.PutCertificate(cert)
 			if err != nil {
-				_ = level.Error(logger).Log("err", err)
+				_ = level.Error(logger).Log("msg", "failed to store renewed certificate", "domain", cert.Domain, "issuer", cert.Issuer, "owner", cert.Owner, "err", err)
 				metrics.SetRenewedCertificate(cert.Issuer, cert.Owner, cert.Domain, 0)
 				continue
 			}
@@ -416,8 +416,8 @@ func executeCommand(logger log.Logger, cmdPath string, cmdArgs []string, cmdTime
 	if err != nil {
 		return fmt.Errorf("command '%s %s' failed: %s. Error: %s", cmdPath, strings.Join(cmdArgs, " "), out, err.Error())
 	}
-	_ = level.Info(logger).Log("msg", fmt.Sprintf("Command '%s %s' successfully executed", cmdPath, strings.Join(cmdArgs, " ")))
-	_ = level.Debug(logger).Log("msg", "Command output", "output", out)
+	_ = level.Info(logger).Log("msg", "command successfully executed", "command", cmdPath, "args", strings.Join(cmdArgs, " "))
+	_ = level.Debug(logger).Log("msg", "command output", "output", out)
 
 	return nil
 }
