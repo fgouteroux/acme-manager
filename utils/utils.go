@@ -3,6 +3,7 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/sha1"
@@ -41,6 +42,44 @@ import (
 )
 
 var labelNameRegexp = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+// contextKey is a private type for context keys to avoid collisions
+type contextKey string
+
+const requestIDKey contextKey = "request_id"
+
+// GenerateRequestID generates a unique request ID using crypto/rand
+func GenerateRequestID() string {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		// Fallback to timestamp-based ID if random fails
+		return fmt.Sprintf("req_%d", time.Now().UnixNano())
+	}
+	return fmt.Sprintf("req_%s", hex.EncodeToString(b))
+}
+
+// WithRequestID adds a request ID to the context
+func WithRequestID(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, requestIDKey, requestID)
+}
+
+// GetRequestID retrieves the request ID from the context
+func GetRequestID(ctx context.Context) string {
+	if requestID, ok := ctx.Value(requestIDKey).(string); ok {
+		return requestID
+	}
+	return ""
+}
+
+// LoggerWithRequestID returns a logger with the request ID from context
+func LoggerWithRequestID(ctx context.Context, logger log.Logger) log.Logger {
+	requestID := GetRequestID(ctx)
+	if requestID != "" {
+		return log.With(logger, "request_id", requestID)
+	}
+	return logger
+}
 
 // SanitizedDomain Make sure no funny chars are in the cert names (like wildcards ;)).
 func SanitizedDomain(logger log.Logger, domain string) string {
@@ -302,7 +341,7 @@ func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.Resp
 		if resp.StatusCode == 201 && strings.Contains(resp.Request.URL.Path, "/new-order") {
 			if location := resp.Header.Get("Location"); location != "" {
 				logger.WithFields(logrus.Fields{
-					"url":       resp.Request.URL.String(),
+					"url": resp.Request.URL.String(),
 				}).Infof("ACME order created OrderURL: %s", location)
 			}
 		}

@@ -20,6 +20,7 @@ import (
 	"github.com/fgouteroux/acme-manager/metrics"
 	"github.com/fgouteroux/acme-manager/models"
 	"github.com/fgouteroux/acme-manager/ring"
+	"github.com/fgouteroux/acme-manager/utils"
 )
 
 //go:embed templates/index.gohtml
@@ -292,6 +293,19 @@ func MetricsHandler(next http.Handler) http.Handler {
 
 func LoggerHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Generate or extract request ID
+		requestID := req.Header.Get("X-Request-ID")
+		if requestID == "" {
+			requestID = utils.GenerateRequestID()
+		}
+
+		// Add request ID to response headers for tracing
+		w.Header().Set("X-Request-ID", requestID)
+
+		// Store request ID in context
+		ctx := utils.WithRequestID(req.Context(), requestID)
+		req = req.WithContext(ctx)
+
 		// Start timer
 		start := time.Now()
 
@@ -317,6 +331,7 @@ func LoggerHandler(next http.Handler) http.Handler {
 			metrics.RecordHTTPRequest(req.Method, req.URL.Path, statusCode, duration, requestSize, lrw.length)
 
 			_ = level.Info(logger).Log(
+				"request_id", requestID,
 				"method", req.Method,
 				"path", req.URL.Path,
 				"status_code", lrw.statusCode,

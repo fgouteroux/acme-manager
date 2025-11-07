@@ -124,6 +124,8 @@ func checkAuth(r *http.Request) (*models.Token, error) {
 //	@Router			/certificate/metadata [get]
 func CertificateMetadataHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add request ID to logger from context
+		logger = utils.LoggerWithRequestID(r.Context(), logger)
 
 		tokenValue, err := checkAuth(r)
 		if err != nil {
@@ -201,6 +203,9 @@ func CertificateMetadataHandler(logger log.Logger, proxyClient *http.Client) htt
 //	@Router			/certificate/{issuer}/{domain} [get]
 func GetCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add request ID to logger from context
+		logger = utils.LoggerWithRequestID(r.Context(), logger)
+
 		tokenValue, err := checkAuth(r)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -227,7 +232,7 @@ func GetCertificateHandler(logger log.Logger, proxyClient *http.Client) http.Han
 		}
 
 		jsonData := map[string]string{
-			"owner":   certData.Owner,
+			"owner":  certData.Owner,
 			"domain": certData.Domain,
 			"issuer": certData.Issuer,
 		}
@@ -293,6 +298,9 @@ func GetCertificateHandler(logger log.Logger, proxyClient *http.Client) http.Han
 //	@Router			/certificate [post]
 func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add request ID to logger from context
+		logger = utils.LoggerWithRequestID(r.Context(), logger)
+
 		tokenValue, err := checkAuth(r)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -370,7 +378,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		certData.Owner = tokenValue.Username
 
 		jsonData := map[string]string{
-			"owner":   certData.Owner,
+			"owner":  certData.Owner,
 			"domain": certData.Domain,
 			"issuer": certData.Issuer,
 		}
@@ -424,7 +432,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		_ = level.Info(logger).Log("msg", "creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
-		newCert, err := certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
+		newCert, err := certstore.CreateRemoteCertificateResource(certData, logger)
 		if err != nil {
 			statusCode := http.StatusInternalServerError
 			if strings.Contains(err.Error(), "urn:ietf:params:acme:error:malformed") {
@@ -481,6 +489,9 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 //	@Router			/certificate [put]
 func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add request ID to logger from context
+		logger = utils.LoggerWithRequestID(r.Context(), logger)
+
 		tokenValue, err := checkAuth(r)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -562,7 +573,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		certData.Owner = tokenValue.Username
 
 		jsonData := map[string]string{
-			"owner":   certData.Owner,
+			"owner":  certData.Owner,
 			"domain": certData.Domain,
 			"issuer": certData.Issuer,
 		}
@@ -646,7 +657,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		if recreateCert {
 			if certParams.Revoke {
 				_ = level.Info(logger).Log("msg", "revoking certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
-				err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
+				err = certstore.DeleteRemoteCertificateResource(certData, logger)
 				if err != nil {
 					_ = level.Error(logger).Log("err", err)
 					responseJSON(w, jsonData, err, http.StatusInternalServerError)
@@ -656,7 +667,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			}
 
 			_ = level.Info(logger).Log("msg", "re-creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
-			newCert, err = certstore.CreateRemoteCertificateResource(certData, certstore.AmStore.Logger)
+			newCert, err = certstore.CreateRemoteCertificateResource(certData, logger)
 			if err != nil {
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
@@ -743,6 +754,9 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 //	@Router			/certificate/{issuer}/{domain} [delete]
 func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add request ID to logger from context
+		logger = utils.LoggerWithRequestID(r.Context(), logger)
+
 		tokenValue, err := checkAuth(r)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -765,7 +779,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		jsonData := map[string]string{
-			"owner":   certData.Owner,
+			"owner":  certData.Owner,
 			"domain": certData.Domain,
 			"issuer": certData.Issuer,
 		}
@@ -826,7 +840,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		if revoke {
 			_ = level.Info(logger).Log("msg", "revoking certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
-			err = certstore.DeleteRemoteCertificateResource(certData, certstore.AmStore.Logger)
+			err = certstore.DeleteRemoteCertificateResource(certData, logger)
 			if err != nil {
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return

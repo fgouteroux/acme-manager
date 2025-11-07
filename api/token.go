@@ -73,6 +73,8 @@ type TokenResponseGet struct {
 //	@security		APIKeyAuth
 func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add request ID to logger from context
+		logger = utils.LoggerWithRequestID(r.Context(), logger)
 
 		if r.Header.Get("Authorization") != "" && r.PathValue("id") == "self" {
 			tokenData, err := checkAuth(r)
@@ -134,6 +136,9 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 //	@security		APIKeyAuth
 func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add request ID to logger from context
+		logger = utils.LoggerWithRequestID(r.Context(), logger)
+
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
 			responseJSON(w, nil, fmt.Errorf("X-API-Key Header is missing or empty"), http.StatusUnauthorized)
@@ -267,6 +272,9 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 //	@security		APIKeyAuth
 func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add request ID to logger from context
+		logger = utils.LoggerWithRequestID(r.Context(), logger)
+
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
 			responseJSON(w, nil, fmt.Errorf("X-API-Key Header is missing or empty"), http.StatusUnauthorized)
@@ -411,6 +419,9 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 //	@security		APIKeyAuth
 func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add request ID to logger from context
+		logger = utils.LoggerWithRequestID(r.Context(), logger)
+
 		authHeader := r.Header.Get("X-API-Key")
 		if authHeader == "" {
 			responseJSON(w, nil, fmt.Errorf("X-API-Key Header is missing or empty"), http.StatusUnauthorized)
