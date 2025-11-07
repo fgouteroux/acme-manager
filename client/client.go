@@ -135,7 +135,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		newCert, err := acmeClient.CreateCertificate(certParams, GlobalConfig.Common.CertTimeout)
 		if err != nil {
 			hasErrors = true
-			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+			_ = level.Error(logger).Log("msg", "failed to create certificate", "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			continue
 		}
 		_ = level.Info(logger).Log("msg", "created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
@@ -220,7 +220,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		newCert, err := acmeClient.UpdateCertificate(certParams, GlobalConfig.Common.CertTimeout)
 		if err != nil {
 			hasErrors = true
-			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+			_ = level.Error(logger).Log("msg", "failed to update certificate", "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			continue
 		}
 		_ = level.Info(logger).Log("msg", "certificate updated", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
@@ -291,7 +291,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		err := acmeClient.DeleteCertificate(certData.Issuer, certData.Domain, revoke, 60)
 		if err != nil {
 			hasErrors = true
-			_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+			_ = level.Error(logger).Log("msg", "failed to delete certificate", "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "user", Owner)
 			continue
 		}
 		if GlobalConfig.Common.DelayBeforeDelete != "" {

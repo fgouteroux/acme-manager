@@ -228,23 +228,21 @@ func (c *Client) CreateCertificate(data models.CertificateParams, timeout int) (
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	baseErrMsg := fmt.Sprintf("error creating certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
-
 	resp, err := c.doRequest(ctx, "POST", "/certificate", headers, bytes.NewReader(reqBody), timeout)
 	if err != nil {
-		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
+		return certificate, err
 	}
 
 	if resp.StatusCode != http.StatusCreated {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return certificate, fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
+			return certificate, fmt.Errorf("%s - %w", resp.Status, err)
 		}
-		return certificate, fmt.Errorf("%s: %s - %s", baseErrMsg, resp.Status, string(respBody))
+		return certificate, fmt.Errorf("%s - %s", resp.Status, string(respBody))
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
+		return certificate, err
 	}
 
 	return certificate, nil
@@ -263,23 +261,21 @@ func (c *Client) UpdateCertificate(data models.CertificateParams, timeout int) (
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	baseErrMsg := fmt.Sprintf("error updating certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
-
 	resp, err := c.doRequest(ctx, "PUT", "/certificate", headers, bytes.NewReader(reqBody), timeout)
 	if err != nil {
-		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
+		return certificate, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return certificate, fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
+			return certificate, fmt.Errorf("%s - %w", resp.Status, err)
 		}
-		return certificate, fmt.Errorf("%s: %s - %s", baseErrMsg, resp.Status, string(respBody))
+		return certificate, fmt.Errorf("%s - %s", resp.Status, string(respBody))
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
-		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
+		return certificate, err
 	}
 
 	return certificate, nil
@@ -292,19 +288,17 @@ func (c *Client) DeleteCertificate(issuer, domain string, revoke bool, timeout i
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	baseErrMsg := fmt.Sprintf("error deleting certificate with issuer '%s' and domain '%s':", issuer, domain)
-
 	resp, err := c.doRequest(ctx, "DELETE", fmt.Sprintf("/certificate/%s/%s?revoke=%v", issuer, domain, revoke), headers, nil, timeout)
 	if err != nil {
-		return fmt.Errorf("%s - %w", baseErrMsg, err)
+		return err
 	}
 
 	if resp.StatusCode != http.StatusNoContent {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
+			return fmt.Errorf("%s - %w", resp.Status, err)
 		}
-		return fmt.Errorf("%s: %s - %s", baseErrMsg, resp.Status, string(respBody))
+		return fmt.Errorf("%s - %s", resp.Status, string(respBody))
 	}
 
 	return nil
