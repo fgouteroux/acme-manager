@@ -298,13 +298,12 @@ func ValidateRenewalDays(value string) (int, int, error) {
 // ResponseLogHook logs the response status code and body
 func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.ResponseLogHook {
 	return func(_ retryablehttp.Logger, resp *http.Response) {
-		// Log order URL at INFO level when a new order is created (status 201 and newOrder endpoint)
-		if resp.StatusCode == 201 && strings.Contains(resp.Request.URL.Path, "/newOrder") {
+		// Log order URL at INFO level when a new order is created (status 201 and new-order endpoint)
+		if resp.StatusCode == 201 && strings.Contains(resp.Request.URL.Path, "/new-order") {
 			if location := resp.Header.Get("Location"); location != "" {
 				logger.WithFields(logrus.Fields{
-					"order_url": location,
 					"url":       resp.Request.URL.String(),
-				}).Info("ACME order created")
+				}).Infof("ACME order created OrderURL: %s", location)
 			}
 		}
 
@@ -338,7 +337,12 @@ func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.Resp
 					}
 				}
 			}
-			logger.WithFields(fields).Errorf("Request failed with status code %d", resp.StatusCode)
+
+			errMsg = fmt.Sprintf("Request failed with status code %d", resp.StatusCode)
+			if resp.StatusCode == 429 {
+				errMsg = errMsg + ". Retrying..."
+			}
+			logger.WithFields(fields).Error(errMsg)
 			// Restore the body content to the response
 			resp.Body = io.NopCloser(bytes.NewBuffer(body))
 		}
