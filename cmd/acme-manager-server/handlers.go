@@ -320,7 +320,7 @@ func LoggerHandler(next http.Handler) http.Handler {
 				"method", req.Method,
 				"path", req.URL.Path,
 				"status_code", lrw.statusCode,
-				"user", w.Header().Get("user"),
+				"owner", w.Header().Get("owner"),
 				"duration", stop.Sub(start).Milliseconds(),
 				"client_ip", GetClientIP(req),
 				"length", lrw.length,
