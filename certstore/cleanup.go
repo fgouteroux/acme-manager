@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/go-kit/log"
@@ -179,15 +178,11 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 					continue
 				}
 
-				err = issuerAcmeClient.Certificate.Revoke([]byte(data.Cert))
-				if err != nil &&
-					!strings.Contains(err.Error(), "Certificate is expired") &&
-					!strings.Contains(err.Error(), "urn:ietf:params:acme:error:alreadyRevoked") {
-					_ = level.Error(logger).Log("msg", "failed to revoke certificate version", "version", versionNumber, "secret_path", secretPath, "err", err)
+				err = RevokeCertificateWithVerification(logger, issuerAcmeClient, []byte(data.Cert), data.Issuer, data.Owner, data.Domain, &versionNumber)
+				if err != nil {
+					_ = level.Error(logger).Log("msg", "skipping destruction due to revocation failure", "version", versionNumber, "secret_path", secretPath)
 					continue
 				}
-
-				_ = level.Info(logger).Log("msg", "certificate revoked", "domain", data.Domain, "issuer", data.Issuer)
 
 				// Destroy the secret version if it is expire soon
 				err = vault.GlobalClient.APIClient.KVv2(vault.GlobalClient.Config.SecretEngine).Destroy(context.Background(), secretPath, []int{versionNumber})

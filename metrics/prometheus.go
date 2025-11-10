@@ -21,10 +21,18 @@ var (
 		[]string{"issuer", "owner", "domain"},
 	)
 
-	revokedCertificate = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "acme_manager_certificate_revoked",
-			Help: "Revoked certificate by issuer, owner and domain, 1 = revoked, 0 = error",
+	revokedCertificateTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_certificate_revoked_total",
+			Help: "Total number of successfully revoked certificates by issuer, owner and domain",
+		},
+		[]string{"issuer", "owner", "domain"},
+	)
+
+	revokedCertificateErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_certificate_revoked_errors_total",
+			Help: "Total number of certificate revocation errors by issuer, owner and domain",
 		},
 		[]string{"issuer", "owner", "domain"},
 	)
@@ -212,8 +220,12 @@ func SetCreatedCertificate(issuer, owner, domain string, value float64) {
 	createdCertificate.WithLabelValues(issuer, owner, domain).Set(value)
 }
 
-func SetRevokedCertificate(issuer, owner, domain string, value float64) {
-	revokedCertificate.WithLabelValues(issuer, owner, domain).Set(value)
+func IncRevokedCertificate(issuer, owner, domain string) {
+	revokedCertificateTotal.WithLabelValues(issuer, owner, domain).Inc()
+}
+
+func IncRevokedCertificateErrors(issuer, owner, domain string) {
+	revokedCertificateErrorsTotal.WithLabelValues(issuer, owner, domain).Inc()
 }
 
 func SetRenewedCertificate(issuer, owner, domain string, value float64) {
@@ -303,7 +315,8 @@ func init() {
 	collectors := []prometheus.Collector{
 		managedCertificate,
 		createdCertificate,
-		revokedCertificate,
+		revokedCertificateTotal,
+		revokedCertificateErrorsTotal,
 		renewedCertificate,
 		createdLocalCertificate,
 		deletedLocalCertificate,
