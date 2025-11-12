@@ -46,9 +46,11 @@ type CertStore struct {
 }
 
 // RevokeCertificateWithVerification revokes a certificate and handles common error cases.
-// Returns nil if the certificate is successfully revoked, already expired, or already revoked.
-// Returns an error if revocation fails.
-func RevokeCertificateWithVerification(logger log.Logger, issuerAcmeClient *lego.Client, certBytes []byte, issuer, owner, domain string, version *int) error {
+// Returns (safeToDestroy bool, error):
+//   - (true, nil): Certificate already revoked/expired in previous cycle - safe to destroy
+//   - (false, nil): Certificate freshly revoked this cycle - wait for next cycle before destroying
+//   - (false, error): Revocation failed - do not proceed with destruction
+func RevokeCertificateWithVerification(logger log.Logger, issuerAcmeClient *lego.Client, certBytes []byte, issuer, owner, domain string, version *int) (bool, error) {
 	versionStr := ""
 	if version != nil {
 		versionStr = fmt.Sprintf(", version=%d", *version)
@@ -57,21 +59,21 @@ func RevokeCertificateWithVerification(logger log.Logger, issuerAcmeClient *lego
 	err := issuerAcmeClient.Certificate.Revoke(certBytes)
 	switch {
 	case err == nil:
-		_ = level.Info(logger).Log("msg", "certificate revoked successfully"+versionStr, "domain", domain, "issuer", issuer, "owner", owner)
+		_ = level.Info(logger).Log("msg", "certificate revoked successfully, will destroy in next cleanup cycle"+versionStr, "domain", domain, "issuer", issuer, "owner", owner)
 		metrics.IncRevokedCertificate(issuer, owner, domain)
-		return nil
+		return false, nil // Freshly revoked, wait for next cycle
 	case strings.Contains(err.Error(), "Certificate is expired"):
-		_ = level.Info(logger).Log("msg", "certificate already expired, skipping revocation"+versionStr, "domain", domain, "issuer", issuer, "owner", owner)
+		_ = level.Info(logger).Log("msg", "certificate already expired"+versionStr, "domain", domain, "issuer", issuer, "owner", owner)
 		metrics.IncRevokedCertificate(issuer, owner, domain)
-		return nil
+		return true, nil // Already expired, safe to destroy
 	case strings.Contains(err.Error(), "urn:ietf:params:acme:error:alreadyRevoked"):
-		_ = level.Info(logger).Log("msg", "certificate already revoked"+versionStr, "domain", domain, "issuer", issuer, "owner", owner)
+		_ = level.Info(logger).Log("msg", "certificate already revoked in previous cycle"+versionStr, "domain", domain, "issuer", issuer, "owner", owner)
 		metrics.IncRevokedCertificate(issuer, owner, domain)
-		return nil
+		return true, nil // Already revoked, safe to destroy now
 	default:
 		_ = level.Error(logger).Log("msg", "failed to revoke certificate"+versionStr, "domain", domain, "issuer", issuer, "owner", owner, "err", err)
 		metrics.IncRevokedCertificateErrors(issuer, owner, domain)
-		return err
+		return false, err // Failed, don't proceed
 	}
 }
 
@@ -330,7 +332,7 @@ func DeleteRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 			return fmt.Errorf("could not delete certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
 		}
 
-		err = RevokeCertificateWithVerification(logger, issuerAcmeClient, []byte(certBytes.(string)), certData.Issuer, certData.Owner, certData.Domain, nil)
+		_, err = RevokeCertificateWithVerification(logger, issuerAcmeClient, []byte(certBytes.(string)), certData.Issuer, certData.Owner, certData.Domain, nil)
 		if err != nil {
 			return err
 		}

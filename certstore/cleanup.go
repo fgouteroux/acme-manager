@@ -164,7 +164,7 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 			daysDelay := now.AddDate(0, 0, certExpDays)
 
 			if expires.Before(now) {
-				// Destroy the secret version if certificate is expired
+				// Destroy the secret version if certificate is expired (no revocation needed)
 				err = vault.GlobalClient.APIClient.KVv2(vault.GlobalClient.Config.SecretEngine).Destroy(context.Background(), secretPath, []int{versionNumber})
 				if err != nil {
 					_ = level.Error(logger).Log("msg", "failed to destroy version", "version", versionNumber, "secret_path", secretPath, "err", err)
@@ -174,7 +174,7 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 				_ = level.Info(logger).Log("msg", "destroyed expired certificate version", "version", versionNumber, "secret_path", secretPath)
 
 			} else if expires.Before(daysDelay) {
-				// Revoke the secret if it expires within given days
+				// Revoke the certificate if it expires within given days
 				var issuerAcmeClient *lego.Client
 				var issuerFound bool
 				if issuerAcmeClient, issuerFound = AcmeClient[data.Issuer]; !issuerFound {
@@ -182,13 +182,19 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 					continue
 				}
 
-				err = RevokeCertificateWithVerification(logger, issuerAcmeClient, []byte(data.Cert), data.Issuer, data.Owner, data.Domain, &versionNumber)
+				safeToDestroy, err := RevokeCertificateWithVerification(logger, issuerAcmeClient, []byte(data.Cert), data.Issuer, data.Owner, data.Domain, &versionNumber)
 				if err != nil {
 					_ = level.Error(logger).Log("msg", "skipping destruction due to revocation failure", "version", versionNumber, "secret_path", secretPath)
 					continue
 				}
 
-				// Destroy the secret version if it is expire soon
+				// Only destroy if certificate was already revoked in a previous cycle
+				if !safeToDestroy {
+					_ = level.Debug(logger).Log("msg", "certificate freshly revoked, waiting for next cleanup cycle before destroying", "version", versionNumber, "secret_path", secretPath)
+					continue
+				}
+
+				// Destroy the secret version (certificate was revoked in previous cycle)
 				err = vault.GlobalClient.APIClient.KVv2(vault.GlobalClient.Config.SecretEngine).Destroy(context.Background(), secretPath, []int{versionNumber})
 				if err != nil {
 					_ = level.Error(logger).Log("msg", "failed to destroy expired soon certificate version", "version", versionNumber, "secret_path", secretPath, "err", err)
