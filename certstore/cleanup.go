@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-acme/lego/v4/lego"
 
+	"github.com/fgouteroux/acme-manager/ring"
 	"github.com/fgouteroux/acme-manager/storage/vault"
 )
 
@@ -20,8 +21,11 @@ func Cleanup(logger log.Logger, interval time.Duration, certExpDays int, cleanup
 
 	// start the ticker
 	for range tk.C {
-		CleanupTokens(logger)
-		CleanupCertificateVersions(logger, certExpDays, cleanupCertRevokeLastVersion)
+		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
+		if isLeaderNow {
+			CleanupTokens(logger)
+			CleanupCertificateVersions(logger, certExpDays, cleanupCertRevokeLastVersion)
+		}
 	}
 }
 
