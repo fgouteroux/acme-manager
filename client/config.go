@@ -140,5 +140,12 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		}
 	}
 
+	// Create base certificate directory if it doesn't exist and certificate_deploy is enabled
+	if s.Common.CertDeploy && s.Common.CertDir != "" {
+		if err := utils.CreateNonExistingFolder(s.Common.CertDir, s.Common.CertDirPerm); err != nil {
+			return fmt.Errorf("failed to create certificate directory '%s': %v", s.Common.CertDir, err)
+		}
+	}
+
 	return nil
 }
