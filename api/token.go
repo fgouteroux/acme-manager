@@ -482,6 +482,7 @@ func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 				return
 			}
 			w.WriteHeader(http.StatusNoContent)
+			return
 		}
 		http.Error(w, "Missing token ID", http.StatusBadRequest)
 	})
