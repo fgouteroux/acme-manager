@@ -395,7 +395,7 @@ func deleteLocalPrivateKeyFile(keyFilePath string) error {
 
 func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *restclient.Client) {
 	if !checkCertLock.TryLock() {
-		_ = level.Info(logger).Log("msg", "skipping check certificates from config file because another run is in progress")
+		_ = level.Debug(logger).Log("msg", "skipping check certificates from config file because another run is in progress")
 		return
 	}
 	defer checkCertLock.Unlock()
@@ -416,7 +416,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 	GlobalConfig = cfg
 	metrics.SetCertificateConfigError(0)
 
-	_ = level.Info(logger).Log("msg", "check certificates from config file and compare with remote server")
+	_ = level.Debug(logger).Log("msg", "check certificates from config file and compare with remote server")
 
 	old, err := acmeClient.GetAllCertificateMetadata(60)
 	if err != nil {
@@ -689,7 +689,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 		}
 	}
 
-	_ = level.Info(logger).Log("msg", "check certificates from config file done")
+	_ = level.Debug(logger).Log("msg", "check certificates from config file done")
 }
 
 func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string, acmeClient *restclient.Client) {
@@ -709,7 +709,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 	GlobalConfig = cfg
 	metrics.SetCertificateConfigError(0)
 
-	_ = level.Info(logger).Log("msg", "pull and check certificates from remote server")
+	_ = level.Debug(logger).Log("msg", "pull and check certificates from remote server")
 
 	allCert, err := acmeClient.GetAllCertificateMetadata(60)
 	if err != nil {
@@ -807,7 +807,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 			_ = level.Error(logger).Log("err", err)
 		}
 	}
-	_ = level.Info(logger).Log("msg", "pull and check certificates done")
+	_ = level.Debug(logger).Log("msg", "pull and check certificates done")
 }
 
 func executeCommand(logger log.Logger, cfg Common, preCmd bool) error {
@@ -936,7 +936,7 @@ func CleanupCertificateFiles(logger log.Logger, interval time.Duration, GlobalCo
 	defer ticker.Stop()
 
 	for range ticker.C {
-		_ = level.Info(logger).Log("msg", "cleanup local certificate files not found on server or config")
+		_ = level.Debug(logger).Log("msg", "cleanup local certificate files not found on server or config")
 
 		newConfigBytes, err := os.ReadFile(filepath.Clean(GlobalConfigPath))
 		if err != nil {
@@ -989,6 +989,6 @@ func CleanupCertificateFiles(logger log.Logger, interval time.Duration, GlobalCo
 			}
 		}
 
-		_ = level.Info(logger).Log("msg", "cleanup done")
+		_ = level.Debug(logger).Log("msg", "cleanup done")
 	}
 }
