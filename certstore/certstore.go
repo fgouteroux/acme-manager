@@ -238,9 +238,11 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 		if (plugin.Checksum != "" && slices.Contains(config.SecuredPlugins, plugin.Name)) || plugin.Checksum == "" {
 			err = executeCommand(logger, plugin.Path, []string{certDomains, certData.Issuer, challengeType}, plugin.Timeout, plugin.Env)
 			if err != nil {
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("plugin command '%s' execution failed", plugin.Path), "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
 				metrics.SetCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
 				return certData, err
 			}
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("plugin command '%s' successfully executed", plugin.Path), "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
 		}
 	}
 
@@ -442,7 +444,7 @@ func executeCommand(logger log.Logger, cmdPath string, cmdArgs []string, cmdTime
 	if err != nil {
 		return fmt.Errorf("command '%s %s' failed: %s. Error: %s", cmdPath, strings.Join(cmdArgs, " "), out, err.Error())
 	}
-	_ = level.Info(logger).Log("msg", "command successfully executed", "command", cmdPath, "args", strings.Join(cmdArgs, " "))
+	_ = level.Debug(logger).Log("msg", "command successfully executed", "command", cmdPath, "args", strings.Join(cmdArgs, " "))
 	_ = level.Debug(logger).Log("msg", "command output", "output", out)
 
 	return nil
