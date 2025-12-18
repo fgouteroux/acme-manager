@@ -122,6 +122,36 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			continue
 		}
 
+		// Save private key BEFORE calling CreateCertificate to prevent loss on timeout
+		// If the server times out but continues processing, we still have the key for reconciliation
+		if GlobalConfig.Common.CertDeploy {
+			err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
+			if err != nil {
+				hasErrors = true
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+				continue
+			}
+			err = createLocalPrivateKeyFile(keyFilePath, privateKey)
+			if err != nil {
+				hasErrors = true
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+				continue
+			}
+			_ = level.Info(logger).Log("msg", "local private key file created", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+		}
+
+		// Backup private key to Vault BEFORE calling CreateCertificate
+		if GlobalConfig.Common.CertBackup {
+			data := CertBackup{Key: string(privateKey)}
+			vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", GlobalConfig.Storage.Vault.CertPrefix, Owner, certData.Issuer, certData.Domain)
+			err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
+			if err != nil {
+				_ = level.Error(logger).Log("msg", "failed to backup private key to vault", "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+			} else {
+				_ = level.Info(logger).Log("msg", "private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+			}
+		}
+
 		certDataBytes, _ := json.Marshal(certData)
 
 		var certParams models.CertificateParams
@@ -140,31 +170,20 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		}
 		_ = level.Info(logger).Log("msg", "created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
 
+		// Update Vault backup with certificate after successful creation
 		if GlobalConfig.Common.CertBackup {
 			data := CertBackup{Cert: newCert.Cert, Key: string(privateKey)}
 			vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", GlobalConfig.Storage.Vault.CertPrefix, newCert.Owner, newCert.Issuer, newCert.Domain)
 			err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "failed to backup certificate", "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+			} else {
+				_ = level.Info(logger).Log("msg", "certificate and private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
 			}
-			_ = level.Info(logger).Log("msg", "certificate and private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
 		}
 
 		if GlobalConfig.Common.CertDeploy {
 			hasChange = true
-			err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
-			if err != nil {
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
-				continue
-			}
-			err = createLocalPrivateKeyFile(keyFilePath, privateKey)
-			if err != nil {
-				hasErrors = true
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
-				continue
-			}
-			_ = level.Info(logger).Log("msg", "local private key file created", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
-
 			err = createLocalCertificateFile(newCert)
 			if err != nil {
 				hasErrors = true
@@ -911,12 +930,13 @@ func listAndDeleteFiles(logger log.Logger, patterns []string) (bool, error) {
 }
 
 // CleanupCertificateFiles periodically checks and deletes local certificate files not found on the server
+// It also considers certificates in the local config file to avoid deleting keys for pending certificates
 func CleanupCertificateFiles(logger log.Logger, interval time.Duration, GlobalConfigPath string, acmeClient *restclient.Client) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		_ = level.Info(logger).Log("msg", "cleanup local certificate files not found on server")
+		_ = level.Info(logger).Log("msg", "cleanup local certificate files not found on server or config")
 
 		newConfigBytes, err := os.ReadFile(filepath.Clean(GlobalConfigPath))
 		if err != nil {
@@ -936,9 +956,24 @@ func CleanupCertificateFiles(logger log.Logger, interval time.Duration, GlobalCo
 			continue
 		}
 
-		var patterns []string
+		// Build patterns from both server certificates and local config
+		// This prevents deleting private keys for certificates that are being created
+		// (exist in config but not yet on server due to timeout or pending creation)
+		patternSet := make(map[string]struct{})
+
+		// Add patterns from server
 		for _, certData := range allCert {
-			patterns = append(patterns, certData.Issuer+"/"+certData.Domain)
+			patternSet[certData.Issuer+"/"+certData.Domain] = struct{}{}
+		}
+
+		// Add patterns from local config to protect pending certificates
+		for _, certConfig := range cfg.Certificate {
+			patternSet[certConfig.Issuer+"/"+certConfig.Domain] = struct{}{}
+		}
+
+		var patterns []string
+		for pattern := range patternSet {
+			patterns = append(patterns, pattern)
 		}
 
 		hasDelete, err := listAndDeleteFiles(logger, patterns)
