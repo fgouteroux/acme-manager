@@ -121,10 +121,10 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 		request.NotAfter = time.Now().Add(time.Duration(certData.Days) * 24 * time.Hour)
 	}
 
-	var issuerAcmeClient *lego.Client
-	var issuerFound bool
-	if issuerAcmeClient, issuerFound = AcmeClient[certData.Issuer]; !issuerFound {
-		return certData, fmt.Errorf("could not create certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
+	// Create a fresh client for this request to avoid challenge provider pollution
+	issuerAcmeClient, err := NewAcmeClientForIssuer(logger, certData.Issuer)
+	if err != nil {
+		return certData, fmt.Errorf("could not create certificate domain %s, issuer %s: %w", certData.Domain, certData.Issuer, err)
 	}
 
 	var dnsChallenge, httpChallenge string

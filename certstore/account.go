@@ -32,6 +32,12 @@ import (
 
 var (
 	AcmeClient = make(map[string]*lego.Client)
+	// AcmeAccount stores the account data per issuer for creating fresh clients
+	AcmeAccount = make(map[string]*Account)
+	// acmeCustomLogger stores the custom logger for creating fresh clients
+	acmeCustomLogger *logrus.Logger
+	// acmeVersion stores the version for creating fresh clients
+	acmeVersion string
 )
 
 // Account represents a users local saved credentials.
@@ -92,6 +98,10 @@ func tryRecoverRegistration(customLogger *logrus.Logger, cfg config.Config, priv
 }
 
 func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, version string) error {
+	// Store for later use when creating fresh clients
+	acmeCustomLogger = customLogger
+	acmeVersion = version
+
 	for issuer, issuerConf := range cfg.Issuer {
 		accountFilePath := fmt.Sprintf("%s/%s/account.json", cfg.Common.RootPathAccount, issuer)
 		accountBytes, err := os.ReadFile(filepath.Clean(accountFilePath))
@@ -282,8 +292,42 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 		}
 
 		AcmeClient[issuer] = client
+		AcmeAccount[issuer] = &account
 	}
 	return nil
+}
+
+// NewAcmeClientForIssuer creates a fresh lego.Client for the given issuer
+// using the cached account data. This ensures each certificate request
+// gets an isolated client with no residual challenge providers.
+func NewAcmeClientForIssuer(logger log.Logger, issuer string) (*lego.Client, error) {
+	account, ok := AcmeAccount[issuer]
+	if !ok {
+		return nil, fmt.Errorf("account for issuer %s not found", issuer)
+	}
+
+	issuerConf, ok := config.GlobalConfig.Issuer[issuer]
+	if !ok {
+		return nil, fmt.Errorf("issuer config for %s not found", issuer)
+	}
+
+	userAgent := fmt.Sprintf("acme-manager/%s", acmeVersion)
+
+	conf := lego.NewConfig(account)
+	conf.CADirURL = issuerConf.CADirURL
+	conf.Certificate.KeyType = certcrypto.RSA2048
+	conf.Certificate.OverallRequestLimit = issuerConf.OverallRequestLimit
+	conf.Certificate.Timeout = time.Duration(issuerConf.CertificateTimeout) * time.Second
+	conf.UserAgent = userAgent
+
+	setRetryHTTPClient(conf, config.GlobalConfig, acmeCustomLogger)
+	client, err := lego.NewClient(conf)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "failed to create lego client", "issuer", issuer, "err", err)
+		return nil, err
+	}
+
+	return client, nil
 }
 
 // NewHTTPChallengeProviderByName Factory for HTTP providers.
