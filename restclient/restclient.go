@@ -138,7 +138,7 @@ func (c *Client) GetAllCertificateMetadata(timeout int) ([]models.Certificate, e
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return certificate, fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
+		return certificate, fmt.Errorf("%s: %s", baseErrMsg, resp.Status)
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
@@ -170,7 +170,7 @@ func (c *Client) GetCertificateMetadata(issuer, domain string, timeout int) (mod
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return certificate, fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
+		return certificate, fmt.Errorf("%s: %s", baseErrMsg, resp.Status)
 	}
 
 	if err := c.decodeJSON(resp, &certificate); err != nil {
@@ -203,7 +203,7 @@ func (c *Client) ReadCertificate(data models.Certificate, timeout int) (models.C
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return certificate, fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
+			return certificate, fmt.Errorf("%s: %s", baseErrMsg, resp.Status)
 		}
 		return certificate, fmt.Errorf("%s: %s - %s", baseErrMsg, resp.Status, string(respBody))
 	}
@@ -320,7 +320,7 @@ func (c *Client) GetSelfToken(timeout int) (models.Token, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return token, fmt.Errorf("%s: %s - %w", baseErrMsg, resp.Status, err)
+		return token, fmt.Errorf("%s: %s", baseErrMsg, resp.Status)
 	}
 
 	if err := c.decodeJSON(resp, &token); err != nil {
