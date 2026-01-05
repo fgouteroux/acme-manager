@@ -275,6 +275,8 @@ Certificates are automatically renewed based on the `renewal_days` parameter:
 - **Single value** (e.g., `"30"`): Renewal occurs exactly 30 days before expiration
 - **Range** (e.g., `"20-30"`): Renewal occurs randomly between 20-30 days before expiration
 
+**Short-lived Certificates**: For certificates with a lifetime shorter than the renewal window (e.g., 6-day certificate with `renewal_days: "20-30"`), the system automatically switches to percentage-based renewal, renewing at 50-75% of the certificate's lifetime.
+
 ### Certificate Bundling
 
 When `bundle: true` is set, the certificate includes the full chain:
@@ -290,6 +292,24 @@ When `bundle: true` is set, the certificate includes the full chain:
 [Root Certificate]
 -----END CERTIFICATE-----
 ```
+
+When `bundle: false`, the CA chain is saved as a separate file:
+- Certificate: `domain.crt`
+- Private key: `domain.key`
+- CA chain: `domain.ca.crt` (configurable via `certificate_ca_file_ext`)
+
+### ACME Profiles
+
+Some Certificate Authorities support custom certificate profiles via the ACME protocol (draft-aaron-acme-profiles). This allows requesting certificates with specific Key Usage or Extended Key Usage extensions.
+
+```yaml
+certificate:
+  - domain: "example.com"
+    issuer: "letsencrypt"
+    profile: "shortlived" # CA-specific profile name
+```
+
+**Note**: Profile support depends on the CA. Contact your CA to confirm support and available profile names.
 
 ### Challenge Types
 
@@ -339,8 +359,9 @@ http://localhost:8989/metrics
 | `dns_challenge` | string | "" | DNS provider for DNS-01 challenge |
 | `http_challenge` | string | "" | HTTP-01 challenge method |
 | `renewal_days` | string | "20-30" | Days before expiration to renew |
-| `bundle` | bool | false | Include CA chain in certificate |
+| `bundle` | bool | false | Include CA chain in certificate. When false, CA chain saved as separate file |
 | `key_type` | string | "RSA2048" | Private key type (RSA2048, RSA4096, EC256, EC384) |
+| `profile` | string | "" | ACME profile for custom certificate issuance (requires CA support) |
 
 ### Client Deployment Options
 
@@ -351,6 +372,7 @@ http://localhost:8989/metrics
 | `certificate_dir_perm` | octal | 0700 | Directory permissions |
 | `certificate_file_perm` | octal | 0600 | Certificate file permissions |
 | `certificate_keyfile_perm` | octal | 0600 | Private key file permissions |
+| `certificate_ca_file_ext` | string | ".ca.crt" | CA chain file extension (used when bundle=false) |
 | `cmd_enabled` | bool | false | Enable command execution |
 | `post_cmd_run` | string | "" | Command to run after deployment |
 | `post_cmd_timeout` | int | 60 | Command timeout in seconds |
@@ -421,5 +443,5 @@ For issues and questions:
 
 ---
 
-**Version**: 0.6.1+  
-**Last Updated**: October 2025
+**Version**: 0.6.2+
+**Last Updated**: January 2026

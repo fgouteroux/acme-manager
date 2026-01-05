@@ -280,6 +280,7 @@ Optional parameters:
 - **san** (string, comma separated): DNS domain names to add to certificate
 - **http_challenge** (string): http challenge name to use for domain validation
 - **dns_challenge** (string): dns challenge name to use for domain validation
+- **profile** (string): ACME profile for certificate issuance (requires CA support for draft-aaron-acme-profiles)
 
 
 ##### Get the certificate
@@ -449,6 +450,7 @@ Optional Common parameters:
 - **certificate_keyfile_perm** (uint32): Unix permission for certificate key file in octal format (default: 0600)
 - **certificate_file_ext** (string): certificate file extension (default: ".crt")
 - **certificate_keyfile_ext** (string): certificate key file extension (default: ".key")
+- **certificate_ca_file_ext** (string): CA chain file extension, used when bundle=false (default: ".ca.crt")
 - **certificate_keyfile_no_generate** (bool): It set to true, don't auto generate private key, use provided file (default: false)
 - **cmd_enabled** (bool): If set to true, allow running pre and post command.
 - **pre_cmd_run** (string): Pre Command to run before executing certificate changes.
@@ -460,14 +462,15 @@ Optional Common parameters:
 - **delay_before_delete** (string): If set, define a duration to wait before deleting certificate
  
 Optional Certificate parameters:
-- **bundle** (bool): if true, add the issuers certificate to the new certificate
-- **renewal_days** (string): number of days or interval of days before automatic certificate renewal
+- **bundle** (bool): if true, add the issuers certificate to the new certificate. When false, CA chain is saved as a separate file (domain.ca.crt)
+- **renewal_days** (string): number of days or interval of days before automatic certificate renewal. For short-lived certificates (where renewal window exceeds certificate lifetime), the system automatically switches to percentage-based renewal (50-75% of lifetime)
 - **days** (int): number of days before certificate expiration
 - **san** (string, comma separated): DNS domain names to add to certificate
 - **http_challenge** (string): http challenge name to use for domain validation
 - **dns_challenge** (string): dns challenge name to use for domain validation
 - **key_type** (string): Key type to use for private keys. Supported: rsa2048, rsa3072, rsa4096, rsa8192, ec256, ec384
 - **labels** (key=value string, comma separated): labels to attach to the certificate, used by the metric `acme_manager_certificate_expiry`
+- **profile** (string): ACME profile for certificate issuance. Useful for CAs supporting custom certificate profiles (e.g., Sectigo with specific Key Usage requirements)
 
 
 ```
@@ -495,6 +498,11 @@ certificate:
 
   - domain: testfgx02.example.com
     issuer: sectigo
+    bundle: false  # CA chain saved as testfgx02.example.com.ca.crt
+
+  - domain: testfgx03.example.com
+    issuer: sectigo
+    profile: "custom-profile"  # Use custom ACME profile (requires CA support)
 ```
 
 ### DNS and HTTP Challenge

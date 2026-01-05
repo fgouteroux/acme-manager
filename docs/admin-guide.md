@@ -1406,6 +1406,6 @@ graph TB
 
 ---
 
-**Version:** 0.6.1+  
-**Last Updated:** October 2025  
+**Version:** 0.6.2+
+**Last Updated:** January 2026
 **Go Version:** 1.24+
