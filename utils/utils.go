@@ -272,9 +272,49 @@ func ValidateLabels(labels string) (errors []error) {
 
 // Function to generate a random weekday within a given range before an expiration date
 func RandomWeekdayBeforeExpiration(expiration time.Time, minDays, maxDays int) time.Time {
+	now := time.Now()
+
 	// Calculate the start and end dates for the range
 	startDate := expiration.AddDate(0, 0, -maxDays)
 	endDate := expiration.AddDate(0, 0, -minDays)
+
+	// For short-lived certificates where renewal window is in the past,
+	// adjust to use a percentage-based approach (renew at ~50-75% of lifetime)
+	if endDate.Before(now) {
+		// Calculate certificate lifetime in hours
+		lifetime := expiration.Sub(now)
+		if lifetime <= 0 {
+			// Certificate already expired, return now
+			return now
+		}
+
+		// Renew between 50% and 75% of remaining lifetime
+		minLifetimePercent := 0.50
+		maxLifetimePercent := 0.75
+
+		minDuration := time.Duration(float64(lifetime) * minLifetimePercent)
+		maxDuration := time.Duration(float64(lifetime) * maxLifetimePercent)
+
+		// Random duration between min and max
+		durationRange := maxDuration - minDuration
+		if durationRange <= 0 {
+			durationRange = time.Hour
+		}
+		randomDuration := minDuration + time.Duration(mathRand.Int63n(int64(durationRange)))
+
+		renewalDate := now.Add(randomDuration)
+
+		// Generate random hours and minutes
+		randomHour := mathRand.Intn(24)
+		randomMinute := mathRand.Intn(60)
+
+		return time.Date(renewalDate.Year(), renewalDate.Month(), renewalDate.Day(), randomHour, randomMinute, 0, 0, renewalDate.Location())
+	}
+
+	// Ensure startDate is not in the past
+	if startDate.Before(now) {
+		startDate = now
+	}
 
 	// Calculate the number of weekdays in the range
 	weekdays := 0
@@ -282,6 +322,13 @@ func RandomWeekdayBeforeExpiration(expiration time.Time, minDays, maxDays int) t
 		if d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
 			weekdays++
 		}
+	}
+
+	// If no weekdays in range, use startDate
+	if weekdays == 0 {
+		randomHour := mathRand.Intn(24)
+		randomMinute := mathRand.Intn(60)
+		return time.Date(startDate.Year(), startDate.Month(), startDate.Day(), randomHour, randomMinute, 0, 0, startDate.Location())
 	}
 
 	// Select a random weekday within the range
