@@ -23,6 +23,7 @@ type CertConfig struct {
 	HTTPChallenge string `yaml:"http_challenge,omitempty"`
 	KeyType       string `yaml:"key_type,omitempty"`
 	Labels        string `yaml:"labels,omitempty"`
+	Profile       string `yaml:"profile,omitempty"`
 }
 
 // Convert to models.Certificate
@@ -38,6 +39,7 @@ func (cc CertConfig) ToModelsCertificate() models.Certificate {
 		HttpChallenge: cc.HTTPChallenge,
 		KeyType:       cc.KeyType,
 		Labels:        cc.Labels,
+		Profile:       cc.Profile,
 	}
 }
 

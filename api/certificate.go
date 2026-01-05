@@ -651,6 +651,9 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		if certData.KeyType != existingCert.KeyType {
 			recreateCert = true
 		}
+		if certData.Profile != existingCert.Profile {
+			recreateCert = true
+		}
 
 		var newCert *models.Certificate
 		var renewalDate string

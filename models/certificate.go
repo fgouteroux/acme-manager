@@ -20,4 +20,5 @@ type CertificateParams struct {
 	Revoke        bool   `json:"revoke"`
 	Labels        string `json:"labels"`
 	KeyType       string `json:"key_type"`
+	Profile       string `json:"profile,omitempty" example:"connect-direct"`
 }

@@ -113,8 +113,9 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 	}
 
 	request := certificate.ObtainForCSRRequest{
-		CSR:    csr,
-		Bundle: certData.Bundle,
+		CSR:     csr,
+		Bundle:  certData.Bundle,
+		Profile: certData.Profile,
 	}
 
 	if certData.Days != 0 {

@@ -33,6 +33,8 @@ message Certificate {
   string encryption = 15;
   string serial = 16;
   string key_type = 17;
+  // ACME profile for certificate issuance (draft-aaron-acme-profiles)
+  string profile = 20;
   // Unix timestamp in milliseconds when we have updated the key.
   int64 updated_at = 18;
   // Unix timestamp in milliseconds when this entry was marked for deletion.

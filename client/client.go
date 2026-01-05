@@ -688,6 +688,17 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 				),
 					"domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
 			}
+			if certData.Profile != old[idx].Profile {
+				toRecreate = true
+				_ = level.Info(logger).Log("msg", fmt.Sprintf(
+					"certificate issuer '%s' for domain '%s' profile changed from '%s' to '%s'.",
+					certData.Issuer,
+					certData.Domain,
+					old[idx].Profile,
+					certData.Profile,
+				),
+					"domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+			}
 			if certData.RenewalDays != old[idx].RenewalDays {
 
 				if _, _, err := utils.ValidateRenewalDays(certData.RenewalDays); err != nil {
