@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"io/fs"
+	"path/filepath"
 
 	"github.com/prometheus/common/model"
 
@@ -145,6 +146,34 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		if err := utils.CreateNonExistingFolder(s.Common.CertDir, s.Common.CertDirPerm); err != nil {
 			return fmt.Errorf("failed to create certificate directory '%s': %v", s.Common.CertDir, err)
 		}
+	}
+
+	return nil
+}
+
+// ValidateConfigPath checks that the certificate directory is not the same as the config file directory.
+func (s *Config) ValidateConfigPath(configPath string) error {
+	if s.Common.CertDir == "" {
+		return nil
+	}
+
+	configDir := filepath.Dir(configPath)
+
+	absConfigDir, err := filepath.Abs(configDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve config directory path: %v", err)
+	}
+
+	absCertDir, err := filepath.Abs(s.Common.CertDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve certificate directory path: %v", err)
+	}
+
+	absConfigDir = filepath.Clean(absConfigDir)
+	absCertDir = filepath.Clean(absCertDir)
+
+	if absConfigDir == absCertDir {
+		return fmt.Errorf("certificate_dir '%s' must not be the same as config file directory '%s'", absCertDir, absConfigDir)
 	}
 
 	return nil

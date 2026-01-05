@@ -413,6 +413,11 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 		metrics.SetCertificateConfigError(1)
 		return
 	}
+	if err := cfg.ValidateConfigPath(GlobalConfigPath); err != nil {
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("ignoring file changes %s because of error", GlobalConfigPath), "err", err)
+		metrics.SetCertificateConfigError(1)
+		return
+	}
 	GlobalConfig = cfg
 	metrics.SetCertificateConfigError(0)
 
@@ -706,6 +711,11 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 		metrics.SetCertificateConfigError(1)
 		return
 	}
+	if err := cfg.ValidateConfigPath(GlobalConfigPath); err != nil {
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("ignoring file changes %s because of error", GlobalConfigPath), "err", err)
+		metrics.SetCertificateConfigError(1)
+		return
+	}
 	GlobalConfig = cfg
 	metrics.SetCertificateConfigError(0)
 
@@ -946,6 +956,10 @@ func CleanupCertificateFiles(logger log.Logger, interval time.Duration, GlobalCo
 		var cfg Config
 		err = yaml.Unmarshal(newConfigBytes, &cfg)
 		if err != nil {
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("ignoring file changes %s because of error", GlobalConfigPath), "err", err)
+			continue
+		}
+		if err := cfg.ValidateConfigPath(GlobalConfigPath); err != nil {
 			_ = level.Error(logger).Log("msg", fmt.Sprintf("ignoring file changes %s because of error", GlobalConfigPath), "err", err)
 			continue
 		}
