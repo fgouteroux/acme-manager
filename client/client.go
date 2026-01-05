@@ -43,8 +43,9 @@ type MapDiff struct {
 }
 
 type CertBackup struct {
-	Cert string `json:"cert" example:"-----BEGIN CERTIFICATE-----\n..."`
-	Key  string `json:"key" example:"-----BEGIN PRIVATE KEY-----\n..."`
+	Cert     string `json:"cert" example:"-----BEGIN CERTIFICATE-----\n..."`
+	Key      string `json:"key" example:"-----BEGIN PRIVATE KEY-----\n..."`
+	CAIssuer string `json:"ca_issuer,omitempty" example:"-----BEGIN CERTIFICATE-----\n..."`
 }
 
 func checkCertDiff(old, newCertList []models.Certificate, logger log.Logger) (MapDiff, bool) {
@@ -172,7 +173,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 
 		// Update Vault backup with certificate after successful creation
 		if GlobalConfig.Common.CertBackup {
-			data := CertBackup{Cert: newCert.Cert, Key: string(privateKey)}
+			data := CertBackup{Cert: newCert.Cert, Key: string(privateKey), CAIssuer: newCert.CAIssuer}
 			vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", GlobalConfig.Storage.Vault.CertPrefix, newCert.Owner, newCert.Issuer, newCert.Domain)
 			err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
 			if err != nil {
@@ -245,7 +246,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		_ = level.Info(logger).Log("msg", "certificate updated", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
 
 		if GlobalConfig.Common.CertBackup {
-			data := CertBackup{Cert: newCert.Cert, Key: string(privateKey)}
+			data := CertBackup{Cert: newCert.Cert, Key: string(privateKey), CAIssuer: newCert.CAIssuer}
 			vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", GlobalConfig.Storage.Vault.CertPrefix, newCert.Owner, newCert.Issuer, newCert.Domain)
 			err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
 			if err != nil {
@@ -361,6 +362,16 @@ func createLocalCertificateFile(certData models.CertMap) error {
 	if err != nil {
 		return fmt.Errorf("unable to save certificate file %s", certFilePath)
 	}
+
+	// Write CA chain file only when bundle=false and CAIssuer is available
+	if !certData.Bundle && certData.CAIssuer != "" {
+		caFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertCAFileExt
+		err = os.WriteFile(caFilePath, []byte(certData.CAIssuer), GlobalConfig.Common.CertFilePerm)
+		if err != nil {
+			return fmt.Errorf("unable to save CA chain file %s", caFilePath)
+		}
+	}
+
 	return nil
 }
 
@@ -372,6 +383,16 @@ func deleteLocalCertificateFile(issuer, domain string) error {
 			return fmt.Errorf("unable to delete certificate file %s", certFilePath)
 		}
 	}
+
+	// Also delete CA chain file if it exists
+	caFilePath := GlobalConfig.Common.CertDir + issuer + "/" + domain + GlobalConfig.Common.CertCAFileExt
+	if utils.FileExists(caFilePath) {
+		err := os.Remove(caFilePath)
+		if err != nil {
+			return fmt.Errorf("unable to delete CA chain file %s", caFilePath)
+		}
+	}
+
 	return nil
 }
 
@@ -509,6 +530,39 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 						hasChange = true
 						_ = level.Info(logger).Log("msg", fmt.Sprintf("deployed local certificate %s", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
 						metrics.IncCreatedLocalCertificate(certData.Issuer)
+					}
+
+					// Also restore CA chain file when bundle=false
+					if !certData.Bundle && certificate.CAIssuer != "" {
+						caFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertCAFileExt
+						err = os.WriteFile(caFilePath, []byte(certificate.CAIssuer), GlobalConfig.Common.CertFilePerm)
+						if err != nil {
+							_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to save CA chain file %s", caFilePath), "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+						} else {
+							_ = level.Info(logger).Log("msg", fmt.Sprintf("restored CA chain file %s", caFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+						}
+					}
+				}
+			}
+
+			// Check and restore CA chain file if bundle=false
+			if !certData.Bundle {
+				caFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertCAFileExt
+				caFileExists := utils.FileExists(caFilePath)
+
+				if !caFileExists {
+					_ = level.Info(logger).Log("msg", fmt.Sprintf("local CA chain file '%s' doesn't exist", caFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+					certificate, err := acmeClient.ReadCertificate(certData, 30)
+					if err != nil {
+						_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+					} else if certificate.CAIssuer != "" {
+						err = os.WriteFile(caFilePath, []byte(certificate.CAIssuer), GlobalConfig.Common.CertFilePerm)
+						if err != nil {
+							_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to save CA chain file %s", caFilePath), "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+						} else {
+							hasChange = true
+							_ = level.Info(logger).Log("msg", fmt.Sprintf("restored CA chain file %s", caFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+						}
 					}
 				}
 			}
@@ -781,6 +835,39 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 					_ = level.Info(logger).Log("msg", fmt.Sprintf("deployed local certificate %s", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
 					metrics.IncCreatedLocalCertificate(certData.Issuer)
 				}
+
+				// Also restore CA chain file when bundle=false
+				if !certData.Bundle && certificate.CAIssuer != "" {
+					caFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertCAFileExt
+					err = os.WriteFile(caFilePath, []byte(certificate.CAIssuer), GlobalConfig.Common.CertFilePerm)
+					if err != nil {
+						_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to save CA chain file %s", caFilePath), "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+					} else {
+						_ = level.Info(logger).Log("msg", fmt.Sprintf("restored CA chain file %s", caFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+					}
+				}
+			}
+		}
+
+		// Check and restore CA chain file if bundle=false
+		if !certData.Bundle {
+			caFilePath := GlobalConfig.Common.CertDir + certData.Issuer + "/" + certData.Domain + GlobalConfig.Common.CertCAFileExt
+			caFileExists := utils.FileExists(caFilePath)
+
+			if !caFileExists {
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("local CA chain file '%s' doesn't exist", caFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+				certificate, err := acmeClient.ReadCertificate(certData, 30)
+				if err != nil {
+					_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+				} else if certificate.CAIssuer != "" {
+					err = os.WriteFile(caFilePath, []byte(certificate.CAIssuer), GlobalConfig.Common.CertFilePerm)
+					if err != nil {
+						_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to save CA chain file %s", caFilePath), "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+					} else {
+						hasChange = true
+						_ = level.Info(logger).Log("msg", fmt.Sprintf("restored CA chain file %s", caFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+					}
+				}
 			}
 		}
 
@@ -918,14 +1005,15 @@ func listAndDeleteFiles(logger log.Logger, patterns []string) (bool, error) {
 		}
 		if !info.IsDir() {
 			var pattern string
-			if strings.HasSuffix(path, GlobalConfig.Common.CertFileExt) {
+			if strings.HasSuffix(path, GlobalConfig.Common.CertCAFileExt) {
+				pattern = strings.TrimPrefix(strings.TrimSuffix(path, GlobalConfig.Common.CertCAFileExt), GlobalConfig.Common.CertDir)
+			} else if strings.HasSuffix(path, GlobalConfig.Common.CertFileExt) {
 				pattern = strings.TrimPrefix(strings.TrimSuffix(path, GlobalConfig.Common.CertFileExt), GlobalConfig.Common.CertDir)
-			}
-			if strings.HasSuffix(path, GlobalConfig.Common.CertKeyFileExt) {
+			} else if strings.HasSuffix(path, GlobalConfig.Common.CertKeyFileExt) {
 				pattern = strings.TrimPrefix(strings.TrimSuffix(path, GlobalConfig.Common.CertKeyFileExt), GlobalConfig.Common.CertDir)
 			}
 
-			if !slices.Contains(patterns, pattern) {
+			if pattern != "" && !slices.Contains(patterns, pattern) {
 				// Delete the file if it don't match the pattern
 				if err := os.Remove(path); err != nil {
 					_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to delete file '%s'", path), "err", err)

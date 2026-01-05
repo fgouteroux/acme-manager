@@ -60,6 +60,7 @@ type Common struct {
 	CertKeyFilePerm   fs.FileMode `yaml:"certificate_keyfile_perm"`
 	CertFileExt       string      `yaml:"certificate_file_ext"`
 	CertKeyFileExt    string      `yaml:"certificate_keyfile_ext"`
+	CertCAFileExt     string      `yaml:"certificate_ca_file_ext"`
 	CertKeyFileNoGen  bool        `yaml:"certificate_keyfile_no_generate"`
 	CertTimeout       int         `yaml:"certificate_timeout"`
 	CmdEnabled        bool        `yaml:"cmd_enabled"`
@@ -107,6 +108,10 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	if s.Common.CertKeyFileExt == "" {
 		s.Common.CertKeyFileExt = ".key"
+	}
+
+	if s.Common.CertCAFileExt == "" {
+		s.Common.CertCAFileExt = ".ca.crt"
 	}
 
 	if s.Common.DelayBeforeDelete != "" {
