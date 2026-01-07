@@ -72,34 +72,53 @@ Create a `client-config.yml` file:
 
 ```yaml
 common:
+  # Default certificate settings
+  cert_days: 90                       # Default validity period
+  cert_days_renewal: "20-30"          # Default renewal window
+
+  # Certificate deployment
   certificate_deploy: true
+  certificate_backup: false           # Backup certs/keys to Vault
   certificate_dir: /etc/ssl/certificates
   certificate_dir_perm: 0700
   certificate_file_perm: 0600
   certificate_keyfile_perm: 0600
   certificate_file_ext: ".crt"
   certificate_keyfile_ext: ".key"
-  cert_days_renewal: "20-30"
+  certificate_ca_file_ext: ".ca.crt"  # Used when bundle=false
+  certificate_keyfile_no_generate: false  # Use existing local key
+  certificate_timeout: 180            # Timeout for cert operations
+
+  # Command execution
   cmd_enabled: true
+  pre_cmd_run: ""                     # Command before deployment
+  pre_cmd_timeout: 60
   post_cmd_run: "systemctl reload nginx"
   post_cmd_timeout: 60
+
+  # Certificate lifecycle
   revoke_on_update: false
   revoke_on_delete: false
+  delay_before_delete: ""             # e.g., "24h"
 
 certificate:
   - domain: "example.com"
     issuer: "letsencrypt"
     dns_challenge: "cloudflare"
     san: "www.example.com,api.example.com"
-    renewal_days: "30"
+    days: 90                          # Override default validity
+    renewal_days: "30"                # Override default renewal window
     bundle: true
-    key_type: "RSA2048"
+    key_type: "ec256"
+    labels: "env=prod,team=infra"
+    profile: ""                       # ACME profile (if CA supports it)
 
 storage:
   vault:
     url: "https://vault.example.com"
     role_id: "your-role-id"
     secret_id: "your-secret-id"
+    cert_prefix: "secret/acme-manager/certificates"  # For certificate_backup
 ```
 
 ### Running the Client
@@ -110,6 +129,117 @@ acme-manager-client \
   -client.manager-url=https://acme-manager.example.com \
   -client.manager-token=your-bearer-token \
   -client.check-config-interval=5m
+```
+
+### Client CLI Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-client.config-path` | `client-config.yml` | Path to the client configuration file |
+| `-client.manager-url` | `http://localhost:8989/api/v1` | ACME Manager server URL (or env var `ACME_MANAGER_URL`) |
+| `-client.manager-token` | "" | Bearer token for authentication (or env var `ACME_MANAGER_TOKEN`) |
+| `-client.check-config-interval` | `5m` | Interval to check for config changes and sync certificates |
+| `-client.pull-only` | `false` | Enable pull-only (slave) mode |
+| `-client.cleanup-enabled` | `false` | Enable cleanup of orphaned local certificate files |
+| `-client.cleanup-interval` | `30m` | Interval to check for orphaned files to cleanup |
+| `-client.tls-ca-file` | "" | TLS CA certificate file for server connection |
+| `-client.tls-cert-file` | "" | TLS client certificate file |
+| `-client.tls-key-file` | "" | TLS client key file |
+| `-client.tls-skip-verify` | `false` | Skip TLS certificate verification |
+| `-server.listen-address` | `:8989` | Address for the metrics HTTP server |
+| `-log.level` | `info` | Log level (debug, info, warn, error) |
+| `-log.format` | `logfmt` | Log format (logfmt, json) |
+
+### Master/Slave Mode
+
+ACME Manager client supports two operational modes that enable a master/slave architecture for certificate management:
+
+#### Master Mode (Default)
+
+In master mode, the client is responsible for:
+- Managing the full certificate lifecycle (create, update, delete)
+- Generating CSRs and private keys
+- Syncing certificates from the local config file to the ACME Manager server
+- Deploying certificates locally
+
+```bash
+acme-manager-client \
+  -client.config-path=client-config.yml \
+  -client.manager-url=https://acme-manager.example.com \
+  -client.manager-token=your-bearer-token
+```
+
+#### Slave Mode (Pull-Only)
+
+In slave mode (`-client.pull-only=true`), the client only:
+- Lists certificates from the KV ring (server storage)
+- Pulls and deploys certificates locally
+- Restores private keys from Vault backup (requires `certificate_backup` enabled on master)
+- Does NOT create, update, or delete certificates on the server
+
+This mode is useful for:
+- Deploying certificates to multiple servers without managing them
+- Separating certificate management from deployment
+- High-availability setups where one master manages certificates and multiple slaves deploy them
+
+```bash
+acme-manager-client \
+  -client.pull-only=true \
+  -client.config-path=client-config.yml \
+  -client.manager-url=https://acme-manager.example.com \
+  -client.manager-token=your-bearer-token
+```
+
+**Note:** In pull-only mode, the `certificate` section in the config file is not required. The client will fetch all certificates available to the token from the server.
+
+#### Master/Slave Architecture Example
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    ACME Manager Server                       │
+│                    (Certificate Store)                       │
+└─────────────────────────────────────────────────────────────┘
+                            ▲
+           ┌────────────────┼────────────────┐
+           │                │                │
+    ┌──────┴──────┐  ┌──────┴──────┐  ┌──────┴──────┐
+    │   Master    │  │   Slave 1   │  │   Slave 2   │
+    │   Client    │  │   Client    │  │   Client    │
+    │             │  │ (pull-only) │  │ (pull-only) │
+    │ - Manages   │  │             │  │             │
+    │   certs     │  │ - Deploys   │  │ - Deploys   │
+    │ - Creates   │  │   only      │  │   only      │
+    │ - Updates   │  │             │  │             │
+    │ - Deletes   │  │             │  │             │
+    └─────────────┘  └─────────────┘  └─────────────┘
+           │                │                │
+           ▼                ▼                ▼
+    ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+    │  App Server │  │  App Server │  │  App Server │
+    │     #1      │  │     #2      │  │     #3      │
+    └─────────────┘  └─────────────┘  └─────────────┘
+```
+
+**Configuration for Slave Mode:**
+
+```yaml
+common:
+  certificate_deploy: true
+  certificate_dir: /etc/ssl/certificates
+  certificate_file_ext: ".crt"
+  certificate_keyfile_ext: ".key"
+  cmd_enabled: true
+  post_cmd_run: "systemctl reload nginx"
+
+# certificate section is optional in pull-only mode
+# The client will pull all certificates available to the token
+
+storage:
+  vault:
+    url: "https://vault.example.com"
+    role_id: "your-role-id"
+    secret_id: "your-secret-id"
+    cert_prefix: "secret/acme-manager/certificates"
 ```
 
 ### Client Workflow
@@ -358,24 +488,35 @@ http://localhost:8989/metrics
 | `san` | string | "" | Subject Alternative Names (comma-separated) |
 | `dns_challenge` | string | "" | DNS provider for DNS-01 challenge |
 | `http_challenge` | string | "" | HTTP-01 challenge method |
+| `days` | int | 90 | Certificate validity period in days (if CA supports it) |
 | `renewal_days` | string | "20-30" | Days before expiration to renew |
 | `bundle` | bool | false | Include CA chain in certificate. When false, CA chain saved as separate file |
-| `key_type` | string | "RSA2048" | Private key type (RSA2048, RSA4096, EC256, EC384) |
+| `key_type` | string | "ec256" | Private key type (RSA2048, RSA4096, EC256, EC384) |
+| `labels` | string | "" | Custom labels for the certificate (key=value,key2=value2) |
 | `profile` | string | "" | ACME profile for custom certificate issuance (requires CA support) |
 
 ### Client Deployment Options
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
+| `cert_days` | int | 90 | Default certificate validity period in days |
+| `cert_days_renewal` | string | "20-30" | Default renewal window (days before expiration) |
 | `certificate_deploy` | bool | false | Deploy certificates locally |
+| `certificate_backup` | bool | false | Backup certificates and private keys to Vault |
 | `certificate_dir` | string | "" | Directory for certificate deployment |
 | `certificate_dir_perm` | octal | 0700 | Directory permissions |
 | `certificate_file_perm` | octal | 0600 | Certificate file permissions |
 | `certificate_keyfile_perm` | octal | 0600 | Private key file permissions |
+| `certificate_file_ext` | string | ".crt" | Certificate file extension |
+| `certificate_keyfile_ext` | string | ".key" | Private key file extension |
 | `certificate_ca_file_ext` | string | ".ca.crt" | CA chain file extension (used when bundle=false) |
+| `certificate_keyfile_no_generate` | bool | false | Do not generate private key, use existing local key file |
+| `certificate_timeout` | int | 180 | Timeout in seconds for certificate operations |
 | `cmd_enabled` | bool | false | Enable command execution |
+| `pre_cmd_run` | string | "" | Command to run before deployment |
+| `pre_cmd_timeout` | int | 60 | Pre-command timeout in seconds |
 | `post_cmd_run` | string | "" | Command to run after deployment |
-| `post_cmd_timeout` | int | 60 | Command timeout in seconds |
+| `post_cmd_timeout` | int | 60 | Post-command timeout in seconds |
 | `revoke_on_update` | bool | false | Revoke old certificate on update |
 | `revoke_on_delete` | bool | false | Revoke certificate on delete |
 | `delay_before_delete` | string | "" | Duration to wait before deleting (e.g., "24h") |

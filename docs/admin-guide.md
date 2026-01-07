@@ -423,12 +423,15 @@ issuer:
     eab: false
     certificate_timeout: 300
     overall_request_limit: 20
-  
+    dns_challenge: "cloudflare"       # Required: DNS or HTTP challenge
+    # http_challenge: "kvring"        # Alternative to dns_challenge
+
   # Let's Encrypt staging
   letsencrypt-staging:
     ca_dir_url: https://acme-staging-v02.api.letsencrypt.org/directory
     eab: false
     certificate_timeout: 300
+    dns_challenge: "cloudflare"
   
   # Sectigo with External Account Binding
   sectigo:
@@ -438,6 +441,8 @@ issuer:
     hmac: "your-hmac-value"
     certificate_timeout: 600
     overall_request_limit: 10
+    dns_challenge: "cloudflare"       # Required: DNS or HTTP challenge
+    # http_challenge: "kvring"        # Alternative to dns_challenge
 
 # Storage backend configuration
 storage:
@@ -453,6 +458,22 @@ storage:
     retry_wait_min: 1
     retry_wait_max: 10
 ```
+
+### Issuer Configuration Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `ca_dir_url` | string | required | ACME directory URL |
+| `contact` | string | "" | Contact email for ACME account |
+| `eab` | bool | false | Enable External Account Binding |
+| `kid` | string | "" | Key ID for EAB (required if eab=true) |
+| `hmac` | string | "" | HMAC key for EAB (required if eab=true) |
+| `dns_challenge` | string | "" | DNS provider name (mutually exclusive with http_challenge) |
+| `http_challenge` | string | "" | HTTP challenge method (mutually exclusive with dns_challenge) |
+| `http_challenge_config` | string | "" | HTTP challenge configuration |
+| `certificate_timeout` | int | 30 | Timeout in seconds for certificate operations |
+| `overall_request_limit` | int | 18 | Maximum concurrent ACME requests |
+| `unregister` | bool | false | Unregister ACME account on startup |
 
 ### Environment Variables
 
