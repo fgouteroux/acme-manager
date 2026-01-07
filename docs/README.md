@@ -233,5 +233,5 @@ See the main repository for license information.
 
 ---
 
-**Version**: 0.6.1+  
-**Last Updated**: October 2025
+**Version**: 0.6.9+
+**Last Updated**: January 2026

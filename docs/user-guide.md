@@ -584,5 +584,5 @@ For issues and questions:
 
 ---
 
-**Version**: 0.6.2+
+**Version**: 0.6.9+
 **Last Updated**: January 2026
