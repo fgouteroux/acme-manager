@@ -31,28 +31,34 @@ var (
 
 // used to validate api body and by swagger
 type TokenParams struct {
-	ID       string   `json:"id" example:"021b5075-2d1e-44bd-b5e5-ffc7be7ad4c3"`
-	Username string   `json:"username" example:"testfgx"`
-	Scope    []string `json:"scope" example:"read,create,update,delete"`
-	Duration string   `json:"duration" example:"30d"`
+	ID                   string   `json:"id" example:"021b5075-2d1e-44bd-b5e5-ffc7be7ad4c3"`
+	Username             string   `json:"username" example:"testfgx"`
+	Scope                []string `json:"scope" example:"read,create,update,delete"`
+	Duration             string   `json:"duration" example:"30d"`
+	RateLimitWindow      string   `json:"rate_limit_window,omitempty" example:"1h"`
+	RateLimitMaxRequests int32    `json:"rate_limit_max_requests,omitempty" example:"5"`
 }
 
 type TokenResponse struct {
-	ID       string   `json:"id"`
-	Token    string   `json:"token"`
-	Hash     string   `json:"tokenHash"`
-	Username string   `json:"username"`
-	Expires  string   `json:"expires"`
-	Duration string   `json:"duration"`
-	Scope    []string `json:"scope"`
+	ID                   string   `json:"id"`
+	Token                string   `json:"token"`
+	Hash                 string   `json:"tokenHash"`
+	Username             string   `json:"username"`
+	Expires              string   `json:"expires"`
+	Duration             string   `json:"duration"`
+	Scope                []string `json:"scope"`
+	RateLimitWindow      string   `json:"rate_limit_window,omitempty"`
+	RateLimitMaxRequests int32    `json:"rate_limit_max_requests,omitempty"`
 }
 
 type TokenResponseGet struct {
-	Hash     string   `json:"tokenHash"`
-	Username string   `json:"username"`
-	Expires  string   `json:"expires"`
-	Duration string   `json:"duration"`
-	Scope    []string `json:"scope"`
+	Hash                 string   `json:"tokenHash"`
+	Username             string   `json:"username"`
+	Expires              string   `json:"expires"`
+	Duration             string   `json:"duration"`
+	Scope                []string `json:"scope"`
+	RateLimitWindow      string   `json:"rate_limit_window,omitempty"`
+	RateLimitMaxRequests int32    `json:"rate_limit_max_requests,omitempty"`
 }
 
 // manage token
@@ -179,6 +185,18 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			}
 		}
 
+		// Validate rate limit settings if provided
+		if token.RateLimitWindow != "" {
+			if _, err := time.ParseDuration(token.RateLimitWindow); err != nil {
+				responseJSON(w, nil, fmt.Errorf("invalid rate_limit_window '%s': %v", token.RateLimitWindow, err), http.StatusBadRequest)
+				return
+			}
+		}
+		if token.RateLimitMaxRequests < 0 {
+			responseJSON(w, nil, fmt.Errorf("rate_limit_max_requests must be non-negative"), http.StatusBadRequest)
+			return
+		}
+
 		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -219,13 +237,15 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		tokenHash := utils.SHA1Hash(randomToken)
 
 		newData := map[string]interface{}{
-			"id":        ID,
-			"token":     base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", ID, randomToken))),
-			"tokenHash": tokenHash,
-			"scope":     token.Scope,
-			"username":  token.Username,
-			"expires":   expires,
-			"duration":  token.Duration,
+			"id":                     ID,
+			"token":                  base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", ID, randomToken))),
+			"tokenHash":              tokenHash,
+			"scope":                  token.Scope,
+			"username":               token.Username,
+			"expires":                expires,
+			"duration":               token.Duration,
+			"rate_limit_window":      token.RateLimitWindow,
+			"rate_limit_max_requests": token.RateLimitMaxRequests,
 		}
 
 		secretKeyPath := fmt.Sprintf("%s/%s/%s", secretKeyPathPrefix, token.Username, ID)
@@ -237,11 +257,13 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		}
 
 		newToken := &models.Token{
-			TokenHash: tokenHash,
-			Scope:     token.Scope,
-			Username:  token.Username,
-			Expires:   expires,
-			Duration:  token.Duration,
+			TokenHash:            tokenHash,
+			Scope:                token.Scope,
+			Username:             token.Username,
+			Expires:              expires,
+			Duration:             token.Duration,
+			RateLimitWindow:      token.RateLimitWindow,
+			RateLimitMaxRequests: token.RateLimitMaxRequests,
 		}
 
 		err = certstore.AmStore.PutToken(ID, newToken)
@@ -336,6 +358,18 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			}
 		}
 
+		// Validate rate limit settings if provided
+		if token.RateLimitWindow != "" {
+			if _, err := time.ParseDuration(token.RateLimitWindow); err != nil {
+				responseJSON(w, nil, fmt.Errorf("invalid rate_limit_window '%s': %v", token.RateLimitWindow, err), http.StatusBadRequest)
+				return
+			}
+		}
+		if token.RateLimitMaxRequests < 0 {
+			responseJSON(w, nil, fmt.Errorf("rate_limit_max_requests must be non-negative"), http.StatusBadRequest)
+			return
+		}
+
 		if !isLeaderNow {
 			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
@@ -369,13 +403,15 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		tokenHash := utils.SHA1Hash(randomToken)
 
 		newData := map[string]interface{}{
-			"id":        token.ID,
-			"token":     base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", token.ID, randomToken))),
-			"tokenHash": tokenHash,
-			"scope":     token.Scope,
-			"username":  token.Username,
-			"expires":   expires,
-			"duration":  token.Duration,
+			"id":                     token.ID,
+			"token":                  base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", token.ID, randomToken))),
+			"tokenHash":              tokenHash,
+			"scope":                  token.Scope,
+			"username":               token.Username,
+			"expires":                expires,
+			"duration":               token.Duration,
+			"rate_limit_window":      token.RateLimitWindow,
+			"rate_limit_max_requests": token.RateLimitMaxRequests,
 		}
 
 		secretKeyPath := fmt.Sprintf("%s/%s/%s", secretKeyPathPrefix, token.Username, token.ID)
@@ -391,6 +427,8 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		data.Username = token.Username
 		data.Expires = expires
 		data.Duration = token.Duration
+		data.RateLimitWindow = token.RateLimitWindow
+		data.RateLimitMaxRequests = token.RateLimitMaxRequests
 
 		err = certstore.AmStore.PutToken(token.ID, data)
 		if err != nil {

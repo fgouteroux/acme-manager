@@ -1,0 +1,142 @@
+{{- /*gotype: main.rateLimitHandlerData */ -}}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Acme Manager</title>
+    <link rel="stylesheet" href="{{ AddPathPrefix "/static/bootstrap-5.1.3.min.css" }}">
+    <link rel="stylesheet" href="{{ AddPathPrefix "/static/styles.css" }}">
+    <script src="{{ AddPathPrefix "/static/bootstrap-5.1.3.bundle.min.js" }}"></script>
+</head>
+<body>
+<body class="d-flex flex-column h-100">
+<main class="flex-shrink-0">
+    <div class="container">
+        <div class="header row border-bottom py-3 flex-column-reverse flex-sm-row">
+            <div class="col-12 col-sm-9 text-center text-sm-start">
+                <h1><a href="/">Acme Manager</a></h1>
+            </div>
+            <div class="col-12 col-sm-3 text-center text-sm-end mb-3 mb-sm-0">
+                <img alt="Acme Manager logo" class="threshold-brand" src="{{ AddPathPrefix "/static/acme-manager.png" }}">
+            </div>
+        </div>
+<br>
+<h2>Rate Limits</h2>
+<div class="row mb-3 align-items-center">
+    <div class="col-12 col-md-6">
+        <span class="text-muted">Total: <span class="badge bg-primary" id="totalCount">{{ len .RateLimits }}</span></span>
+    </div>
+    <div class="col-12 col-md-6">
+        <div class="float-md-end">
+            <div class="btn-group me-2">
+                <input class="form-control search-input" type="search" placeholder="Search rate limits..." autocomplete="on" id="tableSearch">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Show/Hide Columns">
+                    ☰
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="0" checked> Owner</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="1" checked> Issuer</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="2" checked> Domain</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="3" checked> Requests</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="4" checked> Window Start</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="5" checked> Window End</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="6" checked> Remaining</label></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-bordered table-hover table-striped" id="rateLimitTable">
+    <thead>
+      <tr>
+        <th data-column="0">Owner</th>
+        <th data-column="1">Issuer</th>
+        <th data-column="2">Domain</th>
+        <th data-column="3">Requests</th>
+        <th data-column="4">Window Start</th>
+        <th data-column="5">Window End</th>
+        <th data-column="6">Remaining</th>
+      </tr>
+    </thead>
+    <tbody>
+    {{ range .RateLimits }}
+      <tr data-searchable="{{ .Owner }} {{ .Issuer }} {{ .Domain }}">
+        <td data-column="0">{{ .Owner }}</td>
+        <td data-column="1">{{ .Issuer }}</td>
+        <td data-column="2">{{ .Domain }}</td>
+        <td data-column="3">{{ .RequestCount }}/{{ .MaxRequests }}</td>
+        <td data-column="4">{{ .WindowStart.Format "2006-01-02 15:04:05" }}</td>
+        <td data-column="5">{{ .WindowEnd.Format "2006-01-02 15:04:05" }}</td>
+        <td data-column="6">{{ .Remaining }}</td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+</main>
+<footer class="footer mt-auto py-3 bg-light">
+    <div class="container">
+        <small class="text-muted">Status @ {{ .Now.Format "2006-01-02 15:04:05.000" }}</small>
+    </div>
+</footer>
+<script type="text/javascript">
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
+
+    // Table search functionality with dynamic count
+    document.getElementById('tableSearch').addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const tableRows = document.querySelectorAll('#rateLimitTable tbody tr');
+        let visibleCount = 0;
+
+        tableRows.forEach(row => {
+            const searchableText = row.getAttribute('data-searchable').toLowerCase();
+            if (searchableText.includes(searchTerm)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // Update the count display
+        document.getElementById('totalCount').textContent = visibleCount;
+    });
+
+    // Column visibility toggle
+    document.querySelectorAll('input[data-column]').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const columnIndex = this.getAttribute('data-column');
+            const isVisible = this.checked;
+
+            // Toggle header column
+            const headerCell = document.querySelector(`th[data-column="${columnIndex}"]`);
+            if (headerCell) {
+                headerCell.style.display = isVisible ? '' : 'none';
+            }
+
+            // Toggle body columns
+            const bodyCells = document.querySelectorAll(`td[data-column="${columnIndex}"]`);
+            bodyCells.forEach(cell => {
+                cell.style.display = isVisible ? '' : 'none';
+            });
+        });
+    });
+
+    // Prevent dropdown from closing when clicking checkboxes
+    document.querySelectorAll('.dropdown-menu label').forEach(label => {
+        label.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+    });
+</script>
+</body>
+</html>

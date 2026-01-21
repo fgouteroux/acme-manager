@@ -137,6 +137,69 @@ func WatchTokenExpiration(logger log.Logger, interval time.Duration) {
 	}
 }
 
+// WatchRateLimitCleanup periodically cleans up expired rate limit entries.
+// Entries older than the configured rate limit window are deleted to prevent unbounded growth.
+func WatchRateLimitCleanup(logger log.Logger, interval time.Duration) {
+	// create a new Ticker
+	tk := time.NewTicker(interval)
+
+	// start the ticker
+	for range tk.C {
+		isLeaderNow, _ := ring.IsLeader(AmStore.RingConfig)
+		if isLeaderNow {
+			_ = level.Debug(logger).Log("msg", "check rate limit cleanup")
+
+			// Skip if rate limiting is not enabled
+			if !config.GlobalConfig.Common.RateLimitEnabled {
+				_ = level.Debug(logger).Log("msg", "rate limiting disabled, skipping cleanup")
+				continue
+			}
+
+			// Get the configured window duration
+			windowStr := config.GlobalConfig.Common.RateLimitWindow
+			if windowStr == "" {
+				windowStr = "1h"
+			}
+			window, err := time.ParseDuration(windowStr)
+			if err != nil {
+				_ = level.Error(logger).Log("msg", "failed to parse rate limit window", "err", err)
+				continue
+			}
+
+			// List all rate limits
+			rateLimits, err := AmStore.ListAllRateLimits()
+			if err != nil {
+				_ = level.Error(logger).Log("msg", "failed to list rate limits", "err", err)
+				continue
+			}
+
+			now := time.Now()
+			cleanedCount := 0
+
+			for key, rateLimit := range rateLimits {
+				// Check if the window has expired
+				windowStart := time.UnixMilli(rateLimit.WindowStartAt)
+				windowEnd := windowStart.Add(window)
+
+				if now.After(windowEnd) {
+					// Entry expired, delete it
+					err := AmStore.DeleteRateLimit(rateLimit.Owner, rateLimit.Issuer, rateLimit.Domain)
+					if err != nil {
+						_ = level.Error(logger).Log("msg", "failed to delete expired rate limit", "key", key, "err", err)
+						continue
+					}
+					cleanedCount++
+				}
+			}
+
+			if cleanedCount > 0 {
+				_ = level.Info(logger).Log("msg", "cleaned up expired rate limit entries", "count", cleanedCount)
+			}
+			_ = level.Debug(logger).Log("msg", "check rate limit cleanup done")
+		}
+	}
+}
+
 func WatchIssuerHealth(logger log.Logger, customLogger *logrus.Logger, interval time.Duration, version string) {
 	// create a new Ticker
 	tk := time.NewTicker(interval)

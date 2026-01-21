@@ -14,6 +14,7 @@ ACME Manager is a tool designed to create, manage, and deploy ACME certificates 
 - **Automatic refresh**: Configuration file are periodically refreshed without any service restart.
 - **Client Local Certificate**: Ensure that client local certificate deployed are always up-to-date.
 - **Client Local Cmd Run**: Run a custom command once certificate have been created/updated/renewed/deployed on the client.
+- **Rate Limiting**: Prevent excessive certificate requests with configurable per-user and per-token rate limits.
 
 ## How It Works
 

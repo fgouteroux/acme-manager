@@ -33,6 +33,82 @@ type responseErrorJSON struct {
 	Error string `json:"error" example:"error"`
 }
 
+// checkRateLimit checks if the request should be rate limited.
+// Returns (blocked, retryAfter in seconds, error)
+func checkRateLimit(tokenData *models.Token, owner, issuer, domain, operation string) (bool, int, error) {
+	// Check if rate limiting is enabled globally
+	if !config.GlobalConfig.Common.RateLimitEnabled {
+		return false, 0, nil
+	}
+
+	// Get rate limit settings (token overrides global)
+	windowStr := config.GlobalConfig.Common.RateLimitWindow
+	maxRequests := config.GlobalConfig.Common.RateLimitMaxRequests
+
+	if tokenData.RateLimitWindow != "" {
+		windowStr = tokenData.RateLimitWindow
+	}
+	if tokenData.RateLimitMaxRequests > 0 {
+		maxRequests = int(tokenData.RateLimitMaxRequests)
+	}
+
+	// Parse window duration
+	window, err := time.ParseDuration(windowStr)
+	if err != nil {
+		return false, 0, fmt.Errorf("invalid rate limit window: %v", err)
+	}
+
+	// Get current rate limit entry
+	rateLimit, err := certstore.AmStore.GetRateLimit(owner, issuer, domain)
+	if err != nil {
+		return false, 0, err
+	}
+
+	now := time.Now()
+	nowMs := now.UnixMilli()
+
+	if rateLimit == nil {
+		// First request, create new entry
+		rateLimit = &models.RateLimit{
+			Owner:         owner,
+			Issuer:        issuer,
+			Domain:        domain,
+			WindowStartAt: nowMs,
+			RequestCount:  1,
+		}
+		err = certstore.AmStore.PutRateLimit(rateLimit)
+		return false, 0, err
+	}
+
+	// Check if window has expired
+	windowStart := time.UnixMilli(rateLimit.WindowStartAt)
+	windowEnd := windowStart.Add(window)
+
+	if now.After(windowEnd) {
+		// Window expired, reset
+		rateLimit.WindowStartAt = nowMs
+		rateLimit.RequestCount = 1
+		err = certstore.AmStore.PutRateLimit(rateLimit)
+		return false, 0, err
+	}
+
+	// Window still active, check count
+	if int(rateLimit.RequestCount) >= maxRequests {
+		// Rate limited
+		retryAfter := int(windowEnd.Sub(now).Seconds())
+		if retryAfter < 1 {
+			retryAfter = 1
+		}
+		metrics.IncRateLimitBlocked(owner, issuer, domain, operation)
+		return true, retryAfter, nil
+	}
+
+	// Increment counter
+	rateLimit.RequestCount++
+	err = certstore.AmStore.PutRateLimit(rateLimit)
+	return false, 0, err
+}
+
 func responseJSON(w http.ResponseWriter, data interface{}, err error, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
@@ -431,6 +507,20 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
+		// Check rate limit before contacting ACME server
+		blocked, retryAfter, err := checkRateLimit(tokenValue, certData.Owner, certData.Issuer, certData.Domain, "create")
+		if err != nil {
+			_ = level.Error(logger).Log("msg", "rate limit check failed", "err", err)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
+			return
+		}
+		if blocked {
+			_ = level.Info(logger).Log("msg", "rate limit exceeded", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "retry_after", retryAfter)
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+			responseJSON(w, jsonData, fmt.Errorf("rate limit exceeded, retry after %ds", retryAfter), http.StatusTooManyRequests)
+			return
+		}
+
 		_ = level.Info(logger).Log("msg", "creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
 		newCert, err := certstore.CreateRemoteCertificateResource(certData, logger)
 		if err != nil {
@@ -658,6 +748,20 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		var newCert *models.Certificate
 		var renewalDate string
 		if recreateCert {
+			// Check rate limit before contacting ACME server (only for recreate operations)
+			blocked, retryAfter, err := checkRateLimit(tokenValue, certData.Owner, certData.Issuer, certData.Domain, "update")
+			if err != nil {
+				_ = level.Error(logger).Log("msg", "rate limit check failed", "err", err)
+				responseJSON(w, jsonData, err, http.StatusInternalServerError)
+				return
+			}
+			if blocked {
+				_ = level.Info(logger).Log("msg", "rate limit exceeded", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "retry_after", retryAfter)
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				responseJSON(w, jsonData, fmt.Errorf("rate limit exceeded, retry after %ds", retryAfter), http.StatusTooManyRequests)
+				return
+			}
+
 			if certParams.Revoke {
 				_ = level.Info(logger).Log("msg", "revoking certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
 				err = certstore.DeleteRemoteCertificateResource(certData, logger)

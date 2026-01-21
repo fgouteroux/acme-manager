@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package models;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/fgouteroux/acme-manager/models";
+
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+// RateLimit tracks certificate request counts per user and certificate
+// to prevent agents from repeatedly requesting the same certificate in a loop.
+message RateLimit {
+  // The owner (username) who made the request
+  string owner = 1;
+  // The certificate issuer
+  string issuer = 2;
+  // The certificate domain
+  string domain = 3;
+  // Unix timestamp in milliseconds when the current window started
+  int64 window_start_at = 4;
+  // Number of requests made in current window
+  int32 request_count = 5;
+  // Unix timestamp in milliseconds when we have updated the key.
+  int64 updated_at = 6;
+  // Unix timestamp in milliseconds when this entry was marked for deletion.
+  int64 deleted_at = 7;
+}

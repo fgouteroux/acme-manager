@@ -206,6 +206,14 @@ var (
 			Help: "Current number of HTTP requests being processed",
 		},
 	)
+
+	rateLimitBlockedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_rate_limit_blocked_total",
+			Help: "Total certificate requests blocked by rate limiting",
+		},
+		[]string{"owner", "issuer", "domain", "operation"},
+	)
 )
 
 func IncManagedCertificate(issuer, owner string) {
@@ -311,6 +319,10 @@ func DecHTTPRequestsInFlight() {
 	httpRequestsInFlight.Dec()
 }
 
+func IncRateLimitBlocked(owner, issuer, domain, operation string) {
+	rateLimitBlockedTotal.WithLabelValues(owner, issuer, domain, operation).Inc()
+}
+
 func init() {
 	collectors := []prometheus.Collector{
 		managedCertificate,
@@ -338,6 +350,7 @@ func init() {
 		httpRequestSize,
 		httpResponseSize,
 		httpRequestsInFlight,
+		rateLimitBlockedTotal,
 	}
 
 	for _, collector := range collectors {

@@ -296,6 +296,11 @@ func main() {
 	indexPage.AddLinks(tokenWeight, "Tokens", []IndexPageLink{
 		{Desc: "Managed tokens", Path: "/tokens"},
 	})
+	if config.GlobalConfig.Common.RateLimitEnabled {
+		indexPage.AddLinks(rateLimitWeight, "Rate Limits", []IndexPageLink{
+			{Desc: "Rate limits", Path: "/ratelimits"},
+		})
+	}
 	indexPage.AddLinks(metricsWeight, "Metrics", []IndexPageLink{
 		{Desc: "Exported metrics", Path: "/metrics"},
 	})
@@ -429,6 +434,9 @@ func main() {
 
 	go certstore.WatchIssuerHealth(logger, logrusLogger, *checkIssuerInterval, version.Version)
 
+	// rate limit cleanup (only if enabled)
+	go certstore.WatchRateLimitCleanup(logger, 1*time.Hour)
+
 	if *cleanup {
 		go certstore.Cleanup(logger, *cleanupInterval, *cleanupCertExpDays, *cleanupCertRevokeLastVersion)
 	}
@@ -439,6 +447,7 @@ func main() {
 	})))
 	http.Handle("/certificates", LoggerHandler(certificateListHandler()))
 	http.Handle("/tokens", LoggerHandler(tokenListHandler()))
+	http.Handle("/ratelimits", LoggerHandler(rateLimitListHandler()))
 
 	http.Handle(ChallengePath, MetricsHandler(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		httpChallengeHandler(w, req)

@@ -86,6 +86,7 @@ ACME Manager consists of several integrated layers:
 - Config Watcher (checks every 30 seconds)
 - Issuer Health Checker (checks every 10 minutes)
 - Cleanup Worker (optional, runs every 1 hour)
+- Rate Limit Cleanup Worker (runs every 1 hour, if rate limiting enabled)
 
 **Integration Layer:**
 - Vault Client (secure storage)
@@ -395,17 +396,22 @@ systemctl status acme-manager
 common:
   # API key hash for token management (SHA256 hash)
   api_key_hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-  
+
   # Account and certificate storage paths
   rootpath_account: /var/lib/acme-manager/accounts
   rootpath_certificate: /var/lib/acme-manager/certificates
-  
+
   # HTTP client retry configuration
   http_client_retry_max: 3
   http_client_retry_wait_min: 1
   http_client_retry_wait_max: 10
   http_client_retry_status_code: [429, 500, 502, 503, 504]
-  
+
+  # Rate limiting configuration (optional, disabled by default)
+  rate_limit_enabled: false        # Enable rate limiting for certificate requests
+  rate_limit_window: "1h"          # Time window for rate limiting (Go duration format)
+  rate_limit_max_requests: 1       # Maximum requests per window per certificate
+
   # Plugin configuration (optional)
   plugins:
     - name: acme-manager-custom-plugin
@@ -1173,6 +1179,72 @@ path "secret/data/tokens/*" {
 }
 ```
 
+## Rate Limiting
+
+### Overview
+
+Rate limiting prevents agents from repeatedly requesting the same certificate in a loop, protecting ACME servers from excessive requests.
+
+**Key Features:**
+- Tracks requests per owner/issuer/domain combination
+- Configurable time window and max requests
+- Per-token override settings
+- Returns HTTP 429 with Retry-After header when blocked
+- Disabled by default
+
+### Configuration
+
+**Global Configuration (config.yml):**
+```yaml
+common:
+  rate_limit_enabled: true        # Enable rate limiting (default: false)
+  rate_limit_window: "1h"         # Time window (default: 1h)
+  rate_limit_max_requests: 1      # Max requests per window (default: 1)
+```
+
+**Per-Token Override (API request):**
+```json
+POST /api/v1/token
+{
+  "username": "agent1",
+  "scope": ["create", "read"],
+  "rate_limit_window": "30m",
+  "rate_limit_max_requests": 5
+}
+```
+
+### Behavior
+
+- **Applies to:** Certificate Create and Update (only when ACME server is contacted)
+- **Does NOT apply to:** Delete operations, automatic renewals, metadata-only updates
+- **Resolution order:**
+  1. If token has rate limit settings → use token's values
+  2. Otherwise → use global config values
+  3. If global not set → defaults (1 request per 1 hour)
+
+### HTTP 429 Response
+
+When rate limit is exceeded:
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 847
+Content-Type: application/json
+
+{"error": "rate limit exceeded for example.com, 5/5 requests in current window, retry after 847s"}
+```
+
+### Web UI
+
+When rate limiting is enabled, a "Rate Limits" link appears on the index page (`/ratelimits`) showing:
+- Owner, Issuer, Domain
+- Request count (current/max)
+- Window start/end times
+- Time remaining until window reset
+
+### Cleanup
+
+Expired rate limit entries are automatically cleaned up every hour by the Rate Limit Cleanup Worker (runs on the leader node only).
+
 ## Monitoring
 
 ### Prometheus Metrics
@@ -1208,6 +1280,9 @@ acme_manager_config_error
 
 # Issuer health
 acme_manager_issuer_config_error{issuer}
+
+# Rate limiting
+acme_manager_rate_limit_blocked_total{owner, issuer, domain, operation}
 
 # System metrics
 acme_manager_build_info{version, revision, branch, goversion}

@@ -17,6 +17,7 @@ import (
 	"github.com/grafana/dskit/kv/memberlist"
 
 	"github.com/fgouteroux/acme-manager/certstore"
+	"github.com/fgouteroux/acme-manager/config"
 	"github.com/fgouteroux/acme-manager/metrics"
 	"github.com/fgouteroux/acme-manager/models"
 	"github.com/fgouteroux/acme-manager/ring"
@@ -57,6 +58,7 @@ type IndexPageLink struct {
 const (
 	certificateWeight = iota
 	tokenWeight
+	rateLimitWeight
 	metricsWeight
 	hostWeight
 	hostFactWeight
@@ -254,6 +256,141 @@ func tokenListHandler() http.HandlerFunc {
 			},
 		})
 		template.Must(templ.Parse(tokenPageHTML))
+
+		err = templ.Execute(w, v)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+}
+
+//go:embed templates/ratelimit.gohtml
+var rateLimitPageHTML string
+
+// RateLimitEntry represents a rate limit entry with calculated fields for display
+type RateLimitEntry struct {
+	Owner        string
+	Issuer       string
+	Domain       string
+	RequestCount int32
+	MaxRequests  int
+	WindowStart  time.Time
+	WindowEnd    time.Time
+	Remaining    string
+}
+
+type rateLimitHandlerData struct {
+	Now        time.Time
+	RateLimits []*RateLimitEntry
+}
+
+func rateLimitListHandler() http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, err := certstore.AmStore.ListAllRateLimits()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Get all tokens to look up per-token rate limit settings
+		tokens, err := certstore.AmStore.ListAllTokens()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Build a map of owner (username) to token for quick lookup
+		tokensByOwner := make(map[string]*models.Token)
+		for _, token := range tokens {
+			tokensByOwner[token.Username] = token
+		}
+
+		// Get global defaults
+		globalWindowStr := config.GlobalConfig.Common.RateLimitWindow
+		if globalWindowStr == "" {
+			globalWindowStr = "1h"
+		}
+		globalWindow, err := time.ParseDuration(globalWindowStr)
+		if err != nil {
+			globalWindow = time.Hour
+		}
+
+		globalMaxRequests := config.GlobalConfig.Common.RateLimitMaxRequests
+		if globalMaxRequests == 0 {
+			globalMaxRequests = 1
+		}
+
+		now := time.Now()
+		var entries []*RateLimitEntry
+
+		for _, rl := range data {
+			// Determine window and maxRequests for this entry
+			window := globalWindow
+			maxRequests := globalMaxRequests
+
+			// Check if token has override settings
+			if token, ok := tokensByOwner[rl.Owner]; ok {
+				if token.RateLimitWindow != "" {
+					if tokenWindow, err := time.ParseDuration(token.RateLimitWindow); err == nil {
+						window = tokenWindow
+					}
+				}
+				if token.RateLimitMaxRequests > 0 {
+					maxRequests = int(token.RateLimitMaxRequests)
+				}
+			}
+
+			windowStart := time.UnixMilli(rl.WindowStartAt)
+			windowEnd := windowStart.Add(window)
+
+			remaining := ""
+			if now.Before(windowEnd) {
+				dur := windowEnd.Sub(now)
+				if dur >= time.Hour {
+					remaining = fmt.Sprintf("%dh%dm", int(dur.Hours()), int(dur.Minutes())%60)
+				} else if dur >= time.Minute {
+					remaining = fmt.Sprintf("%dm%ds", int(dur.Minutes()), int(dur.Seconds())%60)
+				} else {
+					remaining = fmt.Sprintf("%ds", int(dur.Seconds()))
+				}
+			} else {
+				remaining = "expired"
+			}
+
+			entries = append(entries, &RateLimitEntry{
+				Owner:        rl.Owner,
+				Issuer:       rl.Issuer,
+				Domain:       rl.Domain,
+				RequestCount: rl.RequestCount,
+				MaxRequests:  maxRequests,
+				WindowStart:  windowStart,
+				WindowEnd:    windowEnd,
+				Remaining:    remaining,
+			})
+		}
+
+		v := &rateLimitHandlerData{
+			Now:        now,
+			RateLimits: entries,
+		}
+
+		accept := r.Header.Get("Accept")
+		if strings.Contains(accept, "application/json") {
+			w.Header().Set("Content-Type", "application/json")
+
+			if err := json.NewEncoder(w).Encode(v.RateLimits); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+
+		templ := template.New("main")
+		templ.Funcs(map[string]interface{}{
+			"AddPathPrefix": func(link string) string {
+				return path.Join("", link)
+			},
+		})
+		template.Must(templ.Parse(rateLimitPageHTML))
 
 		err = templ.Execute(w, v)
 		if err != nil {

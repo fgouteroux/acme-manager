@@ -17,6 +17,7 @@ const (
 	CertificatePrefix = "certificate"
 	TokenPrefix       = "token"
 	ChallengePrefix   = "challenge"
+	RateLimitPrefix   = "ratelimit"
 )
 
 // =================== CERTIFICATES ===================
@@ -403,4 +404,95 @@ func (c *CertStore) ListAllChallenges() (map[string]string, error) {
 	}
 
 	return challenges, nil
+}
+
+// =================== RATE LIMITS ===================
+
+// GenerateRateLimitKey creates a hierarchical key for rate limits
+func GenerateRateLimitKey(owner, issuer, domain string) string {
+	return fmt.Sprintf("%s/%s/%s/%s", RateLimitPrefix, owner, issuer, domain)
+}
+
+func (c *CertStore) ListRateLimitKVRingKeys(prefix string) ([]string, error) {
+	return c.RingConfig.RateLimitClient.List(context.Background(), prefix)
+}
+
+// Store rate limit
+func (c *CertStore) PutRateLimit(rateLimit *models.RateLimit) error {
+	key := GenerateRateLimitKey(rateLimit.Owner, rateLimit.Issuer, rateLimit.Domain)
+
+	// Update the timestamp
+	rateLimit.UpdatedAt = timestamp.FromTime(time.Now())
+
+	ctx := context.Background()
+	err := c.RingConfig.RateLimitClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
+		return rateLimit, true, nil
+	})
+
+	if err != nil {
+		_ = level.Error(c.Logger).Log("msg", "Failed to store rate limit", "key", key, "err", err)
+	}
+	return err
+}
+
+// Get rate limit
+func (c *CertStore) GetRateLimit(owner, issuer, domain string) (*models.RateLimit, error) {
+	key := GenerateRateLimitKey(owner, issuer, domain)
+
+	ctx := context.Background()
+	cached, err := c.RingConfig.RateLimitClient.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+
+	if cached == nil {
+		return nil, nil // Not found is not an error for rate limits
+	}
+
+	rateLimit := cached.(*models.RateLimit)
+
+	// Check for deletion
+	if rateLimit.DeletedAt > 0 {
+		return nil, nil
+	}
+
+	return rateLimit, nil
+}
+
+// Delete rate limit
+func (c *CertStore) DeleteRateLimit(owner, issuer, domain string) error {
+	key := GenerateRateLimitKey(owner, issuer, domain)
+
+	ctx := context.Background()
+	return c.RingConfig.RateLimitClient.Delete(ctx, key)
+}
+
+// List all rate limits
+func (c *CertStore) ListAllRateLimits() (map[string]*models.RateLimit, error) {
+	keys, err := c.ListRateLimitKVRingKeys(RateLimitPrefix + "/")
+	if err != nil {
+		return nil, err
+	}
+
+	rateLimits := make(map[string]*models.RateLimit, len(keys))
+	ctx := context.Background()
+
+	for _, key := range keys {
+		cached, err := c.RingConfig.RateLimitClient.Get(ctx, key)
+		if err != nil {
+			_ = level.Error(c.Logger).Log("msg", "Failed to get rate limit", "key", key, "err", err)
+			continue
+		}
+
+		if cached == nil {
+			continue
+		}
+
+		rateLimit := cached.(*models.RateLimit)
+		if rateLimit.DeletedAt == 0 {
+			rateLimits[key] = rateLimit
+		}
+	}
+
+	return rateLimits, nil
 }

@@ -567,6 +567,19 @@ http://localhost:8989/metrics
 3. Ensure correct Authorization header format
 4. Contact administrator if token is invalid
 
+### Rate Limit Errors (HTTP 429)
+
+If you receive a `429 Too Many Requests` response:
+
+```json
+{"error": "rate limit exceeded for example.com, 5/5 requests in current window, retry after 847s"}
+```
+
+1. Check the `Retry-After` header for when you can retry
+2. Wait for the specified time before making another request
+3. Rate limiting applies to certificate create and update operations
+4. Contact your administrator if you need a higher rate limit (per-token override is possible)
+
 ## Support
 
 For issues and questions:

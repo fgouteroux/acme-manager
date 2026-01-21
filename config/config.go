@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/fgouteroux/acme-manager/utils"
 
@@ -46,6 +47,10 @@ type Common struct {
 	HTTPClientRetryWaitMax    int      `yaml:"http_client_retry_wait_max"`
 	HTTPClientRetryStatusCode []int    `yaml:"http_client_retry_status_code"`
 	HTTPClientDebug           bool     `yaml:"http_client_debug"`
+	// Rate limiting configuration
+	RateLimitEnabled     bool   `yaml:"rate_limit_enabled"`      // Enable rate limiting (default: false)
+	RateLimitWindow      string `yaml:"rate_limit_window"`       // Time window for rate limiting (default: "1h")
+	RateLimitMaxRequests int    `yaml:"rate_limit_max_requests"` // Max requests per window (default: 1)
 }
 
 type Issuer struct {
@@ -92,6 +97,22 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		s.Common.CertDaysRenewal = "20-30"
 	} else if _, _, err := utils.ValidateRenewalDays(s.Common.CertDaysRenewal); err != nil {
 		return err
+	}
+
+	// Rate limiting defaults and validation
+	if s.Common.RateLimitEnabled {
+		if s.Common.RateLimitWindow == "" {
+			s.Common.RateLimitWindow = "1h"
+		}
+		if _, err := time.ParseDuration(s.Common.RateLimitWindow); err != nil {
+			return fmt.Errorf("invalid rate_limit_window '%s': %v", s.Common.RateLimitWindow, err)
+		}
+		if s.Common.RateLimitMaxRequests == 0 {
+			s.Common.RateLimitMaxRequests = 1
+		}
+		if s.Common.RateLimitMaxRequests < 0 {
+			return fmt.Errorf("rate_limit_max_requests must be positive, got %d", s.Common.RateLimitMaxRequests)
+		}
 	}
 
 	for issuer, issuerConf := range s.Issuer {
