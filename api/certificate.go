@@ -15,7 +15,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
-	"github.com/go-acme/lego/v4/certcrypto"
+	"github.com/go-acme/lego/v5/certcrypto"
 
 	"github.com/fgouteroux/acme-manager/certstore"
 	"github.com/fgouteroux/acme-manager/config"

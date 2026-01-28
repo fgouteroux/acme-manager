@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"slices"
@@ -18,12 +19,12 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
-	"github.com/go-acme/lego/v4/certcrypto"
-	"github.com/go-acme/lego/v4/certificate"
-	"github.com/go-acme/lego/v4/challenge/dns01"
-	"github.com/go-acme/lego/v4/lego"
-	"github.com/go-acme/lego/v4/platform/config/env"
-	"github.com/go-acme/lego/v4/providers/dns"
+	"github.com/go-acme/lego/v5/certcrypto"
+	"github.com/go-acme/lego/v5/certificate"
+	"github.com/go-acme/lego/v5/challenge/dns01"
+	"github.com/go-acme/lego/v5/lego"
+	"github.com/go-acme/lego/v5/platform/config/env"
+	"github.com/go-acme/lego/v5/providers/dns"
 
 	"github.com/fgouteroux/acme-manager/config"
 	"github.com/fgouteroux/acme-manager/metrics"
@@ -56,7 +57,7 @@ func RevokeCertificateWithVerification(logger log.Logger, issuerAcmeClient *lego
 		versionStr = fmt.Sprintf(", version=%d", *version)
 	}
 
-	err := issuerAcmeClient.Certificate.Revoke(certBytes)
+	err := issuerAcmeClient.Certificate.Revoke(context.Background(), certBytes)
 	switch {
 	case err == nil:
 		_ = level.Info(logger).Log("msg", "certificate revoked successfully, will destroy in next cleanup cycle"+versionStr, "domain", domain, "issuer", issuer, "owner", owner)
@@ -191,10 +192,16 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 			return certData, err
 		}
 
+		// Configure DNS client options (nameservers and timeout)
+		dnsClientOpts := &dns01.Options{
+			Timeout: time.Duration(dnsTimeout) * time.Second,
+		}
+		if dnsResolvers != "" {
+			dnsClientOpts.RecursiveNameservers = parseNameservers(strings.Split(dnsResolvers, ","))
+		}
+		dns01.SetDefaultClient(dns01.NewClient(dnsClientOpts))
+
 		err = issuerAcmeClient.Challenge.SetDNS01Provider(dnsProvider,
-			dns01.CondOption(dnsResolvers != "",
-				dns01.AddRecursiveNameservers(dns01.ParseNameservers(strings.Split(dnsResolvers, ","))),
-			),
 			dns01.CondOption(dnsPropagationDisableANS,
 				dns01.DisableAuthoritativeNssPropagationRequirement(),
 			),
@@ -203,9 +210,6 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 			),
 			dns01.CondOption(dnsPropagationRNS,
 				dns01.RecursiveNSsPropagationRequirement(),
-			),
-			dns01.CondOption(dnsTimeout > 0,
-				dns01.AddDNSTimeout(time.Duration(dnsTimeout)*time.Second),
 			),
 		)
 		if err != nil {
@@ -247,7 +251,7 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 		}
 	}
 
-	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(request)
+	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(context.Background(), request)
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "failed to obtain certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
 		metrics.SetCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
@@ -449,4 +453,22 @@ func executeCommand(logger log.Logger, cmdPath string, cmdArgs []string, cmdTime
 	_ = level.Debug(logger).Log("msg", "command output", "output", out)
 
 	return nil
+}
+
+// parseNameservers ensures all nameservers have a port number.
+func parseNameservers(servers []string) []string {
+	var resolvers []string
+	for _, resolver := range servers {
+		resolver = strings.TrimSpace(resolver)
+		if resolver == "" {
+			continue
+		}
+		// ensure all servers have a port number
+		if _, _, err := net.SplitHostPort(resolver); err != nil {
+			resolvers = append(resolvers, net.JoinHostPort(resolver, "53"))
+		} else {
+			resolvers = append(resolvers, resolver)
+		}
+	}
+	return resolvers
 }

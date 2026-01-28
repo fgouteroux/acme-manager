@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -26,8 +25,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	httpSwagger "github.com/swaggo/http-swagger"
-
-	legoLog "github.com/go-acme/lego/v4/log"
 
 	"github.com/fgouteroux/acme-manager/api"
 	"github.com/fgouteroux/acme-manager/certstore"
@@ -203,62 +200,12 @@ func main() {
 		os.Exit(0)
 	}
 
-	// set custom logger
-	logrusLogger := logrus.New()
-	logrusLogger.SetReportCaller(true)
-
-	parsedLogLevel, err := logrus.ParseLevel(*logLevel)
-	if err != nil {
-		parsedLogLevel = logrus.InfoLevel
-	}
-	logrusLogger.SetLevel(parsedLogLevel)
-
-	if *logFormat == "json" {
-		logrusLogger.SetFormatter(utils.UTCFormatter{Formatter: &logrus.JSONFormatter{
-			TimestampFormat: "2006-01-02T15:04:05.000Z",
-			FieldMap: logrus.FieldMap{
-				logrus.FieldKeyTime: "ts",
-				logrus.FieldKeyFile: "caller",
-			},
-			CallerPrettyfier: func(f *runtime.Frame) (string, string) {
-				return "", fmt.Sprintf("%s:%d", utils.FormatFilePath(f.File), f.Line)
-			},
-		}})
-	} else {
-		logrusLogger.SetFormatter(&utils.CustomTextFormatter{
-			TimestampFormat: "2006-01-02T15:04:05.000Z",
-		})
-	}
-
-	logrusLogger.SetOutput(&utils.CustomWriter{Writer: os.Stdout})
-	logrusLogger.AddHook(&utils.DebugLevelHook{Logger: logrusLogger})
-
-	// Override lego logger
-	legoLog.Logger = logrusLogger
-
-	// Create go-kit logger
-	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stdout))
-	if *logFormat == "json" {
-		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stdout))
-	}
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.Caller(5))
-
-	// Set log level for go-kit logger
-	switch *logLevel {
-	case "debug":
-		logger = level.NewFilter(logger, level.AllowDebug())
-	case "info":
-		logger = level.NewFilter(logger, level.AllowInfo())
-	case "warn":
-		logger = level.NewFilter(logger, level.AllowWarn())
-	case "error":
-		logger = level.NewFilter(logger, level.AllowError())
-	default:
-		logger = level.NewFilter(logger, level.AllowInfo())
-	}
+	// Setup all loggers (go-kit, logrus, and lego slog)
+	var logrusLogger *logrus.Logger
+	logger, logrusLogger = utils.SetupLoggers(*logLevel, *logFormat)
 
 	// Load environment and config
-	err = godotenv.Load(*envConfigPath)
+	err := godotenv.Load(*envConfigPath)
 	if err != nil {
 		_ = level.Debug(logger).Log("msg", "env config file not found", "path", *envConfigPath)
 	}

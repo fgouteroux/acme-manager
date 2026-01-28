@@ -10,7 +10,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/sirupsen/logrus"
 
-	"github.com/go-acme/lego/v4/certcrypto"
+	"github.com/go-acme/lego/v5/certcrypto"
 
 	"github.com/fgouteroux/acme-manager/config"
 	"github.com/fgouteroux/acme-manager/metrics"
