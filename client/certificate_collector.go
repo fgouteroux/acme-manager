@@ -37,7 +37,7 @@ func (c *CertificateCollector) Collect(ch chan<- prometheus.Metric) {
 		notAfter, _ := time.Parse(layout, cert.Expires)
 
 		// Calculate the number of days until expiration
-		daysUntilExpiration := float64(math.Round(time.Until(notAfter).Hours() / 24))
+		daysUntilExpiration := math.Trunc(time.Until(notAfter).Hours() / 24)
 		ch <- prometheus.MustNewConstMetric(
 			prometheus.NewDesc(
 				"acme_manager_certificate_expiry",
