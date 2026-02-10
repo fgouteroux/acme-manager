@@ -2,6 +2,8 @@
 package certstore
 
 import (
+	"context"
+
 	"github.com/go-kit/log"
 )
 
@@ -10,17 +12,17 @@ type HTTPProvider struct {
 	logger log.Logger
 }
 
-// NewMemcacheProvider returns a HTTPProvider instance with a configured webroot path.
+// NewKVRingProvider returns a HTTPProvider instance with a configured webroot path.
 func NewKVRingProvider(logger log.Logger) (*HTTPProvider, error) {
 	return &HTTPProvider{logger: logger}, nil
 }
 
 // Present makes the token available at `HTTP01ChallengePath(token)` by creating the key in the kvring.
-func (w *HTTPProvider) Present(_, token, keyAuth string) error {
+func (w *HTTPProvider) Present(_ context.Context, _, token, keyAuth string) error {
 	return AmStore.PutChallenge(token, keyAuth)
 }
 
 // CleanUp removes the file created for the challenge.
-func (w *HTTPProvider) CleanUp(_, token, _ string) error {
+func (w *HTTPProvider) CleanUp(_ context.Context, _, token, _ string) error {
 	return AmStore.DeleteChallenge(token)
 }

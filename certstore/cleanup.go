@@ -9,7 +9,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
-	"github.com/go-acme/lego/v4/lego"
+	"github.com/go-acme/lego/v5/lego"
 
 	"github.com/fgouteroux/acme-manager/ring"
 	"github.com/fgouteroux/acme-manager/storage/vault"

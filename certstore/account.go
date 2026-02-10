@@ -17,13 +17,13 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 
-	"github.com/go-acme/lego/v4/certcrypto"
-	"github.com/go-acme/lego/v4/challenge"
-	"github.com/go-acme/lego/v4/lego"
-	"github.com/go-acme/lego/v4/providers/http/memcached"
-	"github.com/go-acme/lego/v4/providers/http/s3"
-	"github.com/go-acme/lego/v4/providers/http/webroot"
-	"github.com/go-acme/lego/v4/registration"
+	"github.com/go-acme/lego/v5/certcrypto"
+	"github.com/go-acme/lego/v5/challenge"
+	"github.com/go-acme/lego/v5/lego"
+	"github.com/go-acme/lego/v5/providers/http/memcached"
+	"github.com/go-acme/lego/v5/providers/http/s3"
+	"github.com/go-acme/lego/v5/providers/http/webroot"
+	"github.com/go-acme/lego/v5/registration"
 
 	"github.com/fgouteroux/acme-manager/config"
 	"github.com/fgouteroux/acme-manager/metrics"
@@ -90,7 +90,7 @@ func tryRecoverRegistration(customLogger *logrus.Logger, cfg config.Config, priv
 		return client, nil, err
 	}
 
-	reg, err := client.Registration.ResolveAccountByKey()
+	reg, err := client.Registration.ResolveAccountByKey(context.Background())
 	if err != nil {
 		return client, nil, err
 	}
@@ -153,7 +153,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 
 			if reg == nil {
 				if issuerConf.EAB {
-					reg, err = client.Registration.RegisterWithExternalAccountBinding(registration.RegisterEABOptions{
+					reg, err = client.Registration.RegisterWithExternalAccountBinding(context.Background(), registration.RegisterEABOptions{
 						TermsOfServiceAgreed: true,
 						Kid:                  issuerConf.KID,
 						HmacEncoded:          issuerConf.HMAC,
@@ -163,7 +163,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 						continue
 					}
 				} else {
-					reg, err = client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
+					reg, err = client.Registration.Register(context.Background(), registration.RegisterOptions{TermsOfServiceAgreed: true})
 					if err != nil {
 						_ = level.Error(logger).Log("msg", "failed to register account", "issuer", issuer, "err", err)
 						continue
@@ -185,7 +185,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 						continue
 					}
 
-					reg, err = client.Registration.UpdateRegistration(registration.RegisterOptions{TermsOfServiceAgreed: true})
+					reg, err = client.Registration.UpdateRegistration(context.Background(), registration.RegisterOptions{TermsOfServiceAgreed: true})
 					if err != nil {
 						_ = level.Error(logger).Log("msg", "failed to update registration", "issuer", issuer, "err", err)
 						continue
@@ -217,7 +217,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 				_ = level.Error(logger).Log("msg", "failed to create lego client", "issuer", issuer, "err", err)
 				continue
 			}
-			reg, err := client.Registration.UpdateRegistration(registration.RegisterOptions{TermsOfServiceAgreed: true})
+			reg, err := client.Registration.UpdateRegistration(context.Background(), registration.RegisterOptions{TermsOfServiceAgreed: true})
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "failed to update registration", "issuer", issuer, "err", err)
 				continue
@@ -247,7 +247,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 				continue
 			}
 
-			err = client.Registration.DeleteRegistration()
+			err = client.Registration.DeleteRegistration(context.Background())
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "unable to unregister issuer account", "issuer", issuer, "err", err)
 				continue

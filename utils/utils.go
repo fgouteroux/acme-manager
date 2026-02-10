@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"io"
+	"log/slog"
 	"net/http"
 
 	mathRand "math/rand"
@@ -33,7 +34,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
-	"github.com/go-acme/lego/v4/certcrypto"
+	"github.com/go-acme/lego/v5/certcrypto"
+	legoLog "github.com/go-acme/lego/v5/log"
 	"github.com/hashicorp/go-retryablehttp"
 
 	"github.com/sirupsen/logrus"
@@ -571,4 +573,87 @@ func (cw *CustomWriter) Write(p []byte) (n int, err error) {
 		return len(p), nil
 	}
 	return cw.Writer.Write(p)
+}
+
+// SetupLoggers creates and configures all loggers (logrus, go-kit, and lego slog).
+// Returns the go-kit logger and logrus logger.
+func SetupLoggers(logLevel, logFormat string) (log.Logger, *logrus.Logger) {
+	// Setup logrus logger
+	logrusLogger := logrus.New()
+	logrusLogger.SetReportCaller(true)
+
+	parsedLogLevel, err := logrus.ParseLevel(logLevel)
+	if err != nil {
+		parsedLogLevel = logrus.InfoLevel
+	}
+	logrusLogger.SetLevel(parsedLogLevel)
+
+	if logFormat == "json" {
+		logrusLogger.SetFormatter(UTCFormatter{Formatter: &logrus.JSONFormatter{
+			TimestampFormat: "2006-01-02T15:04:05.000Z",
+			FieldMap: logrus.FieldMap{
+				logrus.FieldKeyTime: "ts",
+				logrus.FieldKeyFile: "caller",
+			},
+			CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+				return "", fmt.Sprintf("%s:%d", FormatFilePath(f.File), f.Line)
+			},
+		}})
+	} else {
+		logrusLogger.SetFormatter(&CustomTextFormatter{
+			TimestampFormat: "2006-01-02T15:04:05.000Z",
+		})
+	}
+
+	logrusLogger.SetOutput(&CustomWriter{Writer: os.Stdout})
+	logrusLogger.AddHook(&DebugLevelHook{Logger: logrusLogger})
+
+	// Setup go-kit logger
+	var logger log.Logger
+	if logFormat == "json" {
+		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stdout))
+	} else {
+		logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stdout))
+	}
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.Caller(5))
+
+	// Parse log level for both go-kit and slog
+	var slogLevel slog.Level
+	switch logLevel {
+	case "debug":
+		logger = level.NewFilter(logger, level.AllowDebug())
+		slogLevel = slog.LevelDebug
+	case "info":
+		logger = level.NewFilter(logger, level.AllowInfo())
+		slogLevel = slog.LevelInfo
+	case "warn":
+		logger = level.NewFilter(logger, level.AllowWarn())
+		slogLevel = slog.LevelWarn
+	case "error":
+		logger = level.NewFilter(logger, level.AllowError())
+		slogLevel = slog.LevelError
+	default:
+		logger = level.NewFilter(logger, level.AllowInfo())
+		slogLevel = slog.LevelInfo
+	}
+
+	// Setup lego logger with slog
+	// Use ReplaceAttr to output lowercase level names for consistency
+	replaceAttr := func(groups []string, a slog.Attr) slog.Attr {
+		if a.Key == slog.LevelKey {
+			level := a.Value.Any().(slog.Level)
+			a.Value = slog.StringValue(strings.ToLower(level.String()))
+		}
+		return a
+	}
+
+	var slogHandler slog.Handler
+	if logFormat == "json" {
+		slogHandler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slogLevel, ReplaceAttr: replaceAttr})
+	} else {
+		slogHandler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slogLevel, ReplaceAttr: replaceAttr})
+	}
+	legoLog.SetDefault(slog.New(slogHandler))
+
+	return logger, logrusLogger
 }
