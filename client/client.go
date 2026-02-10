@@ -123,36 +123,6 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			continue
 		}
 
-		// Save private key BEFORE calling CreateCertificate to prevent loss on timeout
-		// If the server times out but continues processing, we still have the key for reconciliation
-		if GlobalConfig.Common.CertDeploy {
-			err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+certData.Issuer, GlobalConfig.Common.CertDirPerm)
-			if err != nil {
-				hasErrors = true
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
-				continue
-			}
-			err = createLocalPrivateKeyFile(keyFilePath, privateKey)
-			if err != nil {
-				hasErrors = true
-				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
-				continue
-			}
-			_ = level.Info(logger).Log("msg", "local private key file created", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
-		}
-
-		// Backup private key to Vault BEFORE calling CreateCertificate
-		if GlobalConfig.Common.CertBackup {
-			data := CertBackup{Key: string(privateKey)}
-			vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", GlobalConfig.Storage.Vault.CertPrefix, Owner, certData.Issuer, certData.Domain)
-			err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
-			if err != nil {
-				_ = level.Error(logger).Log("msg", "failed to backup private key to vault", "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
-			} else {
-				_ = level.Info(logger).Log("msg", "private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
-			}
-		}
-
 		certDataBytes, _ := json.Marshal(certData)
 
 		var certParams models.CertificateParams
@@ -178,13 +148,25 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 			err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "failed to backup certificate", "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
-			} else {
-				_ = level.Info(logger).Log("msg", "certificate and private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
 			}
+			_ = level.Info(logger).Log("msg", "certificate and private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
 		}
 
 		if GlobalConfig.Common.CertDeploy {
 			hasChange = true
+			err := utils.CreateNonExistingFolder(GlobalConfig.Common.CertDir+newCert.Issuer, GlobalConfig.Common.CertDirPerm)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+				continue
+			}
+			err = createLocalPrivateKeyFile(keyFilePath, privateKey)
+			if err != nil {
+				hasErrors = true
+				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+				continue
+			}
+			_ = level.Info(logger).Log("msg", "local private key file created", "domain", certData.Domain, "issuer", certData.Issuer, "owner", Owner)
+
 			err = createLocalCertificateFile(newCert)
 			if err != nil {
 				hasErrors = true
