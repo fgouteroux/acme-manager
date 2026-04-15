@@ -566,30 +566,40 @@ This endpoint return metrics about app itself.
 # HELP acme_manager_build_info A metric with a constant '1' value labeled by version, revision, branch, goversion from which acme_manager was built, and the goos and goarch for the build.
 # TYPE acme_manager_build_info gauge
 acme_manager_build_info{branch="HEAD",goarch="amd64",goos="linux",goversion="go1.22.10",revision="f9b7946ad9150bfd1e9b19ff5d1f8b47ceffdbc3",tags="unknown",version="0.1.5"} 1
-# HELP acme_manager_certificate_created_total Number of created certificates by issuer and owner
-# TYPE acme_manager_certificate_created_total counter
-acme_manager_certificate_created_total{issuer="letsencrypt",owner="testfgx"} 1
-acme_manager_certificate_created_total{issuer="sectigo",owner="testfgx"} 1
-# HELP acme_manager_certificate_revoked_total Number of revoked certificates by issuer and owner
+# HELP acme_manager_certificate_creations_total Total number of successfully created certificates by issuer, owner and domain
+# TYPE acme_manager_certificate_creations_total counter
+acme_manager_certificate_creations_total{domain="example.com",issuer="letsencrypt",owner="testfgx"} 1
+acme_manager_certificate_creations_total{domain="example.org",issuer="sectigo",owner="testfgx"} 1
+# HELP acme_manager_certificate_creation_errors_total Total number of certificate creation errors by issuer, owner and domain
+# TYPE acme_manager_certificate_creation_errors_total counter
+acme_manager_certificate_creation_errors_total{domain="example.com",issuer="letsencrypt",owner="testfgx"} 0
+# HELP acme_manager_certificate_renewals_total Total number of successfully renewed certificates by issuer, owner and domain
+# TYPE acme_manager_certificate_renewals_total counter
+acme_manager_certificate_renewals_total{domain="example.com",issuer="letsencrypt",owner="testfgx"} 2
+# HELP acme_manager_certificate_renewal_errors_total Total number of certificate renewal errors by issuer, owner and domain
+# TYPE acme_manager_certificate_renewal_errors_total counter
+acme_manager_certificate_renewal_errors_total{domain="example.com",issuer="letsencrypt",owner="testfgx"} 0
+# HELP acme_manager_certificate_revoked_total Total number of successfully revoked certificates by issuer, owner and domain
 # TYPE acme_manager_certificate_revoked_total counter
-acme_manager_certificate_revoked_total{issuer="sectigo",owner="testfgx"} 1
-# HELP acme_manager_certificate_total Number of managed certificates by issuer and owner
+acme_manager_certificate_revoked_total{domain="example.org",issuer="sectigo",owner="testfgx"} 1
+# HELP acme_manager_certificate_total Number of managed certificates by issuer, owner and domain
 # TYPE acme_manager_certificate_total gauge
-acme_manager_certificate_total{issuer="letsencrypt",owner="testfgx"} 1
-acme_manager_certificate_total{issuer="sectigo",owner="testfgx"} 1
+acme_manager_certificate_total{domain="example.com",issuer="letsencrypt",owner="testfgx"} 1
+acme_manager_certificate_total{domain="example.org",issuer="sectigo",owner="testfgx"} 1
 # HELP acme_manager_issuer_config_error 1 if there was an error with issuer config, 0 otherwise
 # TYPE acme_manager_issuer_config_error gauge
 acme_manager_issuer_config_error{issuer="letsencrypt"} 0
 acme_manager_issuer_config_error{issuer="sectigo"} 0
-# HELP acme_manager_vault_delete_secret_success_total Number of created vault secrets
+# HELP acme_manager_vault_delete_secret_success_total Number of deleted vault secrets
 # TYPE acme_manager_vault_delete_secret_success_total counter
-acme_manager_vault_delete_secret_success_total 1
+acme_manager_vault_delete_secret_success_total{secret_type="certificate"} 1
 # HELP acme_manager_vault_get_secret_success_total Number of retrieved vault secrets
 # TYPE acme_manager_vault_get_secret_success_total counter
-acme_manager_vault_get_secret_success_total 5
+acme_manager_vault_get_secret_success_total{secret_type="certificate"} 4
+acme_manager_vault_get_secret_success_total{secret_type="token"} 1
 # HELP acme_manager_vault_put_secret_success_total Number of created/updated vault secrets
 # TYPE acme_manager_vault_put_secret_success_total counter
-acme_manager_vault_put_secret_success_total 2
+acme_manager_vault_put_secret_success_total{secret_type="certificate"} 2
 ```
 
 ### Limitations

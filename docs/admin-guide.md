@@ -1253,29 +1253,32 @@ Expired rate limit entries are automatically cleaned up every hour by the Rate L
 
 ```prometheus
 # Certificate operations
-acme_manager_certificate_total
-acme_manager_certificate_created
-acme_manager_certificate_revoke
-acme_manager_certificate_renewed
+acme_manager_certificate_total{issuer, owner, domain}
+acme_manager_certificate_creations_total{issuer, owner, domain}
+acme_manager_certificate_creation_errors_total{issuer, owner, domain}
+acme_manager_certificate_revoked_total{issuer, owner, domain}
+acme_manager_certificate_revoked_errors_total{issuer, owner, domain}
+acme_manager_certificate_renewals_total{issuer, owner, domain}
+acme_manager_certificate_renewal_errors_total{issuer, owner, domain}
 
 # Local Certificate operations
-acme_manager_local_certificate_created_total
-acme_manager_local_certificate_deleted_total
+acme_manager_local_certificate_created_total{issuer}
+acme_manager_local_certificate_deleted_total{issuer}
 
 # Local command pre/post run
-acme_manager_local_cmd_run_success_total
-acme_manager_local_cmd_run_failed_total
+acme_manager_local_cmd_run_success_total{command}
+acme_manager_local_cmd_run_failed_total{command}
 
 # Vault operations
-acme_manager_vault_get_secret_success_total
-acme_manager_vault_put_secret_success_total
-acme_manager_vault_delete_secret_success_total
-acme_manager_vault_get_secret_failed_total
-acme_manager_vault_put_secret_failed_total
-acme_manager_vault_delete_secret_failed_total
+acme_manager_vault_get_secret_success_total{secret_type}
+acme_manager_vault_put_secret_success_total{secret_type}
+acme_manager_vault_delete_secret_success_total{secret_type}
+acme_manager_vault_get_secret_failed_total{secret_type}
+acme_manager_vault_put_secret_failed_total{secret_type}
+acme_manager_vault_delete_secret_failed_total{secret_type}
 
 # Config file
-acme_manager_config_reload
+acme_manager_config_reload_total
 acme_manager_config_error
 
 # Issuer health
@@ -1327,10 +1330,16 @@ acme_manager_ring_tokens_total
 
 ```promql
 # Certificate creation rate
-rate(acme_manager_certificate_created[5m])
+rate(acme_manager_certificate_creations_total[5m])
 
 # Certificates by issuer
 sum by (issuer) (acme_manager_certificate_total)
+
+# Renewal errors over the last hour
+increase(acme_manager_certificate_renewal_errors_total[1h]) > 0
+
+# Vault failures by secret type
+sum by (secret_type) (rate(acme_manager_vault_get_secret_failed_total[5m]))
 
 # Cluster members
 count(up{job="acme-manager"})
