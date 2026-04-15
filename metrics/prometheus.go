@@ -240,6 +240,14 @@ func SetRenewedCertificate(issuer, owner, domain string, value float64) {
 	renewedCertificate.WithLabelValues(issuer, owner, domain).Set(value)
 }
 
+func DeleteRenewedCertificate(issuer, owner, domain string) {
+	renewedCertificate.DeleteLabelValues(issuer, owner, domain)
+}
+
+func DeleteCreatedCertificate(issuer, owner, domain string) {
+	createdCertificate.DeleteLabelValues(issuer, owner, domain)
+}
+
 func IncCreatedLocalCertificate(issuer string) {
 	createdLocalCertificate.WithLabelValues(issuer).Inc()
 }

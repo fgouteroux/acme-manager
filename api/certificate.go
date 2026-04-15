@@ -965,6 +965,8 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			_ = level.Info(logger).Log("msg", "deleted certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
 		}
 		metrics.DecManagedCertificate(certData.Issuer, certData.Owner)
+		metrics.DeleteRenewedCertificate(certData.Issuer, certData.Owner, certData.Domain)
+		metrics.DeleteCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain)
 
 		err = certstore.AmStore.DeleteCertificate(certData.Owner, certData.Issuer, certData.Domain)
 		if err != nil {
