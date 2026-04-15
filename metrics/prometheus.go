@@ -8,15 +8,23 @@ var (
 	managedCertificate = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "acme_manager_certificate_total",
-			Help: "Number of managed certificates by issuer and owner",
+			Help: "Number of managed certificates by issuer, owner and domain",
 		},
-		[]string{"issuer", "owner"},
+		[]string{"issuer", "owner", "domain"},
 	)
 
-	createdCertificate = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "acme_manager_certificate_created",
-			Help: "Created certificate by issuer, owner and domain, 1 = created, 0 = error",
+	certificateCreationsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_certificate_creations_total",
+			Help: "Total number of successfully created certificates by issuer, owner and domain",
+		},
+		[]string{"issuer", "owner", "domain"},
+	)
+
+	certificateCreationErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_certificate_creation_errors_total",
+			Help: "Total number of certificate creation errors by issuer, owner and domain",
 		},
 		[]string{"issuer", "owner", "domain"},
 	)
@@ -37,10 +45,18 @@ var (
 		[]string{"issuer", "owner", "domain"},
 	)
 
-	renewedCertificate = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "acme_manager_certificate_renewed",
-			Help: "Renewed certificate by issuer, owner and domain, 1 = renewed, 0 = error",
+	certificateRenewalsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_certificate_renewals_total",
+			Help: "Total number of successfully renewed certificates by issuer, owner and domain",
+		},
+		[]string{"issuer", "owner", "domain"},
+	)
+
+	certificateRenewalErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "acme_manager_certificate_renewal_errors_total",
+			Help: "Total number of certificate renewal errors by issuer, owner and domain",
 		},
 		[]string{"issuer", "owner", "domain"},
 	)
@@ -66,7 +82,7 @@ var (
 			Name: "acme_manager_local_cmd_run_success_total",
 			Help: "Number of successful local cmd runs",
 		},
-		[]string{},
+		[]string{"command"},
 	)
 
 	runFailedLocalCmd = prometheus.NewCounterVec(
@@ -74,7 +90,7 @@ var (
 			Name: "acme_manager_local_cmd_run_failed_total",
 			Help: "Number of failed local cmd runs",
 		},
-		[]string{},
+		[]string{"command"},
 	)
 
 	getSuccessVaultSecret = prometheus.NewCounterVec(
@@ -82,7 +98,7 @@ var (
 			Name: "acme_manager_vault_get_secret_success_total",
 			Help: "Number of retrieved vault secrets",
 		},
-		[]string{},
+		[]string{"secret_type"},
 	)
 
 	putSuccessVaultSecret = prometheus.NewCounterVec(
@@ -90,7 +106,7 @@ var (
 			Name: "acme_manager_vault_put_secret_success_total",
 			Help: "Number of created/updated vault secrets",
 		},
-		[]string{},
+		[]string{"secret_type"},
 	)
 
 	deleteSuccessVaultSecret = prometheus.NewCounterVec(
@@ -98,7 +114,7 @@ var (
 			Name: "acme_manager_vault_delete_secret_success_total",
 			Help: "Number of deleted vault secrets",
 		},
-		[]string{},
+		[]string{"secret_type"},
 	)
 
 	getFailedVaultSecret = prometheus.NewCounterVec(
@@ -106,7 +122,7 @@ var (
 			Name: "acme_manager_vault_get_secret_failed_total",
 			Help: "Number of failed vault secret retrievals",
 		},
-		[]string{},
+		[]string{"secret_type"},
 	)
 
 	putFailedVaultSecret = prometheus.NewCounterVec(
@@ -114,7 +130,7 @@ var (
 			Name: "acme_manager_vault_put_secret_failed_total",
 			Help: "Number of failed vault secret creations/updates",
 		},
-		[]string{},
+		[]string{"secret_type"},
 	)
 
 	deleteFailedVaultSecret = prometheus.NewCounterVec(
@@ -122,7 +138,7 @@ var (
 			Name: "acme_manager_vault_delete_secret_failed_total",
 			Help: "Number of failed vault secret deletions",
 		},
-		[]string{},
+		[]string{"secret_type"},
 	)
 
 	certificateConfigReload = prometheus.NewCounterVec(
@@ -216,16 +232,20 @@ var (
 	)
 )
 
-func IncManagedCertificate(issuer, owner string) {
-	managedCertificate.WithLabelValues(issuer, owner).Inc()
+func IncManagedCertificate(issuer, owner, domain string) {
+	managedCertificate.WithLabelValues(issuer, owner, domain).Inc()
 }
 
-func DecManagedCertificate(issuer, owner string) {
-	managedCertificate.WithLabelValues(issuer, owner).Dec()
+func DecManagedCertificate(issuer, owner, domain string) {
+	managedCertificate.WithLabelValues(issuer, owner, domain).Dec()
 }
 
-func SetCreatedCertificate(issuer, owner, domain string, value float64) {
-	createdCertificate.WithLabelValues(issuer, owner, domain).Set(value)
+func IncCertificateCreated(issuer, owner, domain string) {
+	certificateCreationsTotal.WithLabelValues(issuer, owner, domain).Inc()
+}
+
+func IncCertificateCreationError(issuer, owner, domain string) {
+	certificateCreationErrorsTotal.WithLabelValues(issuer, owner, domain).Inc()
 }
 
 func IncRevokedCertificate(issuer, owner, domain string) {
@@ -236,16 +256,12 @@ func IncRevokedCertificateErrors(issuer, owner, domain string) {
 	revokedCertificateErrorsTotal.WithLabelValues(issuer, owner, domain).Inc()
 }
 
-func SetRenewedCertificate(issuer, owner, domain string, value float64) {
-	renewedCertificate.WithLabelValues(issuer, owner, domain).Set(value)
+func IncCertificateRenewed(issuer, owner, domain string) {
+	certificateRenewalsTotal.WithLabelValues(issuer, owner, domain).Inc()
 }
 
-func DeleteRenewedCertificate(issuer, owner, domain string) {
-	renewedCertificate.DeleteLabelValues(issuer, owner, domain)
-}
-
-func DeleteCreatedCertificate(issuer, owner, domain string) {
-	createdCertificate.DeleteLabelValues(issuer, owner, domain)
+func IncCertificateRenewalError(issuer, owner, domain string) {
+	certificateRenewalErrorsTotal.WithLabelValues(issuer, owner, domain).Inc()
 }
 
 func IncCreatedLocalCertificate(issuer string) {
@@ -256,36 +272,36 @@ func IncDeletedLocalCertificate(issuer string) {
 	deletedLocalCertificate.WithLabelValues(issuer).Inc()
 }
 
-func IncRunSuccessLocalCmd() {
-	runSuccessLocalCmd.WithLabelValues().Inc()
+func IncRunSuccessLocalCmd(command string) {
+	runSuccessLocalCmd.WithLabelValues(command).Inc()
 }
 
-func IncRunFailedLocalCmd() {
-	runFailedLocalCmd.WithLabelValues().Inc()
+func IncRunFailedLocalCmd(command string) {
+	runFailedLocalCmd.WithLabelValues(command).Inc()
 }
 
-func IncGetSuccessVaultSecret() {
-	getSuccessVaultSecret.WithLabelValues().Inc()
+func IncGetSuccessVaultSecret(secretType string) {
+	getSuccessVaultSecret.WithLabelValues(secretType).Inc()
 }
 
-func IncPutSuccessVaultSecret() {
-	putSuccessVaultSecret.WithLabelValues().Inc()
+func IncPutSuccessVaultSecret(secretType string) {
+	putSuccessVaultSecret.WithLabelValues(secretType).Inc()
 }
 
-func IncDeleteSuccessVaultSecret() {
-	deleteSuccessVaultSecret.WithLabelValues().Inc()
+func IncDeleteSuccessVaultSecret(secretType string) {
+	deleteSuccessVaultSecret.WithLabelValues(secretType).Inc()
 }
 
-func IncGetFailedVaultSecret() {
-	getFailedVaultSecret.WithLabelValues().Inc()
+func IncGetFailedVaultSecret(secretType string) {
+	getFailedVaultSecret.WithLabelValues(secretType).Inc()
 }
 
-func IncPutFailedVaultSecret() {
-	putFailedVaultSecret.WithLabelValues().Inc()
+func IncPutFailedVaultSecret(secretType string) {
+	putFailedVaultSecret.WithLabelValues(secretType).Inc()
 }
 
-func IncDeleteFailedVaultSecret() {
-	deleteFailedVaultSecret.WithLabelValues().Inc()
+func IncDeleteFailedVaultSecret(secretType string) {
+	deleteFailedVaultSecret.WithLabelValues(secretType).Inc()
 }
 
 func IncCertificateConfigReload() {
@@ -334,10 +350,12 @@ func IncRateLimitBlocked(owner, issuer, domain, operation string) {
 func init() {
 	collectors := []prometheus.Collector{
 		managedCertificate,
-		createdCertificate,
+		certificateCreationsTotal,
+		certificateCreationErrorsTotal,
 		revokedCertificateTotal,
 		revokedCertificateErrorsTotal,
-		renewedCertificate,
+		certificateRenewalsTotal,
+		certificateRenewalErrorsTotal,
 		createdLocalCertificate,
 		deletedLocalCertificate,
 		runSuccessLocalCmd,

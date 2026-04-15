@@ -52,7 +52,7 @@ func OnStartup(logger log.Logger) error {
 					"domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
 				continue
 			}
-			metrics.IncManagedCertificate(certData.Issuer, certData.Owner)
+			metrics.IncManagedCertificate(certData.Issuer, certData.Owner, certData.Domain)
 		}
 	} else if len(certificateData) > 0 {
 		_ = level.Info(logger).Log("msg", "found existing certificates in KV ring", "count", len(certificateData))

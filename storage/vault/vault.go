@@ -132,6 +132,14 @@ func (client *Client) ListSecretWithAppRole(secretPath string) ([]string, error)
 	return secrets, nil
 }
 
+// secretTypeFromPath infers whether a secret path refers to a certificate or token secret.
+func secretTypeFromPath(secretPath string) string {
+	if strings.HasPrefix(secretPath, config.GlobalConfig.Storage.Vault.CertPrefix) {
+		return "certificate"
+	}
+	return "token"
+}
+
 // Fetches a key-value secret (kv-v2) after authenticating via AppRole.
 func (client *Client) GetSecretWithAppRole(secretPath string) (map[string]interface{}, error) {
 	var data map[string]interface{}
@@ -143,11 +151,11 @@ func (client *Client) GetSecretWithAppRole(secretPath string) (map[string]interf
 
 	secret, err := client.APIClient.KVv2(client.Config.SecretEngine).Get(context.Background(), secretPath)
 	if err != nil {
-		metrics.IncGetFailedVaultSecret()
+		metrics.IncGetFailedVaultSecret(secretTypeFromPath(secretPath))
 		return data, err
 	}
 
-	metrics.IncGetSuccessVaultSecret()
+	metrics.IncGetSuccessVaultSecret(secretTypeFromPath(secretPath))
 
 	return secret.Data, nil
 }
@@ -161,10 +169,10 @@ func (client *Client) PutSecretWithAppRole(secretPath string, data map[string]in
 
 	_, err = client.APIClient.KVv2(client.Config.SecretEngine).Put(context.Background(), secretPath, data)
 	if err != nil {
-		metrics.IncPutFailedVaultSecret()
+		metrics.IncPutFailedVaultSecret(secretTypeFromPath(secretPath))
 		return err
 	}
-	metrics.IncPutSuccessVaultSecret()
+	metrics.IncPutSuccessVaultSecret(secretTypeFromPath(secretPath))
 
 	return nil
 }
@@ -178,10 +186,10 @@ func (client *Client) DeleteSecretWithAppRole(secretPath string) error {
 
 	err = client.APIClient.KVv2(client.Config.SecretEngine).Delete(context.Background(), secretPath)
 	if err != nil {
-		metrics.IncDeleteFailedVaultSecret()
+		metrics.IncDeleteFailedVaultSecret(secretTypeFromPath(secretPath))
 		return err
 	}
-	metrics.IncDeleteSuccessVaultSecret()
+	metrics.IncDeleteSuccessVaultSecret(secretTypeFromPath(secretPath))
 
 	return nil
 }
@@ -193,9 +201,11 @@ func (client *Client) DestroySecretWithAppRole(secretPath string) error {
 		return err
 	}
 
+	secretType := secretTypeFromPath(secretPath)
+
 	metaVersions, err := client.APIClient.KVv2(client.Config.SecretEngine).GetVersionsAsList(context.Background(), secretPath)
 	if err != nil {
-		metrics.IncDeleteFailedVaultSecret()
+		metrics.IncDeleteFailedVaultSecret(secretType)
 		return err
 	}
 
@@ -206,17 +216,17 @@ func (client *Client) DestroySecretWithAppRole(secretPath string) error {
 
 	err = client.APIClient.KVv2(client.Config.SecretEngine).Destroy(context.Background(), secretPath, versionList)
 	if err != nil {
-		metrics.IncDeleteFailedVaultSecret()
+		metrics.IncDeleteFailedVaultSecret(secretType)
 		return err
 	}
 
 	err = client.APIClient.KVv2(client.Config.SecretEngine).DeleteMetadata(context.Background(), secretPath)
 	if err != nil {
-		metrics.IncDeleteFailedVaultSecret()
+		metrics.IncDeleteFailedVaultSecret(secretType)
 		return err
 	}
 
-	metrics.IncDeleteSuccessVaultSecret()
+	metrics.IncDeleteSuccessVaultSecret(secretType)
 
 	return nil
 }

@@ -244,7 +244,7 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 			err = executeCommand(logger, plugin.Path, []string{certDomains, certData.Issuer, challengeType}, plugin.Timeout, plugin.Env)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", fmt.Sprintf("plugin command '%s' execution failed", plugin.Path), "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
-				metrics.SetCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
+				metrics.IncCertificateCreationError(certData.Issuer, certData.Owner, certData.Domain)
 				return certData, err
 			}
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("plugin command '%s' successfully executed", plugin.Path), "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
@@ -254,11 +254,11 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(context.Background(), request)
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "failed to obtain certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
-		metrics.SetCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain, 0)
+		metrics.IncCertificateCreationError(certData.Issuer, certData.Owner, certData.Domain)
 		return certData, err
 	}
 
-	metrics.SetCreatedCertificate(certData.Issuer, certData.Owner, certData.Domain, 1)
+	metrics.IncCertificateCreated(certData.Issuer, certData.Owner, certData.Domain)
 
 	// save in local in case of vault failure
 	SaveResource(logger, baseCertificateFilePath, resource)
@@ -379,19 +379,17 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 			_ = level.Info(logger).Log("msg", "trying renewal certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
 			cert, err := CreateRemoteCertificateResource(certData, logger)
 			if err != nil {
-				metrics.SetRenewedCertificate(cert.Issuer, cert.Owner, cert.Domain, 0)
+				metrics.IncCertificateRenewalError(cert.Issuer, cert.Owner, cert.Domain)
 				_ = level.Error(logger).Log("msg", "failed to renew certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
 				continue
 			}
 			err = amStore.PutCertificate(cert)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "failed to store renewed certificate", "domain", cert.Domain, "issuer", cert.Issuer, "owner", cert.Owner, "err", err)
-				metrics.SetRenewedCertificate(cert.Issuer, cert.Owner, cert.Domain, 0)
+				metrics.IncCertificateRenewalError(cert.Issuer, cert.Owner, cert.Domain)
 				continue
 			}
-			metrics.SetRenewedCertificate(cert.Issuer, cert.Owner, cert.Domain, 1)
-			// Reset the created metric to ensure consistency (successful renewal means no creation issues)
-			metrics.SetCreatedCertificate(cert.Issuer, cert.Owner, cert.Domain, 1)
+			metrics.IncCertificateRenewed(cert.Issuer, cert.Owner, cert.Domain)
 		}
 	}
 	return nil

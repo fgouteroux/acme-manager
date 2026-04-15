@@ -939,12 +939,12 @@ func executeCommand(logger log.Logger, cfg Common, preCmd bool) error {
 
 		out, err := run(cmdPath, cmdArgs, cmdTimeout)
 		if err != nil {
-			metrics.IncRunFailedLocalCmd()
+			metrics.IncRunFailedLocalCmd(cmdPath)
 			return fmt.Errorf("command '%s %s' failed: %s. Error: %s", cmdPath, strings.Join(cmdArgs, " "), out, err.Error())
 		}
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("command '%s %s' successfully executed", cmdPath, strings.Join(cmdArgs, " ")))
 		_ = level.Debug(logger).Log("msg", "Command output", "output", out)
-		metrics.IncRunSuccessLocalCmd()
+		metrics.IncRunSuccessLocalCmd(cmdPath)
 	}
 	return nil
 }
