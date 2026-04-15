@@ -134,10 +134,15 @@ func (client *Client) ListSecretWithAppRole(secretPath string) ([]string, error)
 
 // secretTypeFromPath infers whether a secret path refers to a certificate or token secret.
 func secretTypeFromPath(secretPath string) string {
-	if strings.HasPrefix(secretPath, config.GlobalConfig.Storage.Vault.CertPrefix) {
+	certPrefix := config.GlobalConfig.Storage.Vault.CertPrefix
+	if certPrefix != "" && strings.HasPrefix(secretPath, certPrefix) {
 		return "certificate"
 	}
-	return "token"
+	tokenPrefix := config.GlobalConfig.Storage.Vault.TokenPrefix
+	if tokenPrefix != "" && strings.HasPrefix(secretPath, tokenPrefix) {
+		return "token"
+	}
+	return "unknown"
 }
 
 // Fetches a key-value secret (kv-v2) after authenticating via AppRole.
