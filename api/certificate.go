@@ -533,7 +533,6 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 		_ = level.Info(logger).Log("msg", "created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
-		metrics.IncManagedCertificate(certData.Issuer, certData.Owner, certData.Domain)
 
 		err = certstore.AmStore.PutCertificate(newCert)
 		if err != nil {
@@ -541,6 +540,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
+		metrics.IncManagedCertificate(certData.Issuer, certData.Owner, certData.Domain)
 
 		secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
@@ -957,14 +957,13 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			}
 			_ = level.Info(logger).Log("msg", "deleted certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
 		}
-		metrics.DecManagedCertificate(certData.Issuer, certData.Owner, certData.Domain)
-
 		err = certstore.AmStore.DeleteCertificate(certData.Owner, certData.Issuer, certData.Domain)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
+		metrics.DecManagedCertificate(certData.Issuer, certData.Owner, certData.Domain)
 
 		w.WriteHeader(http.StatusNoContent)
 	})
