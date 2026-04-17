@@ -45,10 +45,10 @@ var (
 		[]string{"issuer", "owner", "domain"},
 	)
 
-	certificateRenewalsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
+	certificateRenewalsTotal = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Name: "acme_manager_certificate_renewals_total",
-			Help: "Total number of successfully renewed certificates by issuer, owner and domain",
+			Help: "Total number of successfully renewed certificates by issuer, owner and domain (persisted in Ring KV, survives restarts and leader changes)",
 		},
 		[]string{"issuer", "owner", "domain"},
 	)
@@ -256,12 +256,20 @@ func IncRevokedCertificateErrors(issuer, owner, domain string) {
 	revokedCertificateErrorsTotal.WithLabelValues(issuer, owner, domain).Inc()
 }
 
-func IncCertificateRenewed(issuer, owner, domain string) {
-	certificateRenewalsTotal.WithLabelValues(issuer, owner, domain).Inc()
+func SetCertificateRenewed(issuer, owner, domain string, count int64) {
+	certificateRenewalsTotal.WithLabelValues(issuer, owner, domain).Set(float64(count))
 }
 
 func IncCertificateRenewalError(issuer, owner, domain string) {
 	certificateRenewalErrorsTotal.WithLabelValues(issuer, owner, domain).Inc()
+}
+
+// InitCertificateErrorMetrics initializes renewal error counter to 0 at startup
+// so that increase() works correctly on the first renewal error for a known domain.
+// Creation errors are NOT pre-initialized: the cert doesn't exist in the KV ring yet
+// when a creation fails, so label values are unknown at startup.
+func InitCertificateErrorMetrics(issuer, owner, domain string) {
+	certificateRenewalErrorsTotal.WithLabelValues(issuer, owner, domain).Add(0)
 }
 
 func IncCreatedLocalCertificate(issuer string) {

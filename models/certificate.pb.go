@@ -51,6 +51,8 @@ type Certificate struct {
 	// already remove entry from memory. Actual deletion from KV store does *not* trigger
 	// "watch" notification with a key for all KV stores.
 	DeletedAt int64 `protobuf:"varint,19,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
+	// Total number of successful renewals, persisted to survive restarts.
+	RenewalCount int64 `protobuf:"varint,21,opt,name=renewal_count,json=renewalCount,proto3" json:"renewal_count,omitempty"`
 }
 
 func (m *Certificate) Reset()         { *m = Certificate{} }
@@ -144,6 +146,13 @@ func (m *Certificate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.RenewalCount != 0 {
+		i = encodeVarintCertificate(dAtA, i, uint64(m.RenewalCount))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xa8
+	}
 	if len(m.Profile) > 0 {
 		i -= len(m.Profile)
 		copy(dAtA[i:], m.Profile)
@@ -386,6 +395,9 @@ func (m *Certificate) Size() (n int) {
 	l = len(m.Profile)
 	if l > 0 {
 		n += 2 + l + sovCertificate(uint64(l))
+	}
+	if m.RenewalCount != 0 {
+		n += 2 + sovCertificate(uint64(m.RenewalCount))
 	}
 	return n
 }
@@ -1014,6 +1026,25 @@ func (m *Certificate) Unmarshal(dAtA []byte) error {
 			}
 			m.Profile = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 21:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RenewalCount", wireType)
+			}
+			m.RenewalCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowCertificate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.RenewalCount |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipCertificate(dAtA[iNdEx:])

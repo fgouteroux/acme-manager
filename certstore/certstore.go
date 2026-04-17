@@ -377,9 +377,11 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 		currentDate := time.Now()
 		if currentDate.After(renewalDate) || currentDate.Equal(renewalDate) {
 			_ = level.Info(logger).Log("msg", "trying renewal certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			certData.RenewalCount++
 			cert, err := CreateRemoteCertificateResource(certData, logger)
 			if err != nil {
-				metrics.IncCertificateRenewalError(cert.Issuer, cert.Owner, cert.Domain)
+				certData.RenewalCount-- // revert: Vault write did not happen
+				metrics.IncCertificateRenewalError(certData.Issuer, certData.Owner, certData.Domain)
 				_ = level.Error(logger).Log("msg", "failed to renew certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
 				continue
 			}
@@ -389,7 +391,7 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 				metrics.IncCertificateRenewalError(cert.Issuer, cert.Owner, cert.Domain)
 				continue
 			}
-			metrics.IncCertificateRenewed(cert.Issuer, cert.Owner, cert.Domain)
+			metrics.SetCertificateRenewed(cert.Issuer, cert.Owner, cert.Domain, cert.RenewalCount)
 		}
 	}
 	return nil

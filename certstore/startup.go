@@ -53,9 +53,16 @@ func OnStartup(logger log.Logger) error {
 				continue
 			}
 			metrics.IncManagedCertificate(certData.Issuer, certData.Owner, certData.Domain)
+			metrics.InitCertificateErrorMetrics(certData.Issuer, certData.Owner, certData.Domain)
 		}
 	} else if len(certificateData) > 0 {
 		_ = level.Info(logger).Log("msg", "found existing certificates in KV ring", "count", len(certificateData))
+		for _, certData := range certificateData {
+			// Restore renewal gauge from persisted KV values so metrics survive restarts and leader changes.
+			metrics.SetCertificateRenewed(certData.Issuer, certData.Owner, certData.Domain, certData.RenewalCount)
+			// Initialize error counters to 0 so increase() works on first occurrence.
+			metrics.InitCertificateErrorMetrics(certData.Issuer, certData.Owner, certData.Domain)
+		}
 	}
 
 	// Handle tokens
