@@ -51,6 +51,9 @@
                     <li><label class="dropdown-item"><input type="checkbox" data-column="10"> Renew days</label></li>
                     <li><label class="dropdown-item"><input type="checkbox" data-column="11"> Renewal date</label></li>
                     <li><label class="dropdown-item"><input type="checkbox" data-column="12" checked> Labels</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="13"> Challenge</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="14"> Renewal count</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="15"> Profile</label></li>
                 </ul>
             </div>
         </div>
@@ -74,12 +77,15 @@
         <th data-column="10">Renew days</th>
         <th data-column="11">Renewal date</th>
         <th data-column="12">Labels</th>
+        <th data-column="13">Challenge</th>
+        <th data-column="14">Renewal count</th>
+        <th data-column="15">Profile</th>
       </tr>
     </thead>
     <tbody>
     {{$out := .}}
     {{ range $cert := .Certificates }}
-      <tr data-searchable="{{ $cert.Owner }} {{ $cert.Domain }} {{ $cert.Issuer }} {{ $cert.KeyType }}">
+      <tr data-searchable="{{ $cert.Owner }} {{ $cert.Domain }} {{ $cert.Issuer }} {{ $cert.KeyType }} {{ $cert.EffectiveDnsChallenge }} {{ $cert.EffectiveHttpChallenge }} {{ $cert.Profile }}">
         <td data-column="0">{{ $cert.Owner }}</td>
         <td data-column="1">{{ $cert.Domain }}</td>
         <td data-column="2">{{ $cert.Issuer }}</td>
@@ -108,6 +114,19 @@
         <td data-column="12">{{ range $item := Split $cert.Labels "," }}{{ $item }}<br>{{ end }}</td>
         {{ else }}
         <td data-column="12"></td>
+        {{ end }}
+        {{ if $cert.EffectiveDnsChallenge }}
+        <td data-column="13"><span class="badge bg-info text-dark">dns</span> {{ $cert.EffectiveDnsChallenge }}</td>
+        {{ else if $cert.EffectiveHttpChallenge }}
+        <td data-column="13"><span class="badge bg-secondary">http</span> {{ $cert.EffectiveHttpChallenge }}</td>
+        {{ else }}
+        <td data-column="13"></td>
+        {{ end }}
+        <td data-column="14">{{ if $cert.RenewalCount }}{{ $cert.RenewalCount }}{{ end }}</td>
+        {{ if $cert.Profile }}
+        <td data-column="15">{{ $cert.Profile }}</td>
+        {{ else }}
+        <td data-column="15"></td>
         {{ end }}
       </tr>
       {{ end }}

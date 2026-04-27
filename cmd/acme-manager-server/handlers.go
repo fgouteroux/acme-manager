@@ -142,9 +142,15 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 //go:embed templates/certificate.gohtml
 var certificatePageHTML string
 
+type certificateView struct {
+	*models.Certificate
+	EffectiveDnsChallenge  string
+	EffectiveHttpChallenge string
+}
+
 type certificateHandlerData struct {
 	Now          time.Time
-	Certificates []*models.Certificate
+	Certificates []*certificateView
 }
 
 func certificateListHandler() http.HandlerFunc {
@@ -154,9 +160,19 @@ func certificateListHandler() http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
-		var certSlice []*models.Certificate
+		var certSlice []*certificateView
 		for _, cert := range data {
-			certSlice = append(certSlice, cert)
+			view := &certificateView{Certificate: cert}
+			// Resolve effective challenge: cert-level override takes priority, then issuer config.
+			view.EffectiveDnsChallenge = cert.DnsChallenge
+			if view.EffectiveDnsChallenge == "" {
+				view.EffectiveDnsChallenge = config.GlobalConfig.Issuer[cert.Issuer].DNSChallenge
+			}
+			view.EffectiveHttpChallenge = cert.HttpChallenge
+			if view.EffectiveHttpChallenge == "" {
+				view.EffectiveHttpChallenge = config.GlobalConfig.Issuer[cert.Issuer].HTTPChallenge
+			}
+			certSlice = append(certSlice, view)
 		}
 
 		v := &certificateHandlerData{
