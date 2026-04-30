@@ -87,7 +87,7 @@
     <tbody>
     {{$out := .}}
     {{ range $cert := .Certificates }}
-      <tr data-searchable="{{ $cert.Owner }} {{ $cert.Domain }} {{ $cert.Issuer }} {{ $cert.Name }} {{ $cert.KeyType }} {{ $cert.EffectiveDnsChallenge }} {{ $cert.EffectiveHttpChallenge }} {{ $cert.Profile }}">
+      <tr data-searchable="{{ $cert.Owner }} {{ $cert.Domain }} {{ $cert.Issuer }} {{ $cert.Name }} {{ $cert.KeyType }} {{ $cert.EffectiveDNSChallenge }} {{ $cert.EffectiveHTTPChallenge }} {{ $cert.Profile }}">
         <td data-column="0">{{ $cert.Owner }}</td>
         <td data-column="1">{{ $cert.Domain }}</td>
         <td data-column="2">{{ $cert.Issuer }}</td>
@@ -118,10 +118,10 @@
         {{ else }}
         <td data-column="12"></td>
         {{ end }}
-        {{ if $cert.EffectiveDnsChallenge }}
-        <td data-column="13"><span class="badge bg-info text-dark">dns</span> {{ $cert.EffectiveDnsChallenge }}</td>
-        {{ else if $cert.EffectiveHttpChallenge }}
-        <td data-column="13"><span class="badge bg-secondary">http</span> {{ $cert.EffectiveHttpChallenge }}</td>
+        {{ if $cert.EffectiveDNSChallenge }}
+        <td data-column="13"><span class="badge bg-info text-dark">dns</span> {{ $cert.EffectiveDNSChallenge }}</td>
+        {{ else if $cert.EffectiveHTTPChallenge }}
+        <td data-column="13"><span class="badge bg-secondary">http</span> {{ $cert.EffectiveHTTPChallenge }}</td>
         {{ else }}
         <td data-column="13"></td>
         {{ end }}

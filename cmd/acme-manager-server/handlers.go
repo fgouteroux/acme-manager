@@ -148,8 +148,8 @@ var certificatePageHTML string
 
 type certificateView struct {
 	*models.Certificate
-	EffectiveDnsChallenge  string
-	EffectiveHttpChallenge string
+	EffectiveDNSChallenge  string
+	EffectiveHTTPChallenge string
 }
 
 type certificateHandlerData struct {
@@ -168,13 +168,13 @@ func certificateListHandler() http.HandlerFunc {
 		for _, cert := range data {
 			view := &certificateView{Certificate: cert}
 			// Resolve effective challenge: cert-level override takes priority, then issuer config.
-			view.EffectiveDnsChallenge = cert.DnsChallenge
-			if view.EffectiveDnsChallenge == "" {
-				view.EffectiveDnsChallenge = config.GlobalConfig.Issuer[cert.Issuer].DNSChallenge
+			view.EffectiveDNSChallenge = cert.DnsChallenge
+			if view.EffectiveDNSChallenge == "" {
+				view.EffectiveDNSChallenge = config.GlobalConfig.Issuer[cert.Issuer].DNSChallenge
 			}
-			view.EffectiveHttpChallenge = cert.HttpChallenge
-			if view.EffectiveHttpChallenge == "" {
-				view.EffectiveHttpChallenge = config.GlobalConfig.Issuer[cert.Issuer].HTTPChallenge
+			view.EffectiveHTTPChallenge = cert.HttpChallenge
+			if view.EffectiveHTTPChallenge == "" {
+				view.EffectiveHTTPChallenge = config.GlobalConfig.Issuer[cert.Issuer].HTTPChallenge
 			}
 			certSlice = append(certSlice, view)
 		}
