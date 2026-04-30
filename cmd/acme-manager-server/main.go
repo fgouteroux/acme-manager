@@ -72,6 +72,7 @@ var (
 
 	// Help flags
 	showVersion = flag.Bool("version", false, "Show version information")
+	configCheck = flag.Bool("config-check", false, "Validate config file and exit")
 
 	logger log.Logger
 )
@@ -87,6 +88,7 @@ var commonFlagNames = []string{
 	"check-renewal-interval", "check-config-interval", "check-token-interval", "check-issuer-interval",
 	"ring.instance-id", "ring.instance-addr", "ring.instance-port", "ring.join-members",
 	"cleanup", "cleanup.interval", "cleanup.cert-expire-days", "cleanup.cert-revoke-last-version",
+	"config-check",
 }
 
 const ChallengePath = "/.well-known/acme-challenge/"
@@ -224,6 +226,11 @@ func main() {
 	}
 
 	config.GlobalConfig = cfg
+
+	if *configCheck {
+		fmt.Println("config file is valid")
+		os.Exit(0)
+	}
 
 	err = prometheus.Register(versioncollector.NewCollector("acme_manager_server"))
 	if err != nil {

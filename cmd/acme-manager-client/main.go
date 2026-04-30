@@ -49,6 +49,7 @@ var (
 
 	// Help flags
 	showVersion = flag.Bool("version", false, "Show version information")
+	configCheck = flag.Bool("config-check", false, "Validate client config file and exit")
 
 	logger log.Logger
 )
@@ -106,6 +107,15 @@ func main() {
 	}
 
 	client.GlobalConfig = cfg
+
+	if *configCheck {
+		if err := cfg.ValidateConfigPath(*clientConfigPath); err != nil {
+			_ = level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
+		fmt.Println("config file is valid")
+		os.Exit(0)
+	}
 
 	if cfg.Common.CertBackup || *clientPullOnly {
 		vault.GlobalClient, err = vault.InitClient(cfg.Storage.Vault, logrusLogger)
