@@ -1011,13 +1011,16 @@ func certVaultPath(prefix, owner, issuer, name, domain string) string {
 // When name is non-empty a subdirectory is added to avoid filename collisions.
 func certLocalDir(certDir, issuer, name string) string {
 	if name != "" {
-		return certDir + issuer + "/" + name
+		return certDir
 	}
 	return certDir + issuer
 }
 
 // certLocalPath returns the full local file path for a certificate file.
 func certLocalPath(certDir, issuer, name, domain, ext string) string {
+	if name != "" {
+		return certDir + name + ext
+	}
 	return certLocalDir(certDir, issuer, name) + "/" + domain + ext
 }
 
