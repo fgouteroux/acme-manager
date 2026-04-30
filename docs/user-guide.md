@@ -146,6 +146,7 @@ acme-manager-client \
 | `-client.tls-cert-file` | "" | TLS client certificate file |
 | `-client.tls-key-file` | "" | TLS client key file |
 | `-client.tls-skip-verify` | `false` | Skip TLS certificate verification |
+| `-config-check` | `false` | Validate client config file and exit (see below) |
 | `-server.listen-address` | `:8989` | Address for the metrics HTTP server |
 | `-log.level` | `info` | Log level (debug, info, warn, error) |
 | `-log.format` | `logfmt` | Log format (logfmt, json) |
@@ -240,6 +241,43 @@ storage:
     role_id: "your-role-id"
     secret_id: "your-secret-id"
     cert_prefix: "secret/acme-manager/certificates"
+```
+
+### Config Validation (`-config-check`)
+
+The `-config-check` flag validates the client configuration file and exits immediately — it does not connect to the ACME Manager server or Vault.
+
+```bash
+acme-manager-client -client.config-path client-config.yml -config-check
+```
+
+- Exits 0 and prints `config file is valid` on success
+- Exits 1 and prints the error on failure
+
+Validation covers:
+- YAML structure and field types (`UnmarshalYAML`)
+- `certificate_dir` must not be the same directory as the config file itself
+
+This flag is suitable for use in configuration management pipelines (Ansible, Puppet, etc.) to verify a rendered config before deploying it.
+
+### On-Demand Certificate Check (`SIGUSR1`)
+
+The client handles `SIGUSR1` to trigger an immediate certificate check or pull without waiting for the next periodic interval.
+
+```bash
+kill -USR1 <pid>
+```
+
+- In normal (master) mode: calls `CheckCertificate`, which compares the local config against the server and applies any necessary changes.
+- In `--client.pull-only` mode: calls `PullAndCheckCertificateFromRing`, which fetches all certificates available to the token from the ring.
+
+Both functions use an internal `TryLock`. If a run is already in progress when the signal arrives, the signal is ignored and a message is logged at debug level. This prevents overlapping runs.
+
+A common pattern for systemd-managed deployments is:
+
+```bash
+# Force an immediate certificate refresh without restarting the service
+systemctl kill --signal=USR1 acme-manager-client
 ```
 
 ### Client Workflow
@@ -428,6 +466,37 @@ When `bundle: false`, the CA chain is saved as a separate file:
 - Private key: `domain.key`
 - CA chain: `domain.ca.crt` (configurable via `certificate_ca_file_ext`)
 
+### Named Certificate Local File Paths
+
+When a certificate has the optional `name` field set, the local file path uses a flat structure (no issuer subdirectory). This mirrors the KV ring key structure used by the server.
+
+| | KV ring key | Local file path |
+|---|---|---|
+| Named cert | `{prefix}/{owner}/{name}` | `{certDir}/{name}{ext}` |
+| Unnamed cert | `{prefix}/{owner}/{issuer}/{domain}` | `{certDir}/{issuer}/{domain}{ext}` |
+
+**Example** — a certificate named `myapp` with default extensions and `certificate_dir: /etc/ssl/`:
+
+| File | Path |
+|---|---|
+| Certificate | `/etc/ssl/myapp.crt` |
+| Private key | `/etc/ssl/myapp.key` |
+| CA chain (bundle=false) | `/etc/ssl/myapp.ca.crt` |
+
+For comparison, an unnamed certificate under issuer `letsencrypt` with domain `example.com` would be placed at `/etc/ssl/letsencrypt/example.com.crt`.
+
+**Configuration example:**
+
+```yaml
+certificate:
+  - name: myapp
+    domain: example.com
+    issuer: letsencrypt
+    dns_challenge: cloudflare
+```
+
+> **Breaking change:** In earlier versions, named certificates were stored at `{certDir}/{issuer}/{name}/{domain}{ext}`. They are now stored at the flat path `{certDir}/{name}{ext}`. On the next client run after upgrading, the files will be re-created at the new location. Remove the old files manually once you have verified the new paths are in place.
+
 ### ACME Profiles
 
 Some Certificate Authorities support custom certificate profiles via the ACME protocol (draft-aaron-acme-profiles). This allows requesting certificates with specific Key Usage or Extended Key Usage extensions.
@@ -485,6 +554,7 @@ http://localhost:8989/metrics
 |-----------|------|---------|-------------|
 | `domain` | string | required | Primary domain name |
 | `issuer` | string | required | Certificate authority (e.g., "letsencrypt") |
+| `name` | string | "" | Optional logical name for the certificate. When set, local files use a flat path (`{certDir}/{name}{ext}`) instead of `{certDir}/{issuer}/{domain}{ext}` |
 | `san` | string | "" | Subject Alternative Names (comma-separated) |
 | `dns_challenge` | string | "" | DNS provider for DNS-01 challenge |
 | `http_challenge` | string | "" | HTTP-01 challenge method |

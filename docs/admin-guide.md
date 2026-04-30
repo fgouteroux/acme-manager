@@ -529,6 +529,7 @@ AZURE_RESOURCE_GROUP=your-resource-group
 # Configuration
 -config-path string        # Config file path (default "config.yml")
 -env-config-path string   # Environment file path (default ".env")
+-config-check              # Validate config file and exit (see below)
 
 # Check intervals
 -check-renewal-interval duration    # Certificate renewal check (default 30m)
@@ -550,6 +551,25 @@ AZURE_RESOURCE_GROUP=your-resource-group
 -cleanup.cert-expire-days int              # Days before expiry to cleanup (default 10)
 -cleanup.cert-revoke-last-version          # Revoke last version on cleanup
 ```
+
+### Config Validation (`-config-check`)
+
+The `-config-check` flag validates the server configuration file and exits immediately — it does not start the server or connect to any external services.
+
+```bash
+acme-manager-server -config-path config.yml -config-check
+```
+
+- Exits 0 and prints `config file is valid` on success
+- Exits 1 and prints the error on failure
+
+Validation covers all `UnmarshalYAML` checks, including:
+- Certificate renewal day ranges
+- Rate limit settings
+- Issuer challenge conflicts (e.g., both `dns_challenge` and `http_challenge` set)
+- Plugin checksum format
+
+This flag is useful for checking configuration correctness in CI pipelines or before reloading a running cluster node.
 
 ## High Availability
 
@@ -1323,6 +1343,35 @@ acme_manager_ring_members
 acme_manager_ring_oldest_member_timestamp
 acme_manager_ring_tokens_total
 ```
+
+### HTTP Metrics Path Normalization
+
+The server records HTTP request metrics using matched route patterns as the `path` label rather than the raw request URL. This prevents cardinality explosion when clients send requests to arbitrary or unknown paths.
+
+**Behaviour:**
+
+- Requests to unknown paths (e.g. `/toto`, `/foo/bar`) return **404** instead of 200.
+- The `path` label in all HTTP metrics uses the registered route template, not the literal URL.
+
+**Examples:**
+
+| Raw request path | `path` label in metrics |
+|---|---|
+| `/api/v1/certificate/letsencrypt/example.com` | `/api/v1/certificate/{issuer}/{domain}` |
+| `/api/v1/token/94e0c649-...` | `/api/v1/token/{id}` |
+| `/metrics` | `/metrics` |
+| `/toto` (unknown) | `unknown` |
+
+**Affected metrics:**
+
+```prometheus
+acme_manager_http_requests_total{method, path, status_code}
+acme_manager_http_request_duration_seconds{method, path, status_code}
+acme_manager_http_request_size_bytes{method, path, status_code}
+acme_manager_http_response_size_bytes{method, path, status_code}
+```
+
+This design ensures that Prometheus label sets remain stable regardless of what paths external scanners or misconfigured clients request.
 
 ### Grafana Dashboard
 
