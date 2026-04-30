@@ -102,7 +102,11 @@ func indexHandler(httpPathPrefix string, content *IndexPageContent) http.Handler
 	})
 	template.Must(templ.Parse(indexPageHTML))
 
-	return func(w http.ResponseWriter, _ *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
 		leader, err := ring.GetLeader(certstore.AmStore.RingConfig)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -415,6 +419,20 @@ func rateLimitListHandler() http.HandlerFunc {
 	})
 }
 
+// normalizePathForMetrics returns the mux-matched route pattern for use as a
+// metric label, preventing cardinality explosion from arbitrary request paths.
+// The method prefix (e.g. "GET ") is stripped since method is already a label.
+func normalizePathForMetrics(req *http.Request) string {
+	_, pattern := http.DefaultServeMux.Handler(req)
+	if pattern == "" {
+		return "unknown"
+	}
+	if spaceIdx := strings.Index(pattern, " "); spaceIdx != -1 {
+		return pattern[spaceIdx+1:]
+	}
+	return pattern
+}
+
 func MetricsHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Start timer
@@ -439,7 +457,7 @@ func MetricsHandler(next http.Handler) http.Handler {
 			if requestSize < 0 {
 				requestSize = 0
 			}
-			metrics.RecordHTTPRequest(req.Method, req.URL.Path, statusCode, duration, requestSize, lrw.length)
+			metrics.RecordHTTPRequest(req.Method, normalizePathForMetrics(req), statusCode, duration, requestSize, lrw.length)
 		}
 	})
 }
@@ -481,7 +499,7 @@ func LoggerHandler(next http.Handler) http.Handler {
 			if requestSize < 0 {
 				requestSize = 0
 			}
-			metrics.RecordHTTPRequest(req.Method, req.URL.Path, statusCode, duration, requestSize, lrw.length)
+			metrics.RecordHTTPRequest(req.Method, normalizePathForMetrics(req), statusCode, duration, requestSize, lrw.length)
 
 			_ = level.Info(logger).Log(
 				"request_id", requestID,
