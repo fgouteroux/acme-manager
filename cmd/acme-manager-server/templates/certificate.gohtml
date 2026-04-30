@@ -41,6 +41,7 @@
                     <li><label class="dropdown-item"><input type="checkbox" data-column="0" checked> Owner</label></li>
                     <li><label class="dropdown-item"><input type="checkbox" data-column="1" checked> Domain</label></li>
                     <li><label class="dropdown-item"><input type="checkbox" data-column="2" checked> Issuer</label></li>
+                    <li><label class="dropdown-item"><input type="checkbox" data-column="16"> Name</label></li>
                     <li><label class="dropdown-item"><input type="checkbox" data-column="3" checked> Expires</label></li>
                     <li><label class="dropdown-item"><input type="checkbox" data-column="4">  Key type</label></li>
                     <li><label class="dropdown-item"><input type="checkbox" data-column="5"> Encryption</label></li>
@@ -67,6 +68,7 @@
         <th data-column="0">Owner</th>
         <th data-column="1">Domain</th>
         <th data-column="2">Issuer</th>
+        <th data-column="16">Name</th>
         <th data-column="3">Expires</th>
         <th data-column="4">Key type</th>
         <th data-column="5">Encryption</th>
@@ -85,10 +87,11 @@
     <tbody>
     {{$out := .}}
     {{ range $cert := .Certificates }}
-      <tr data-searchable="{{ $cert.Owner }} {{ $cert.Domain }} {{ $cert.Issuer }} {{ $cert.KeyType }} {{ $cert.EffectiveDnsChallenge }} {{ $cert.EffectiveHttpChallenge }} {{ $cert.Profile }}">
+      <tr data-searchable="{{ $cert.Owner }} {{ $cert.Domain }} {{ $cert.Issuer }} {{ $cert.Name }} {{ $cert.KeyType }} {{ $cert.EffectiveDnsChallenge }} {{ $cert.EffectiveHttpChallenge }} {{ $cert.Profile }}">
         <td data-column="0">{{ $cert.Owner }}</td>
         <td data-column="1">{{ $cert.Domain }}</td>
         <td data-column="2">{{ $cert.Issuer }}</td>
+        <td data-column="16">{{ $cert.Name }}</td>
         <td data-column="3">{{ $cert.Expires }}</td>
         <td data-column="4">{{ $cert.KeyType }}</td>
         <td data-column="5">{{ $cert.Encryption }}</td>

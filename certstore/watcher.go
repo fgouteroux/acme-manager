@@ -183,7 +183,7 @@ func WatchRateLimitCleanup(logger log.Logger, interval time.Duration) {
 
 				if now.After(windowEnd) {
 					// Entry expired, delete it
-					err := AmStore.DeleteRateLimit(rateLimit.Owner, rateLimit.Issuer, rateLimit.Domain)
+					err := AmStore.DeleteRateLimitByKey(key)
 					if err != nil {
 						_ = level.Error(logger).Log("msg", "failed to delete expired rate limit", "key", key, "err", err)
 						continue

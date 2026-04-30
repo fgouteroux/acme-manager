@@ -22,9 +22,19 @@ const (
 
 // =================== CERTIFICATES ===================
 
-// GenerateCertificateKey creates a hierarchical key for certificates
-func GenerateCertificateKey(owner, issuer, domain string) string {
-	return fmt.Sprintf("%s/%s/%s/%s", CertificatePrefix, owner, issuer, domain)
+// GenerateCertificatePath builds a slash-separated path.
+// Named certs (name != ""): prefix/owner/name  — issuer and domain are in the value, not the key.
+// Unnamed certs:            prefix/owner/issuer/domain (backward compatible).
+func GenerateCertificatePath(prefix, owner, issuer, name, domain string) string {
+	if name != "" {
+		return fmt.Sprintf("%s/%s/%s", prefix, owner, name)
+	}
+	return fmt.Sprintf("%s/%s/%s/%s", prefix, owner, issuer, domain)
+}
+
+// GenerateCertificateKey creates a hierarchical key for certificates in the KV ring.
+func GenerateCertificateKey(owner, issuer, name, domain string) string {
+	return GenerateCertificatePath(CertificatePrefix, owner, issuer, name, domain)
 }
 
 // GetCertificateKeysForOwner generates a prefix to list all certificates for an owner
@@ -43,7 +53,7 @@ func (c *CertStore) ListCertificateKVRingKeys(prefix string) ([]string, error) {
 
 // Store certificate
 func (c *CertStore) PutCertificate(cert *models.Certificate) error {
-	key := GenerateCertificateKey(cert.Owner, cert.Issuer, cert.Domain)
+	key := GenerateCertificateKey(cert.Owner, cert.Issuer, cert.Name, cert.Domain)
 
 	// Update the timestamp
 	cert.UpdatedAt = timestamp.FromTime(time.Now())
@@ -60,8 +70,8 @@ func (c *CertStore) PutCertificate(cert *models.Certificate) error {
 }
 
 // Get certificate
-func (c *CertStore) GetCertificate(owner, issuer, domain string) (*models.Certificate, error) {
-	key := GenerateCertificateKey(owner, issuer, domain)
+func (c *CertStore) GetCertificate(owner, issuer, name, domain string) (*models.Certificate, error) {
+	key := GenerateCertificateKey(owner, issuer, name, domain)
 
 	ctx := context.Background()
 	cached, err := c.RingConfig.CertificateClient.Get(ctx, key)
@@ -70,22 +80,22 @@ func (c *CertStore) GetCertificate(owner, issuer, domain string) (*models.Certif
 	}
 
 	if cached == nil {
-		return nil, fmt.Errorf("certificate '%s/%s/%s' not found", owner, issuer, domain)
+		return nil, fmt.Errorf("certificate '%s' not found", key)
 	}
 
 	cert := cached.(*models.Certificate)
 
 	// Check for deletion
 	if cert.DeletedAt > 0 {
-		return nil, fmt.Errorf("certificate '%s/%s/%s' is pending deletion", owner, issuer, domain)
+		return nil, fmt.Errorf("certificate '%s' is pending deletion", key)
 	}
 
 	return cert, nil
 }
 
 // Delete certificate
-func (c *CertStore) DeleteCertificate(owner, issuer, domain string) error {
-	key := GenerateCertificateKey(owner, issuer, domain)
+func (c *CertStore) DeleteCertificate(owner, issuer, name, domain string) error {
+	key := GenerateCertificateKey(owner, issuer, name, domain)
 
 	ctx := context.Background()
 
@@ -408,8 +418,12 @@ func (c *CertStore) ListAllChallenges() (map[string]string, error) {
 
 // =================== RATE LIMITS ===================
 
-// GenerateRateLimitKey creates a hierarchical key for rate limits
-func GenerateRateLimitKey(owner, issuer, domain string) string {
+// GenerateRateLimitKey creates a hierarchical key for rate limits.
+// Named certs use name as the stable identifier (issuer and domain excluded); unnamed certs use issuer+domain.
+func GenerateRateLimitKey(owner, issuer, name, domain string) string {
+	if name != "" {
+		return fmt.Sprintf("%s/%s/%s", RateLimitPrefix, owner, name)
+	}
 	return fmt.Sprintf("%s/%s/%s/%s", RateLimitPrefix, owner, issuer, domain)
 }
 
@@ -418,8 +432,8 @@ func (c *CertStore) ListRateLimitKVRingKeys(prefix string) ([]string, error) {
 }
 
 // Store rate limit
-func (c *CertStore) PutRateLimit(rateLimit *models.RateLimit) error {
-	key := GenerateRateLimitKey(rateLimit.Owner, rateLimit.Issuer, rateLimit.Domain)
+func (c *CertStore) PutRateLimit(rateLimit *models.RateLimit, name string) error {
+	key := GenerateRateLimitKey(rateLimit.Owner, rateLimit.Issuer, name, rateLimit.Domain)
 
 	// Update the timestamp
 	rateLimit.UpdatedAt = timestamp.FromTime(time.Now())
@@ -436,8 +450,8 @@ func (c *CertStore) PutRateLimit(rateLimit *models.RateLimit) error {
 }
 
 // Get rate limit
-func (c *CertStore) GetRateLimit(owner, issuer, domain string) (*models.RateLimit, error) {
-	key := GenerateRateLimitKey(owner, issuer, domain)
+func (c *CertStore) GetRateLimit(owner, issuer, name, domain string) (*models.RateLimit, error) {
+	key := GenerateRateLimitKey(owner, issuer, name, domain)
 
 	ctx := context.Background()
 	cached, err := c.RingConfig.RateLimitClient.Get(ctx, key)
@@ -460,9 +474,16 @@ func (c *CertStore) GetRateLimit(owner, issuer, domain string) (*models.RateLimi
 }
 
 // Delete rate limit
-func (c *CertStore) DeleteRateLimit(owner, issuer, domain string) error {
-	key := GenerateRateLimitKey(owner, issuer, domain)
+func (c *CertStore) DeleteRateLimit(owner, issuer, name, domain string) error {
+	key := GenerateRateLimitKey(owner, issuer, name, domain)
 
+	ctx := context.Background()
+	return c.RingConfig.RateLimitClient.Delete(ctx, key)
+}
+
+// DeleteRateLimitByKey deletes a rate limit entry by its full KV key.
+// Used when the key is already known (e.g. from ListAllRateLimits iteration).
+func (c *CertStore) DeleteRateLimitByKey(key string) error {
 	ctx := context.Background()
 	return c.RingConfig.RateLimitClient.Delete(ctx, key)
 }

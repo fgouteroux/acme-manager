@@ -10,6 +10,7 @@ type CertMap struct {
 type CertificateParams struct {
 	Domain        string `json:"domain" example:"testfgx.example.com"`
 	Issuer        string `json:"issuer" example:"letsencrypt"`
+	Name          string `json:"name,omitempty" example:"prod"`
 	Bundle        bool   `json:"bundle" example:"false"`
 	San           string `json:"san,omitempty" example:""`
 	Csr           string `json:"csr,omitempty"`

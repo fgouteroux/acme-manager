@@ -30,6 +30,7 @@ func (c *CertificateCollector) Collect(ch chan<- prometheus.Metric) {
 			"issuer":     cert.Issuer,
 			"owner":      cert.Owner,
 			"domain":     cert.Domain,
+			"name":       cert.Name,
 			"expires":    cert.Expires,
 			"encryption": cert.Encryption,
 			"serial":     cert.Serial,

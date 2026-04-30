@@ -15,6 +15,7 @@ import (
 type CertConfig struct {
 	Domain        string `yaml:"domain"`
 	Issuer        string `yaml:"issuer"`
+	Name          string `yaml:"name,omitempty"`
 	Bundle        bool   `yaml:"bundle,omitempty"`
 	San           string `yaml:"san,omitempty"`
 	Days          int32  `yaml:"days,omitempty"`
@@ -31,6 +32,7 @@ func (cc CertConfig) ToModelsCertificate() models.Certificate {
 	return models.Certificate{
 		Domain:        cc.Domain,
 		Issuer:        cc.Issuer,
+		Name:          cc.Name,
 		Bundle:        cc.Bundle,
 		San:           cc.San,
 		Days:          cc.Days,
@@ -122,11 +124,20 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		}
 	}
 
-	// Validate unique issuer/domain name.
+	// Validate uniqueness: named certs are identified by name alone (issuer is mutable);
+	// unnamed certs are identified by issuer+domain.
 	domains := map[string]struct{}{}
 	for _, cert := range s.Certificate {
-		k := cert.Issuer + "/" + cert.Domain
+		var k string
+		if cert.Name != "" {
+			k = cert.Name
+		} else {
+			k = cert.Issuer + "/" + cert.Domain
+		}
 		if _, ok := domains[k]; ok {
+			if cert.Name != "" {
+				return fmt.Errorf("found multiple certificate config with name '%s'", cert.Name)
+			}
 			return fmt.Errorf("found multiple certificate config with issuer '%s' and domain '%s'", cert.Issuer, cert.Domain)
 		}
 		domains[k] = struct{}{}

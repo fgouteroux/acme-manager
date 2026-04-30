@@ -35,7 +35,7 @@ type responseErrorJSON struct {
 
 // checkRateLimit checks if the request should be rate limited.
 // Returns (blocked, retryAfter in seconds, error)
-func checkRateLimit(tokenData *models.Token, owner, issuer, domain, operation string) (bool, int, error) {
+func checkRateLimit(tokenData *models.Token, owner, issuer, domain, name, operation string) (bool, int, error) {
 	// Check if rate limiting is enabled globally
 	if !config.GlobalConfig.Common.RateLimitEnabled {
 		return false, 0, nil
@@ -59,7 +59,7 @@ func checkRateLimit(tokenData *models.Token, owner, issuer, domain, operation st
 	}
 
 	// Get current rate limit entry
-	rateLimit, err := certstore.AmStore.GetRateLimit(owner, issuer, domain)
+	rateLimit, err := certstore.AmStore.GetRateLimit(owner, issuer, name, domain)
 	if err != nil {
 		return false, 0, err
 	}
@@ -76,7 +76,7 @@ func checkRateLimit(tokenData *models.Token, owner, issuer, domain, operation st
 			WindowStartAt: nowMs,
 			RequestCount:  1,
 		}
-		err = certstore.AmStore.PutRateLimit(rateLimit)
+		err = certstore.AmStore.PutRateLimit(rateLimit, name)
 		return false, 0, err
 	}
 
@@ -88,7 +88,7 @@ func checkRateLimit(tokenData *models.Token, owner, issuer, domain, operation st
 		// Window expired, reset
 		rateLimit.WindowStartAt = nowMs
 		rateLimit.RequestCount = 1
-		err = certstore.AmStore.PutRateLimit(rateLimit)
+		err = certstore.AmStore.PutRateLimit(rateLimit, name)
 		return false, 0, err
 	}
 
@@ -99,13 +99,13 @@ func checkRateLimit(tokenData *models.Token, owner, issuer, domain, operation st
 		if retryAfter < 1 {
 			retryAfter = 1
 		}
-		metrics.IncRateLimitBlocked(owner, issuer, domain, operation)
+		metrics.IncRateLimitBlocked(owner, issuer, domain, name, operation)
 		return true, retryAfter, nil
 	}
 
 	// Increment counter
 	rateLimit.RequestCount++
-	err = certstore.AmStore.PutRateLimit(rateLimit)
+	err = certstore.AmStore.PutRateLimit(rateLimit, name)
 	return false, 0, err
 }
 
@@ -229,10 +229,11 @@ func CertificateMetadataHandler(logger log.Logger, proxyClient *http.Client) htt
 
 		issuer := r.URL.Query().Get("issuer")
 		domain := r.URL.Query().Get("domain")
+		name := r.URL.Query().Get("name")
 
 		var metadata []*models.Certificate
 		if issuer != "" && domain != "" {
-			data, err := certstore.AmStore.GetCertificate(tokenValue.Username, issuer, domain)
+			data, err := certstore.AmStore.GetCertificate(tokenValue.Username, issuer, name, domain)
 			if err != nil {
 				if strings.Contains(err.Error(), "pending deletion") {
 					responseJSON(w, nil, err, http.StatusConflict)
@@ -300,6 +301,7 @@ func GetCertificateHandler(logger log.Logger, proxyClient *http.Client) http.Han
 			Domain: r.PathValue("domain"),
 			Issuer: r.PathValue("issuer"),
 			Owner:  tokenValue.Username,
+			Name:   r.URL.Query().Get("name"),
 		}
 
 		if certData.Domain == "" || certData.Issuer == "" {
@@ -311,6 +313,7 @@ func GetCertificateHandler(logger log.Logger, proxyClient *http.Client) http.Han
 			"owner":  certData.Owner,
 			"domain": certData.Domain,
 			"issuer": certData.Issuer,
+			"name":   certData.Name,
 		}
 
 		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
@@ -327,7 +330,7 @@ func GetCertificateHandler(logger log.Logger, proxyClient *http.Client) http.Han
 			return
 		}
 
-		_, err = certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Domain)
+		_, err = certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 		if err != nil {
 			if strings.Contains(err.Error(), "pending deletion") {
 				responseJSON(w, nil, err, http.StatusConflict)
@@ -341,7 +344,7 @@ func GetCertificateHandler(logger log.Logger, proxyClient *http.Client) http.Han
 			return
 		}
 
-		secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
+		secretKeyPath := certstore.GenerateCertificatePath(config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -457,6 +460,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			"owner":  certData.Owner,
 			"domain": certData.Domain,
 			"issuer": certData.Issuer,
+			"name":   certData.Name,
 		}
 
 		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
@@ -475,7 +479,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		_, err = certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Domain)
+		_, err = certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 		if err == nil {
 			responseJSON(w, jsonData, fmt.Errorf("certificate already exists"), http.StatusConflict)
 			return
@@ -488,11 +492,11 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		// no concurrent task for the same certificate here
-		certLockKey := certData.Owner + "/" + certData.Issuer + "/" + certData.Domain
+		certLockKey := certstore.GenerateCertificateKey(certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
-			_ = level.Info(logger).Log("msg", "another create operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			_ = level.Info(logger).Log("msg", "another create operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 
 			responseJSON(w, jsonData, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
 			return
@@ -508,20 +512,20 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		// Check rate limit before contacting ACME server
-		blocked, retryAfter, err := checkRateLimit(tokenValue, certData.Owner, certData.Issuer, certData.Domain, "create")
+		blocked, retryAfter, err := checkRateLimit(tokenValue, certData.Owner, certData.Issuer, certData.Domain, certData.Name, "create")
 		if err != nil {
 			_ = level.Error(logger).Log("msg", "rate limit check failed", "err", err)
 			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
 		if blocked {
-			_ = level.Info(logger).Log("msg", "rate limit exceeded", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "retry_after", retryAfter)
+			_ = level.Info(logger).Log("msg", "rate limit exceeded", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner, "retry_after", retryAfter)
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 			responseJSON(w, jsonData, fmt.Errorf("rate limit exceeded, retry after %ds", retryAfter), http.StatusTooManyRequests)
 			return
 		}
 
-		_ = level.Info(logger).Log("msg", "creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+		_ = level.Info(logger).Log("msg", "creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 		newCert, err := certstore.CreateRemoteCertificateResource(certData, logger)
 		if err != nil {
 			statusCode := http.StatusInternalServerError
@@ -532,7 +536,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			responseJSON(w, jsonData, err, statusCode)
 			return
 		}
-		_ = level.Info(logger).Log("msg", "created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+		_ = level.Info(logger).Log("msg", "created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 
 		err = certstore.AmStore.PutCertificate(newCert)
 		if err != nil {
@@ -540,9 +544,9 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
-		metrics.IncManagedCertificate(certData.Issuer, certData.Owner, certData.Domain)
+		metrics.IncManagedCertificate(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
 
-		secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
+		secretKeyPath := certstore.GenerateCertificatePath(config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
@@ -663,6 +667,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			"owner":  certData.Owner,
 			"domain": certData.Domain,
 			"issuer": certData.Issuer,
+			"name":   certData.Name,
 		}
 
 		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
@@ -681,7 +686,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		existingCert, err := certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Domain)
+		existingCert, err := certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 		if err != nil {
 			if strings.Contains(err.Error(), "pending deletion") {
 				responseJSON(w, nil, err, http.StatusConflict)
@@ -696,27 +701,32 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		// no concurrent task for the same certificate here
-		certLockKey := certData.Owner + "/" + certData.Issuer + "/" + certData.Domain
+		certLockKey := certstore.GenerateCertificateKey(certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
-			_ = level.Info(logger).Log("msg", "another update operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			_ = level.Info(logger).Log("msg", "another update operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 			responseJSON(w, jsonData, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
 			return
 		}
-
 		certLockMap.Store(certLockKey, r.Method)
 		_ = level.Debug(logger).Log("msg", fmt.Sprintf("Locking operation for key '%s' on '%s' method", certLockKey, r.Method))
-		defer func() { certLockMap.Delete(certLockKey) }() // Unlock deferred
+		defer func() { certLockMap.Delete(certLockKey) }()
 
 		if !slices.Contains(tokenValue.Scope, "update") {
 			responseJSON(w, jsonData, fmt.Errorf("invalid scope, missing 'update' scope"), http.StatusForbidden)
 			return
 		}
 
-		secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
+		secretKeyPath := certstore.GenerateCertificatePath(config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 
 		var recreateCert bool
+		if certData.Domain != existingCert.Domain {
+			recreateCert = true
+		}
+		if certData.Issuer != existingCert.Issuer {
+			recreateCert = true
+		}
 		if certData.San != existingCert.San {
 			recreateCert = true
 		}
@@ -746,37 +756,45 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		var renewalDate string
 		if recreateCert {
 			// Check rate limit before contacting ACME server (only for recreate operations)
-			blocked, retryAfter, err := checkRateLimit(tokenValue, certData.Owner, certData.Issuer, certData.Domain, "update")
+			blocked, retryAfter, err := checkRateLimit(tokenValue, certData.Owner, certData.Issuer, certData.Domain, certData.Name, "update")
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "rate limit check failed", "err", err)
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
 			if blocked {
-				_ = level.Info(logger).Log("msg", "rate limit exceeded", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "retry_after", retryAfter)
+				_ = level.Info(logger).Log("msg", "rate limit exceeded", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner, "retry_after", retryAfter)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 				responseJSON(w, jsonData, fmt.Errorf("rate limit exceeded, retry after %ds", retryAfter), http.StatusTooManyRequests)
 				return
 			}
 
 			if certParams.Revoke {
-				_ = level.Info(logger).Log("msg", "revoking certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
-				err = certstore.DeleteRemoteCertificateResource(certData, logger)
-				if err != nil {
-					_ = level.Error(logger).Log("err", err)
-					responseJSON(w, jsonData, err, http.StatusInternalServerError)
-					return
+				// Revoke the existing cert using its own issuer's ACME client,
+				// not the new issuer — they may differ when the user changes issuer.
+				certToRevoke := certData
+				if certData.Issuer != existingCert.Issuer {
+					tmp := *certData
+					tmp.Issuer = existingCert.Issuer
+					certToRevoke = &tmp
 				}
-				_ = level.Info(logger).Log("msg", "revoked certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+				_ = level.Info(logger).Log("msg", "revoking certificate", "domain", certToRevoke.Domain, "issuer", certToRevoke.Issuer, "name", certToRevoke.Name, "owner", certToRevoke.Owner)
+				if revokeErr := certstore.DeleteRemoteCertificateResource(certToRevoke, logger); revokeErr != nil {
+					// Revocation is best-effort: some CAs reject it (e.g. unauthorized key).
+					// Log and proceed so the new cert is still issued.
+					_ = level.Warn(logger).Log("msg", "revocation failed, proceeding with new certificate", "err", revokeErr, "domain", certToRevoke.Domain, "issuer", certToRevoke.Issuer, "name", certToRevoke.Name, "owner", certToRevoke.Owner)
+				} else {
+					_ = level.Info(logger).Log("msg", "revoked certificate", "domain", certToRevoke.Domain, "issuer", certToRevoke.Issuer, "name", certToRevoke.Name, "owner", certToRevoke.Owner)
+				}
 			}
 
-			_ = level.Info(logger).Log("msg", "re-creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			_ = level.Info(logger).Log("msg", "re-creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 			newCert, err = certstore.CreateRemoteCertificateResource(certData, logger)
 			if err != nil {
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
-			_ = level.Info(logger).Log("msg", "re-created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			_ = level.Info(logger).Log("msg", "re-created certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 
 			err = certstore.AmStore.PutCertificate(newCert)
 			if err != nil {
@@ -784,8 +802,16 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
+
+			// When issuer or domain changed, migrate metric label sets so stale series don't linger.
+			if existingCert.Issuer != newCert.Issuer || existingCert.Domain != newCert.Domain {
+				metrics.DeleteCertificateMetrics(existingCert.Issuer, existingCert.Owner, existingCert.Domain, existingCert.Name)
+				metrics.IncManagedCertificate(newCert.Issuer, newCert.Owner, newCert.Domain, newCert.Name)
+				metrics.InitCertificateErrorMetrics(newCert.Issuer, newCert.Owner, newCert.Domain, newCert.Name)
+				metrics.SetCertificateRenewed(newCert.Issuer, newCert.Owner, newCert.Domain, newCert.Name, existingCert.RenewalCount)
+			}
 		} else {
-			_ = level.Info(logger).Log("msg", "updating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			_ = level.Info(logger).Log("msg", "updating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 			secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
@@ -816,7 +842,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
-			_ = level.Info(logger).Log("msg", "updated certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			_ = level.Info(logger).Log("msg", "updated certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 		}
 
 		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
@@ -876,12 +902,14 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			Domain: r.PathValue("domain"),
 			Issuer: r.PathValue("issuer"),
 			Owner:  tokenValue.Username,
+			Name:   r.URL.Query().Get("name"),
 		}
 
 		jsonData := map[string]string{
 			"owner":  certData.Owner,
 			"domain": certData.Domain,
 			"issuer": certData.Issuer,
+			"name":   certData.Name,
 		}
 
 		if certData.Domain == "" || certData.Issuer == "" {
@@ -905,7 +933,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
-		_, err = certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Domain)
+		_, err = certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 		if err != nil {
 			if strings.Contains(err.Error(), "pending deletion") {
 				responseJSON(w, nil, err, http.StatusConflict)
@@ -920,11 +948,11 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		// no concurrent task for the same certificate here
-		certLockKey := certData.Owner + "/" + certData.Issuer + "/" + certData.Domain
+		certLockKey := certstore.GenerateCertificateKey(certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 
 		_, locked := certLockMap.Load(certLockKey)
 		if locked {
-			_ = level.Info(logger).Log("msg", "another delete operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			_ = level.Info(logger).Log("msg", "another delete operation is in progress", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 			responseJSON(w, jsonData, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
 			return
 		}
@@ -939,31 +967,31 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		if revoke {
-			_ = level.Info(logger).Log("msg", "revoking certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			_ = level.Info(logger).Log("msg", "revoking certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 			err = certstore.DeleteRemoteCertificateResource(certData, logger)
 			if err != nil {
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
-			_ = level.Info(logger).Log("msg", "revoked certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			_ = level.Info(logger).Log("msg", "revoked certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 		} else {
-			_ = level.Info(logger).Log("msg", "deleting certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
-			secretKeyPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
+			_ = level.Info(logger).Log("msg", "deleting certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
+			secretKeyPath := certstore.GenerateCertificatePath(config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 			err = vault.GlobalClient.DeleteSecretWithAppRole(secretKeyPath)
 			if err != nil {
 				_ = level.Error(logger).Log("err", err)
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
 			}
-			_ = level.Info(logger).Log("msg", "deleted certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			_ = level.Info(logger).Log("msg", "deleted certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 		}
-		err = certstore.AmStore.DeleteCertificate(certData.Owner, certData.Issuer, certData.Domain)
+		err = certstore.AmStore.DeleteCertificate(certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 		if err != nil {
 			_ = level.Error(logger).Log("err", err)
 			responseJSON(w, jsonData, err, http.StatusInternalServerError)
 			return
 		}
-		metrics.DecManagedCertificate(certData.Issuer, certData.Owner, certData.Domain)
+		metrics.DecManagedCertificate(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
 
 		w.WriteHeader(http.StatusNoContent)
 	})

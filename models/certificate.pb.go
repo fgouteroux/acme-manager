@@ -53,6 +53,8 @@ type Certificate struct {
 	DeletedAt int64 `protobuf:"varint,19,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
 	// Total number of successful renewals, persisted to survive restarts.
 	RenewalCount int64 `protobuf:"varint,21,opt,name=renewal_count,json=renewalCount,proto3" json:"renewal_count,omitempty"`
+	// Optional logical name to namespace the KV key.
+	Name string `protobuf:"bytes,22,opt,name=name,proto3" json:"name,omitempty"`
 }
 
 func (m *Certificate) Reset()         { *m = Certificate{} }
@@ -146,6 +148,15 @@ func (m *Certificate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintCertificate(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xb2
+	}
 	if m.RenewalCount != 0 {
 		i = encodeVarintCertificate(dAtA, i, uint64(m.RenewalCount))
 		i--
@@ -398,6 +409,10 @@ func (m *Certificate) Size() (n int) {
 	}
 	if m.RenewalCount != 0 {
 		n += 2 + sovCertificate(uint64(m.RenewalCount))
+	}
+	l = len(m.Name)
+	if l > 0 {
+		n += 2 + l + sovCertificate(uint64(l))
 	}
 	return n
 }
@@ -1045,6 +1060,38 @@ func (m *Certificate) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		case 22:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowCertificate
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthCertificate
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthCertificate
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipCertificate(dAtA[iNdEx:])

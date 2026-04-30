@@ -182,7 +182,7 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 					continue
 				}
 
-				safeToDestroy, err := RevokeCertificateWithVerification(logger, issuerAcmeClient, []byte(data.Cert), data.Issuer, data.Owner, data.Domain, &versionNumber)
+				safeToDestroy, err := RevokeCertificateWithVerification(logger, issuerAcmeClient, []byte(data.Cert), data.Issuer, data.Owner, data.Domain, data.Name, &versionNumber)
 				if err != nil {
 					_ = level.Error(logger).Log("msg", "skipping destruction due to revocation failure", "version", versionNumber, "secret_path", secretPath)
 					continue

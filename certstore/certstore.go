@@ -51,7 +51,7 @@ type CertStore struct {
 //   - (true, nil): Certificate already revoked/expired in previous cycle - safe to destroy
 //   - (false, nil): Certificate freshly revoked this cycle - wait for next cycle before destroying
 //   - (false, error): Revocation failed - do not proceed with destruction
-func RevokeCertificateWithVerification(logger log.Logger, issuerAcmeClient *lego.Client, certBytes []byte, issuer, owner, domain string, version *int) (bool, error) {
+func RevokeCertificateWithVerification(logger log.Logger, issuerAcmeClient *lego.Client, certBytes []byte, issuer, owner, domain, name string, version *int) (bool, error) {
 	versionStr := ""
 	if version != nil {
 		versionStr = fmt.Sprintf(", version=%d", *version)
@@ -60,20 +60,20 @@ func RevokeCertificateWithVerification(logger log.Logger, issuerAcmeClient *lego
 	err := issuerAcmeClient.Certificate.Revoke(context.Background(), certBytes)
 	switch {
 	case err == nil:
-		_ = level.Info(logger).Log("msg", "certificate revoked successfully, will destroy in next cleanup cycle"+versionStr, "domain", domain, "issuer", issuer, "owner", owner)
-		metrics.IncRevokedCertificate(issuer, owner, domain)
+		_ = level.Info(logger).Log("msg", "certificate revoked successfully, will destroy in next cleanup cycle"+versionStr, "domain", domain, "issuer", issuer, "name", name, "owner", owner)
+		metrics.IncRevokedCertificate(issuer, owner, domain, name)
 		return false, nil // Freshly revoked, wait for next cycle
 	case strings.Contains(err.Error(), "Certificate is expired"):
-		_ = level.Info(logger).Log("msg", "certificate already expired"+versionStr, "domain", domain, "issuer", issuer, "owner", owner)
-		metrics.IncRevokedCertificate(issuer, owner, domain)
+		_ = level.Info(logger).Log("msg", "certificate already expired"+versionStr, "domain", domain, "issuer", issuer, "name", name, "owner", owner)
+		metrics.IncRevokedCertificate(issuer, owner, domain, name)
 		return true, nil // Already expired, safe to destroy
 	case strings.Contains(err.Error(), "urn:ietf:params:acme:error:alreadyRevoked"):
-		_ = level.Info(logger).Log("msg", "certificate already revoked in previous cycle"+versionStr, "domain", domain, "issuer", issuer, "owner", owner)
-		metrics.IncRevokedCertificate(issuer, owner, domain)
+		_ = level.Info(logger).Log("msg", "certificate already revoked in previous cycle"+versionStr, "domain", domain, "issuer", issuer, "name", name, "owner", owner)
+		metrics.IncRevokedCertificate(issuer, owner, domain, name)
 		return true, nil // Already revoked, safe to destroy now
 	default:
-		_ = level.Error(logger).Log("msg", "failed to revoke certificate"+versionStr, "domain", domain, "issuer", issuer, "owner", owner, "err", err)
-		metrics.IncRevokedCertificateErrors(issuer, owner, domain)
+		_ = level.Error(logger).Log("msg", "failed to revoke certificate"+versionStr, "domain", domain, "issuer", issuer, "name", name, "owner", owner, "err", err)
+		metrics.IncRevokedCertificateErrors(issuer, owner, domain, name)
 		return false, err // Failed, don't proceed
 	}
 }
@@ -94,10 +94,10 @@ func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resou
 }
 
 func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Logger) (*models.Certificate, error) {
-	vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
+	vaultSecretPath := GenerateCertificatePath(config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 	domain := utils.SanitizedDomain(logger, certData.Domain)
 
-	baseCertificateFilePath := fmt.Sprintf("%s/%s/%s/%s/", config.GlobalConfig.Common.RootPathCertificate, certData.Owner, certData.Issuer, domain)
+	baseCertificateFilePath := GenerateCertificatePath(config.GlobalConfig.Common.RootPathCertificate, certData.Owner, certData.Issuer, certData.Name, domain) + "/"
 	err := utils.CreateNonExistingFolder(baseCertificateFilePath, 0750)
 	if err != nil {
 		return certData, err
@@ -243,22 +243,22 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 		if (plugin.Checksum != "" && slices.Contains(config.SecuredPlugins, plugin.Name)) || plugin.Checksum == "" {
 			err = executeCommand(logger, plugin.Path, []string{certDomains, certData.Issuer, challengeType}, plugin.Timeout, plugin.Env)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("plugin command '%s' execution failed", plugin.Path), "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
-				metrics.IncCertificateCreationError(certData.Issuer, certData.Owner, certData.Domain)
+				_ = level.Error(logger).Log("msg", fmt.Sprintf("plugin command '%s' execution failed", plugin.Path), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
+				metrics.IncCertificateCreationError(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
 				return certData, err
 			}
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("plugin command '%s' successfully executed", plugin.Path), "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("plugin command '%s' successfully executed", plugin.Path), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 		}
 	}
 
 	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(context.Background(), request)
 	if err != nil {
-		_ = level.Error(logger).Log("msg", "failed to obtain certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
-		metrics.IncCertificateCreationError(certData.Issuer, certData.Owner, certData.Domain)
+		_ = level.Error(logger).Log("msg", "failed to obtain certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner, "err", err)
+		metrics.IncCertificateCreationError(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
 		return certData, err
 	}
 
-	metrics.IncCertificateCreated(certData.Issuer, certData.Owner, certData.Domain)
+	metrics.IncCertificateCreated(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
 
 	// save in local in case of vault failure
 	SaveResource(logger, baseCertificateFilePath, resource)
@@ -310,10 +310,10 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 
 	err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
 	if err != nil {
-		_ = level.Error(logger).Log("msg", "failed to save certificate to vault", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
+		_ = level.Error(logger).Log("msg", "failed to save certificate to vault", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner, "err", err)
 		return certData, err
 	}
-	_ = level.Info(logger).Log("msg", "certificate saved to vault", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+	_ = level.Info(logger).Log("msg", "certificate saved to vault", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 
 	// remove local cert once stored in vault
 	err = os.RemoveAll(baseCertificateFilePath)
@@ -325,10 +325,10 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 }
 
 func DeleteRemoteCertificateResource(certData *models.Certificate, logger log.Logger) error {
-	vaultSecretPath := fmt.Sprintf("%s/%s/%s/%s", config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Domain)
+	vaultSecretPath := GenerateCertificatePath(config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 	data, err := vault.GlobalClient.GetSecretWithAppRole(vaultSecretPath)
 	if err != nil {
-		_ = level.Error(logger).Log("msg", "failed to get certificate from vault", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
+		_ = level.Error(logger).Log("msg", "failed to get certificate from vault", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner, "err", err)
 		return err
 	}
 
@@ -339,7 +339,7 @@ func DeleteRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 			return fmt.Errorf("could not delete certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
 		}
 
-		_, err = RevokeCertificateWithVerification(logger, issuerAcmeClient, []byte(certBytes.(string)), certData.Issuer, certData.Owner, certData.Domain, nil)
+		_, err = RevokeCertificateWithVerification(logger, issuerAcmeClient, []byte(certBytes.(string)), certData.Issuer, certData.Owner, certData.Domain, certData.Name, nil)
 		if err != nil {
 			return err
 		}
@@ -370,28 +370,28 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 		layout := "2006-01-02 15:04:05 -0700 MST"
 		renewalDate, err := time.Parse(layout, certData.RenewalDate)
 		if err != nil {
-			_ = level.Error(logger).Log("msg", "unable to parse renewal date for certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
+			_ = level.Error(logger).Log("msg", "unable to parse renewal date for certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner, "err", err)
 			continue
 		}
 
 		currentDate := time.Now()
 		if currentDate.After(renewalDate) || currentDate.Equal(renewalDate) {
-			_ = level.Info(logger).Log("msg", "trying renewal certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner)
+			_ = level.Info(logger).Log("msg", "trying renewal certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 			certData.RenewalCount++
 			cert, err := CreateRemoteCertificateResource(certData, logger)
 			if err != nil {
 				certData.RenewalCount-- // revert: Vault write did not happen
-				metrics.IncCertificateRenewalError(certData.Issuer, certData.Owner, certData.Domain)
-				_ = level.Error(logger).Log("msg", "failed to renew certificate", "domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
+				metrics.IncCertificateRenewalError(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
+				_ = level.Error(logger).Log("msg", "failed to renew certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner, "err", err)
 				continue
 			}
 			err = amStore.PutCertificate(cert)
 			if err != nil {
-				_ = level.Error(logger).Log("msg", "failed to store renewed certificate", "domain", cert.Domain, "issuer", cert.Issuer, "owner", cert.Owner, "err", err)
-				metrics.IncCertificateRenewalError(cert.Issuer, cert.Owner, cert.Domain)
+				_ = level.Error(logger).Log("msg", "failed to store renewed certificate", "domain", cert.Domain, "issuer", cert.Issuer, "name", cert.Name, "owner", cert.Owner, "err", err)
+				metrics.IncCertificateRenewalError(cert.Issuer, cert.Owner, cert.Domain, cert.Name)
 				continue
 			}
-			metrics.SetCertificateRenewed(cert.Issuer, cert.Owner, cert.Domain, cert.RenewalCount)
+			metrics.SetCertificateRenewed(cert.Issuer, cert.Owner, cert.Domain, cert.Name, cert.RenewalCount)
 		}
 	}
 	return nil

@@ -49,19 +49,19 @@ func OnStartup(logger log.Logger) error {
 			err := AmStore.PutCertificate(certData)
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "failed to store certificate",
-					"domain", certData.Domain, "issuer", certData.Issuer, "owner", certData.Owner, "err", err)
+					"domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner, "err", err)
 				continue
 			}
-			metrics.IncManagedCertificate(certData.Issuer, certData.Owner, certData.Domain)
-			metrics.InitCertificateErrorMetrics(certData.Issuer, certData.Owner, certData.Domain)
+			metrics.IncManagedCertificate(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
+			metrics.InitCertificateErrorMetrics(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
 		}
 	} else if len(certificateData) > 0 {
 		_ = level.Info(logger).Log("msg", "found existing certificates in KV ring", "count", len(certificateData))
 		for _, certData := range certificateData {
 			// Restore renewal gauge from persisted KV values so metrics survive restarts and leader changes.
-			metrics.SetCertificateRenewed(certData.Issuer, certData.Owner, certData.Domain, certData.RenewalCount)
+			metrics.SetCertificateRenewed(certData.Issuer, certData.Owner, certData.Domain, certData.Name, certData.RenewalCount)
 			// Initialize error counters to 0 so increase() works on first occurrence.
-			metrics.InitCertificateErrorMetrics(certData.Issuer, certData.Owner, certData.Domain)
+			metrics.InitCertificateErrorMetrics(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
 		}
 	}
 
@@ -158,6 +158,25 @@ func getVaultAllCertificate(logger log.Logger) ([]*models.Certificate, error) {
 			if err != nil {
 				_ = level.Error(logger).Log("msg", "failed to unmarshal certificate", "err", err)
 				continue
+			}
+
+			// Migrate old-format vault paths to the new stable format (prefix/owner/name) for named certs.
+			// ListSecretWithAppRole returns paths with a leading "/" that must be stripped before
+			// comparison or vault operations to avoid double-slash URLs that delete the wrong secret.
+			if vaultCert.Name != "" {
+				normalizedPath := strings.TrimPrefix(secretKeyPath, "/")
+				expectedPath := GenerateCertificatePath(
+					config.GlobalConfig.Storage.Vault.CertPrefix,
+					vaultCert.Owner, vaultCert.Issuer, vaultCert.Name, vaultCert.Domain,
+				)
+				if normalizedPath != expectedPath {
+					if putErr := vault.GlobalClient.PutSecretWithAppRole(expectedPath, secret); putErr != nil {
+						_ = level.Error(logger).Log("msg", "failed to migrate cert vault path", "old", normalizedPath, "new", expectedPath, "err", putErr)
+						continue
+					}
+					_ = vault.GlobalClient.DeleteSecretWithAppRole(normalizedPath)
+					_ = level.Info(logger).Log("msg", "migrated cert vault path", "old", normalizedPath, "new", expectedPath)
+				}
 			}
 
 			vaultCertList = append(vaultCertList, vaultCert)

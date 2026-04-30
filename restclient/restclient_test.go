@@ -78,7 +78,7 @@ func TestGetCertificateMetadata(t *testing.T) {
 
 	mockClient.On("Do", mock.Anything).Return(response, nil)
 
-	certificate, err := client.GetCertificateMetadata("issuer1", "domain1", 30)
+	certificate, err := client.GetCertificateMetadata("issuer1", "domain1", "", 30)
 	assert.NoError(t, err)
 	assert.Equal(t, "issuer1", certificate.Issuer)
 	assert.Equal(t, "domain1", certificate.Domain)
@@ -181,7 +181,7 @@ func TestDeleteCertificate(t *testing.T) {
 
 	mockClient.On("Do", mock.Anything).Return(response, nil)
 
-	err := client.DeleteCertificate("issuer1", "domain1", false, 30)
+	err := client.DeleteCertificate("issuer1", "domain1", "", false, 30)
 	assert.NoError(t, err)
 }
 

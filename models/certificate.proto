@@ -45,4 +45,7 @@ message Certificate {
   int64 deleted_at = 19;
   // Total number of successful renewals, persisted to survive restarts.
   int64 renewal_count = 21;
+  // Optional logical name to namespace the KV key: certificate/{owner}/{issuer}/{name}/{domain}.
+  // When empty the legacy key format is used: certificate/{owner}/{issuer}/{domain}.
+  string name = 22;
 }

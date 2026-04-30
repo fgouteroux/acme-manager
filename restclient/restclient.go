@@ -148,7 +148,7 @@ func (c *Client) GetAllCertificateMetadata(timeout int) ([]models.Certificate, e
 	return certificate, nil
 }
 
-func (c *Client) GetCertificateMetadata(issuer, domain string, timeout int) (models.Certificate, error) {
+func (c *Client) GetCertificateMetadata(issuer, domain, name string, timeout int) (models.Certificate, error) {
 	var certificate models.Certificate
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
@@ -158,6 +158,9 @@ func (c *Client) GetCertificateMetadata(issuer, domain string, timeout int) (mod
 	}
 
 	path := fmt.Sprintf("/certificate/metadata?issuer=%s&domain=%s", issuer, domain)
+	if name != "" {
+		path += "&name=" + name
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
@@ -195,7 +198,11 @@ func (c *Client) ReadCertificate(data models.Certificate, timeout int) (models.C
 
 	baseErrMsg := fmt.Sprintf("error reading certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
 
-	resp, err := c.doRequest(ctx, "GET", fmt.Sprintf("/certificate/%s/%s", data.Issuer, data.Domain), headers, bytes.NewReader(reqBody), timeout)
+	readPath := fmt.Sprintf("/certificate/%s/%s", data.Issuer, data.Domain)
+	if data.Name != "" {
+		readPath += "?name=" + data.Name
+	}
+	resp, err := c.doRequest(ctx, "GET", readPath, headers, bytes.NewReader(reqBody), timeout)
 	if err != nil {
 		return certificate, fmt.Errorf("%s - %w", baseErrMsg, err)
 	}
@@ -281,14 +288,18 @@ func (c *Client) UpdateCertificate(data models.CertificateParams, timeout int) (
 	return certificate, nil
 }
 
-func (c *Client) DeleteCertificate(issuer, domain string, revoke bool, timeout int) error {
+func (c *Client) DeleteCertificate(issuer, domain, name string, revoke bool, timeout int) error {
 	headers := make(map[string]string, 1)
 	headers["Authorization"] = "Bearer " + c.Token
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	resp, err := c.doRequest(ctx, "DELETE", fmt.Sprintf("/certificate/%s/%s?revoke=%v", issuer, domain, revoke), headers, nil, timeout)
+	deletePath := fmt.Sprintf("/certificate/%s/%s?revoke=%v", issuer, domain, revoke)
+	if name != "" {
+		deletePath += "&name=" + name
+	}
+	resp, err := c.doRequest(ctx, "DELETE", deletePath, headers, nil, timeout)
 	if err != nil {
 		return err
 	}
