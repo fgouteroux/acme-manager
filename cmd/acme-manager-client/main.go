@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-kit/log"
@@ -159,6 +161,16 @@ func main() {
 
 		// periodically check local certificate are up-to-date
 		go client.WatchCertificateFromRing(logger, *clientCheckConfigInterval, *clientConfigPath, acmeClient)
+
+		// force a pull on SIGUSR1
+		go func() {
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, syscall.SIGUSR1)
+			for range sigChan {
+				_ = level.Info(logger).Log("msg", "SIGUSR1 received, forcing certificate pull from ring")
+				client.PullAndCheckCertificateFromRing(logger, *clientConfigPath, acmeClient)
+			}
+		}()
 	} else {
 		// On startup compare and create/update certificate from config file to remote server
 		client.CheckCertificate(logger, *clientConfigPath, acmeClient)
@@ -168,6 +180,16 @@ func main() {
 
 		// listen for config file event change
 		go client.WatchCertificateEventChange(logger, *clientConfigPath, acmeClient)
+
+		// force a check on SIGUSR1
+		go func() {
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, syscall.SIGUSR1)
+			for range sigChan {
+				_ = level.Info(logger).Log("msg", "SIGUSR1 received, forcing certificate check")
+				client.CheckCertificate(logger, *clientConfigPath, acmeClient)
+			}
+		}()
 	}
 
 	// periodically cleanup local certificate files not found on server

@@ -32,6 +32,7 @@ var (
 	GlobalConfig  Config
 	certificates  []models.Certificate
 	checkCertLock sync.Mutex
+	pullCertLock  sync.Mutex
 
 	localCache = memcache.NewLocalCache()
 )
@@ -780,6 +781,12 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 }
 
 func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string, acmeClient *restclient.Client) {
+	if !pullCertLock.TryLock() {
+		_ = level.Debug(logger).Log("msg", "skipping pull certificates from ring because another run is in progress")
+		return
+	}
+	defer pullCertLock.Unlock()
+
 	newConfigBytes, err := os.ReadFile(filepath.Clean(GlobalConfigPath))
 	if err != nil {
 		_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to read file %s", GlobalConfigPath), "err", err)
