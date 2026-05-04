@@ -33,6 +33,7 @@ var (
 	certificates  []models.Certificate
 	checkCertLock sync.Mutex
 	pullCertLock  sync.Mutex
+	cleanupLock   sync.Mutex
 
 	localCache = memcache.NewLocalCache()
 )
@@ -412,6 +413,11 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 		return
 	}
 	defer checkCertLock.Unlock()
+	if !cleanupLock.TryLock() {
+		_ = level.Debug(logger).Log("msg", "skipping check certificates from config file because cleanup is in progress")
+		return
+	}
+	defer cleanupLock.Unlock()
 
 	newConfigBytes, err := os.ReadFile(filepath.Clean(GlobalConfigPath))
 	if err != nil {
@@ -786,6 +792,11 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 		return
 	}
 	defer pullCertLock.Unlock()
+	if !cleanupLock.TryLock() {
+		_ = level.Debug(logger).Log("msg", "skipping pull certificates from ring because cleanup is in progress")
+		return
+	}
+	defer cleanupLock.Unlock()
 
 	newConfigBytes, err := os.ReadFile(filepath.Clean(GlobalConfigPath))
 	if err != nil {
@@ -1077,15 +1088,77 @@ func listAndDeleteFiles(logger log.Logger, patterns []string) (bool, error) {
 			if pattern != "" && !slices.Contains(patterns, pattern) {
 				// Delete the file if it don't match the pattern
 				if err := os.Remove(path); err != nil {
-					_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to delete file '%s'", path), "err", err)
+					_ = level.Error(logger).Log("msg", fmt.Sprintf("cleanup: failed to delete file '%s'", path), "err", err)
 				}
 				hasDelete = true
-				_ = level.Info(logger).Log("msg", fmt.Sprintf("deleted file '%s'", path))
+				_ = level.Info(logger).Log("msg", fmt.Sprintf("cleanup: file '%s' deleted", path))
 			}
 		}
 		return nil
 	})
 	return hasDelete, err
+}
+
+func runCleanup(logger log.Logger, GlobalConfigPath string, acmeClient *restclient.Client) {
+	_ = level.Debug(logger).Log("msg", "cleanup local certificate files not found on server or config")
+
+	newConfigBytes, err := os.ReadFile(filepath.Clean(GlobalConfigPath))
+	if err != nil {
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to read file %s", GlobalConfigPath), "err", err)
+		return
+	}
+	var cfg Config
+	if err = yaml.Unmarshal(newConfigBytes, &cfg); err != nil {
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("ignoring file changes %s because of error", GlobalConfigPath), "err", err)
+		return
+	}
+	if err = cfg.ValidateConfigPath(GlobalConfigPath); err != nil {
+		_ = level.Error(logger).Log("msg", fmt.Sprintf("ignoring file changes %s because of error", GlobalConfigPath), "err", err)
+		return
+	}
+
+	allCert, err := acmeClient.GetAllCertificateMetadata(60)
+	if err != nil {
+		_ = level.Error(logger).Log("err", err)
+		return
+	}
+
+	// Build patterns from both server certificates and local config.
+	// Local config protects private keys for certs pending creation (not yet on server).
+	patternSet := make(map[string]struct{})
+	for _, certData := range allCert {
+		if certData.Name != "" {
+			patternSet[certData.Name] = struct{}{}
+		} else {
+			patternSet[certData.Issuer+"/"+certData.Domain] = struct{}{}
+		}
+	}
+	for _, certConfig := range cfg.Certificate {
+		if certConfig.Name != "" {
+			patternSet[certConfig.Name] = struct{}{}
+		} else {
+			patternSet[certConfig.Issuer+"/"+certConfig.Domain] = struct{}{}
+		}
+	}
+
+	var patterns []string
+	for pattern := range patternSet {
+		patterns = append(patterns, pattern)
+	}
+
+	hasDelete, err := listAndDeleteFiles(logger, patterns)
+	if err != nil {
+		_ = level.Error(logger).Log("err", err)
+		return
+	}
+
+	if hasDelete && cfg.Common.CmdEnabled {
+		if err := executeCommand(logger, cfg.Common, false); err != nil {
+			_ = level.Error(logger).Log("err", err)
+		}
+	}
+
+	_ = level.Debug(logger).Log("msg", "cleanup done")
 }
 
 // CleanupCertificateFiles periodically checks and deletes local certificate files not found on the server
@@ -1095,71 +1168,11 @@ func CleanupCertificateFiles(logger log.Logger, interval time.Duration, GlobalCo
 	defer ticker.Stop()
 
 	for range ticker.C {
-		_ = level.Debug(logger).Log("msg", "cleanup local certificate files not found on server or config")
-
-		newConfigBytes, err := os.ReadFile(filepath.Clean(GlobalConfigPath))
-		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to read file %s", GlobalConfigPath), "err", err)
+		if !cleanupLock.TryLock() {
+			_ = level.Debug(logger).Log("msg", "skipping cleanup because a certificate run is in progress")
 			continue
 		}
-		var cfg Config
-		err = yaml.Unmarshal(newConfigBytes, &cfg)
-		if err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("ignoring file changes %s because of error", GlobalConfigPath), "err", err)
-			continue
-		}
-		if err := cfg.ValidateConfigPath(GlobalConfigPath); err != nil {
-			_ = level.Error(logger).Log("msg", fmt.Sprintf("ignoring file changes %s because of error", GlobalConfigPath), "err", err)
-			continue
-		}
-
-		allCert, err := acmeClient.GetAllCertificateMetadata(60)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			continue
-		}
-
-		// Build patterns from both server certificates and local config
-		// This prevents deleting private keys for certificates that are being created
-		// (exist in config but not yet on server due to timeout or pending creation)
-		patternSet := make(map[string]struct{})
-
-		// Add patterns from server
-		for _, certData := range allCert {
-			rel := certData.Issuer
-			if certData.Name != "" {
-				rel += "/" + certData.Name
-			}
-			patternSet[rel+"/"+certData.Domain] = struct{}{}
-		}
-
-		// Add patterns from local config to protect pending certificates
-		for _, certConfig := range cfg.Certificate {
-			rel := certConfig.Issuer
-			if certConfig.Name != "" {
-				rel += "/" + certConfig.Name
-			}
-			patternSet[rel+"/"+certConfig.Domain] = struct{}{}
-		}
-
-		var patterns []string
-		for pattern := range patternSet {
-			patterns = append(patterns, pattern)
-		}
-
-		hasDelete, err := listAndDeleteFiles(logger, patterns)
-		if err != nil {
-			_ = level.Error(logger).Log("err", err)
-			continue
-		}
-
-		if hasDelete && cfg.Common.CmdEnabled {
-			err := executeCommand(logger, cfg.Common, false)
-			if err != nil {
-				_ = level.Error(logger).Log("err", err)
-			}
-		}
-
-		_ = level.Debug(logger).Log("msg", "cleanup done")
+		runCleanup(logger, GlobalConfigPath, acmeClient)
+		cleanupLock.Unlock()
 	}
 }
