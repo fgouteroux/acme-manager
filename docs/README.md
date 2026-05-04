@@ -53,6 +53,8 @@ Complete documentation for ACME Manager - an automated certificate management sy
 - **Web UI**: Certificate and token management interface
 - **Monitoring**: Prometheus metrics and alerting
 - **Plugin System**: Extensible architecture for custom integrations
+- **Config Validation**: `--config-check` flag for both server and client
+- **Forced Certificate Check**: `SIGUSR1` triggers an immediate certificate check on a running client
 
 ## 📦 Components
 
@@ -90,10 +92,10 @@ Built-in Prometheus metrics for:
 
 ## 🛠️ Technology Stack
 
-- **Language**: Go 1.24+
+- **Language**: Go
 - **Clustering**: HashiCorp Memberlist
 - **Storage**: HashiCorp Vault
-- **ACME Client**: Lego library v4.25.0
+- **ACME Client**: Lego library
 - **Metrics**: Prometheus
 - **Web Framework**: Go standard library
 
@@ -183,8 +185,10 @@ certificate:
 |----------|--------|------|-------------|
 | `/api/v1/certificate` | POST | Bearer | Create certificate |
 | `/api/v1/certificate` | PUT | Bearer | Update certificate |
-| `/api/v1/certificate/{issuer}/{domain}` | GET | Bearer | Get certificate |
-| `/api/v1/certificate/{issuer}/{domain}` | DELETE | Bearer | Delete certificate |
+| `/api/v1/certificate/{issuer}/{domain}` | GET | Bearer | Get certificate by issuer and domain |
+| `/api/v1/certificate/{issuer}/{domain}` | DELETE | Bearer | Delete certificate by issuer and domain |
+| `/api/v1/certificate/{name}` | GET | Bearer | Get named certificate |
+| `/api/v1/certificate/{name}` | DELETE | Bearer | Delete named certificate |
 | `/api/v1/token` | POST | API Key | Create token |
 | `/metrics` | GET | None | Prometheus metrics |
 | `/swagger` | GET | None | API documentation |
@@ -233,5 +237,5 @@ See the main repository for license information.
 
 ---
 
-**Version**: 0.6.9+
-**Last Updated**: January 2026
+**Version**: 0.7.3+
+**Last Updated**: May 2026

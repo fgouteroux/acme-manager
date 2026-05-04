@@ -688,5 +688,5 @@ For issues and questions:
 
 ---
 
-**Version**: 0.6.9+
+**Version**: 0.7.3+
 **Last Updated**: January 2026

@@ -15,6 +15,8 @@ ACME Manager is a tool designed to create, manage, and deploy ACME certificates 
 - **Client Local Certificate**: Ensure that client local certificate deployed are always up-to-date.
 - **Client Local Cmd Run**: Run a custom command once certificate have been created/updated/renewed/deployed on the client.
 - **Rate Limiting**: Prevent excessive certificate requests with configurable per-user and per-token rate limits.
+- **Config Validation**: `--config-check` flag validates the configuration file and exits without starting the service.
+- **Forced Certificate Check**: Send `SIGUSR1` to a running client to trigger an immediate certificate check/pull.
 
 ## How It Works
 
@@ -76,6 +78,8 @@ Flags:
         Root certificate authority used to verify client certificates.
   -server.tls-key-file string
         Server tls key file.
+  -config-check
+        Validate config file and exit
   -version
         Show version information
 
@@ -164,11 +168,13 @@ Acme Manager supports plugins execution before creating certificates. This allow
 
 Manage certificate with API endpoints in a secured way.
 
-| HTTP Method            | Endpoint                     |  Auth Type Supported       |
-|------------------------|------------------------------|----------------------------|
-| GET                    | /api/v1/certificate/metadata | Bearer Token               |
-| GET, POST, PUT, DELETE | /api/v1/certificate          | Bearer Token               |
-| GET, POST, PUT, DELETE | /api/v1/token                | API key Header             |
+| HTTP Method   | Endpoint                              | Auth Type Supported |
+|---------------|---------------------------------------|---------------------|
+| GET           | /api/v1/certificate/metadata          | Bearer Token        |
+| POST, PUT     | /api/v1/certificate                   | Bearer Token        |
+| GET, DELETE   | /api/v1/certificate/{issuer}/{domain} | Bearer Token        |
+| GET, DELETE   | /api/v1/certificate/{name}            | Bearer Token        |
+| GET, POST, PUT, DELETE | /api/v1/token                | API key Header      |
 
 See swagger page: http://localhost:8989/swagger/index.html
 
@@ -401,6 +407,8 @@ Flags:
       Client manager URL (can be set via ACME_MANAGER_URL env var). (default "http://localhost:8989/api/v1")
   -client.pull-only
       Set client in pull mode. Manage local certificate files based on remote server changes.
+  -config-check
+      Validate client config file and exit
   -client.tls-ca-file string
       Client manager tls ca certificate file.
   -client.tls-cert-file string
@@ -563,43 +571,37 @@ The endpoint http://localhost:8989/tokens return the page for all managed tokens
 This endpoint return metrics about app itself.
 
 ```
-# HELP acme_manager_build_info A metric with a constant '1' value labeled by version, revision, branch, goversion from which acme_manager was built, and the goos and goarch for the build.
+# HELP acme_manager_build_info A metric with a constant '1' value labeled by version, revision, branch, goversion from which acme_manager was built.
 # TYPE acme_manager_build_info gauge
-acme_manager_build_info{branch="HEAD",goarch="amd64",goos="linux",goversion="go1.22.10",revision="f9b7946ad9150bfd1e9b19ff5d1f8b47ceffdbc3",tags="unknown",version="0.1.5"} 1
-# HELP acme_manager_certificate_creations_total Total number of successfully created certificates by issuer, owner and domain
-# TYPE acme_manager_certificate_creations_total counter
-acme_manager_certificate_creations_total{domain="example.com",issuer="letsencrypt",owner="testfgx"} 1
-acme_manager_certificate_creations_total{domain="example.org",issuer="sectigo",owner="testfgx"} 1
-# HELP acme_manager_certificate_creation_errors_total Total number of certificate creation errors by issuer, owner and domain
-# TYPE acme_manager_certificate_creation_errors_total counter
-acme_manager_certificate_creation_errors_total{domain="example.com",issuer="letsencrypt",owner="testfgx"} 0
-# HELP acme_manager_certificate_renewals_total Total number of successfully renewed certificates by issuer, owner and domain
-# TYPE acme_manager_certificate_renewals_total counter
-acme_manager_certificate_renewals_total{domain="example.com",issuer="letsencrypt",owner="testfgx"} 2
-# HELP acme_manager_certificate_renewal_errors_total Total number of certificate renewal errors by issuer, owner and domain
-# TYPE acme_manager_certificate_renewal_errors_total counter
-acme_manager_certificate_renewal_errors_total{domain="example.com",issuer="letsencrypt",owner="testfgx"} 0
-# HELP acme_manager_certificate_revoked_total Total number of successfully revoked certificates by issuer, owner and domain
-# TYPE acme_manager_certificate_revoked_total counter
-acme_manager_certificate_revoked_total{domain="example.org",issuer="sectigo",owner="testfgx"} 1
-# HELP acme_manager_certificate_total Number of managed certificates by issuer, owner and domain
-# TYPE acme_manager_certificate_total gauge
-acme_manager_certificate_total{domain="example.com",issuer="letsencrypt",owner="testfgx"} 1
-acme_manager_certificate_total{domain="example.org",issuer="sectigo",owner="testfgx"} 1
+acme_manager_build_info{branch="main",goarch="amd64",goos="linux",goversion="go1.25.0",revision="abc123",version="0.7.3"} 1
+
+# HELP acme_manager_managed_certificates Current number of managed certificates by issuer, owner, domain and name
+# TYPE acme_manager_managed_certificates gauge
+acme_manager_managed_certificates{domain="example.com",issuer="letsencrypt",name="",owner="testfgx"} 1
+acme_manager_managed_certificates{domain="example.org",issuer="sectigo",name="",owner="testfgx"} 1
+
+# HELP acme_manager_certificate_operations_total Total number of certificate operations by issuer, owner, domain, name, operation and status
+# TYPE acme_manager_certificate_operations_total counter
+acme_manager_certificate_operations_total{domain="example.com",issuer="letsencrypt",name="",operation="create",owner="testfgx",status="success"} 1
+acme_manager_certificate_operations_total{domain="example.com",issuer="letsencrypt",name="",operation="renew",owner="testfgx",status="error"} 0
+acme_manager_certificate_operations_total{domain="example.com",issuer="letsencrypt",name="",operation="renew",owner="testfgx",status="success"} 2
+acme_manager_certificate_operations_total{domain="example.org",issuer="sectigo",name="",operation="revoke",owner="testfgx",status="success"} 1
+
+# HELP acme_manager_certificate_renewals Current renewal count per certificate as persisted in the Ring KV store
+# TYPE acme_manager_certificate_renewals gauge
+acme_manager_certificate_renewals{domain="example.com",issuer="letsencrypt",name="",owner="testfgx"} 2
+
 # HELP acme_manager_issuer_config_error 1 if there was an error with issuer config, 0 otherwise
 # TYPE acme_manager_issuer_config_error gauge
 acme_manager_issuer_config_error{issuer="letsencrypt"} 0
 acme_manager_issuer_config_error{issuer="sectigo"} 0
-# HELP acme_manager_vault_delete_secret_success_total Number of deleted vault secrets
-# TYPE acme_manager_vault_delete_secret_success_total counter
-acme_manager_vault_delete_secret_success_total{secret_type="certificate"} 1
-# HELP acme_manager_vault_get_secret_success_total Number of retrieved vault secrets
-# TYPE acme_manager_vault_get_secret_success_total counter
-acme_manager_vault_get_secret_success_total{secret_type="certificate"} 4
-acme_manager_vault_get_secret_success_total{secret_type="token"} 1
-# HELP acme_manager_vault_put_secret_success_total Number of created/updated vault secrets
-# TYPE acme_manager_vault_put_secret_success_total counter
-acme_manager_vault_put_secret_success_total{secret_type="certificate"} 2
+
+# HELP acme_manager_vault_secret_operations_total Total number of vault secret operations by operation and status
+# TYPE acme_manager_vault_secret_operations_total counter
+acme_manager_vault_secret_operations_total{operation="delete",secret_type="certificate",status="success"} 1
+acme_manager_vault_secret_operations_total{operation="get",secret_type="certificate",status="success"} 4
+acme_manager_vault_secret_operations_total{operation="get",secret_type="token",status="success"} 1
+acme_manager_vault_secret_operations_total{operation="put",secret_type="certificate",status="success"} 2
 ```
 
 ### Limitations

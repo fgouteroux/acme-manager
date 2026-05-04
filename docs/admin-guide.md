@@ -1272,40 +1272,33 @@ Expired rate limit entries are automatically cleaned up every hour by the Rate L
 **Application Metrics:**
 
 ```prometheus
-# Certificate operations
-acme_manager_certificate_total{issuer, owner, domain}
-acme_manager_certificate_creations_total{issuer, owner, domain}
-acme_manager_certificate_creation_errors_total{issuer, owner, domain}
-acme_manager_certificate_revoked_total{issuer, owner, domain}
-acme_manager_certificate_revoked_errors_total{issuer, owner, domain}
-acme_manager_certificate_renewals_total{issuer, owner, domain}
-acme_manager_certificate_renewal_errors_total{issuer, owner, domain}
+# Certificate inventory
+acme_manager_managed_certificates{issuer, owner, domain, name}
 
-# Local Certificate operations
-acme_manager_local_certificate_created_total{issuer}
-acme_manager_local_certificate_deleted_total{issuer}
+# Certificate operations (operation=create|renew|revoke, status=success|error)
+acme_manager_certificate_operations_total{issuer, owner, domain, name, operation, status}
 
-# Local command pre/post run
-acme_manager_local_cmd_run_success_total{command}
-acme_manager_local_cmd_run_failed_total{command}
+# Certificate renewal count (persisted in Ring KV, survives restarts)
+acme_manager_certificate_renewals{issuer, owner, domain, name}
 
-# Vault operations
-acme_manager_vault_get_secret_success_total{secret_type}
-acme_manager_vault_put_secret_success_total{secret_type}
-acme_manager_vault_delete_secret_success_total{secret_type}
-acme_manager_vault_get_secret_failed_total{secret_type}
-acme_manager_vault_put_secret_failed_total{secret_type}
-acme_manager_vault_delete_secret_failed_total{secret_type}
+# Local certificate operations (operation=created|deleted)
+acme_manager_local_certificate_operations_total{issuer, operation}
 
-# Config file
-acme_manager_config_reload_total
+# Local command pre/post run (status=success|failed)
+acme_manager_local_cmd_run_total{command, status}
+
+# Vault operations (operation=get|put|delete, status=success|failed)
+acme_manager_vault_secret_operations_total{secret_type, operation, status}
+
+# Config file health
 acme_manager_config_error
+acme_manager_certificate_config_error
 
 # Issuer health
 acme_manager_issuer_config_error{issuer}
 
 # Rate limiting
-acme_manager_rate_limit_blocked_total{owner, issuer, domain, operation}
+acme_manager_rate_limit_blocked_total{issuer, owner, operation}
 
 # System metrics
 acme_manager_build_info{version, revision, branch, goversion}
@@ -1367,9 +1360,8 @@ The server records HTTP request metrics using matched route patterns as the `pat
 
 ```prometheus
 acme_manager_http_requests_total{method, path, status_code}
-acme_manager_http_request_duration_seconds{method, path, status_code}
-acme_manager_http_request_size_bytes{method, path, status_code}
-acme_manager_http_response_size_bytes{method, path, status_code}
+acme_manager_http_request_duration_seconds{method, path}
+acme_manager_http_requests_in_flight
 ```
 
 This design ensures that Prometheus label sets remain stable regardless of what paths external scanners or misconfigured clients request.
@@ -1380,16 +1372,16 @@ This design ensures that Prometheus label sets remain stable regardless of what 
 
 ```promql
 # Certificate creation rate
-rate(acme_manager_certificate_creations_total[5m])
+rate(acme_manager_certificate_operations_total{operation="create", status="success"}[5m])
 
 # Certificates by issuer
-sum by (issuer) (acme_manager_certificate_total)
+sum by (issuer) (acme_manager_managed_certificates)
 
 # Renewal errors over the last hour
-increase(acme_manager_certificate_renewal_errors_total[1h]) > 0
+increase(acme_manager_certificate_operations_total{operation="renew", status="error"}[1h]) > 0
 
-# Vault failures by secret type
-sum by (secret_type) (rate(acme_manager_vault_get_secret_failed_total[5m]))
+# Vault failures by secret type and operation
+sum by (secret_type, operation) (rate(acme_manager_vault_secret_operations_total{status="failed"}[5m]))
 
 # Cluster members
 count(up{job="acme-manager"})
@@ -1563,6 +1555,6 @@ graph TB
 
 ---
 
-**Version:** 0.6.9+
+**Version:** 0.7.3+
 **Last Updated:** May 2026
 **Go Version:** 1.25+
