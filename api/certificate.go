@@ -99,7 +99,7 @@ func checkRateLimit(tokenData *models.Token, owner, issuer, domain, name, operat
 		if retryAfter < 1 {
 			retryAfter = 1
 		}
-		metrics.IncRateLimitBlocked(owner, issuer, domain, name, operation)
+		metrics.IncRateLimitBlocked(owner, issuer, operation)
 		return true, retryAfter, nil
 	}
 

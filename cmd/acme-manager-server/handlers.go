@@ -453,11 +453,7 @@ func MetricsHandler(next http.Handler) http.Handler {
 		// Record metrics only if path is not /static/
 		if !strings.HasPrefix(req.URL.Path, "/static/") {
 			statusCode := fmt.Sprintf("%d", lrw.statusCode)
-			requestSize := int(req.ContentLength)
-			if requestSize < 0 {
-				requestSize = 0
-			}
-			metrics.RecordHTTPRequest(req.Method, normalizePathForMetrics(req), statusCode, duration, requestSize, lrw.length)
+			metrics.RecordHTTPRequest(req.Method, normalizePathForMetrics(req), statusCode, duration)
 		}
 	})
 }
@@ -495,11 +491,7 @@ func LoggerHandler(next http.Handler) http.Handler {
 		// Record metrics and logs only if path is not /static/
 		if !strings.HasPrefix(req.URL.Path, "/static/") {
 			statusCode := fmt.Sprintf("%d", lrw.statusCode)
-			requestSize := int(req.ContentLength)
-			if requestSize < 0 {
-				requestSize = 0
-			}
-			metrics.RecordHTTPRequest(req.Method, normalizePathForMetrics(req), statusCode, duration, requestSize, lrw.length)
+			metrics.RecordHTTPRequest(req.Method, normalizePathForMetrics(req), statusCode, duration)
 
 			_ = level.Info(logger).Log(
 				"request_id", requestID,

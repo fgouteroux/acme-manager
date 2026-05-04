@@ -7,8 +7,8 @@ import (
 var (
 	managedCertificate = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "acme_manager_certificate_total",
-			Help: "Number of managed certificates by issuer, owner, domain and name",
+			Name: "acme_manager_managed_certificates",
+			Help: "Current number of managed certificates by issuer, owner, domain and name",
 		},
 		[]string{"issuer", "owner", "domain", "name"},
 	)
@@ -47,8 +47,8 @@ var (
 
 	certificateRenewalsTotal = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "acme_manager_certificate_renewals_total",
-			Help: "Total number of successfully renewed certificates by issuer, owner, domain and name (persisted in Ring KV, survives restarts and leader changes)",
+			Name: "acme_manager_certificate_renewals",
+			Help: "Current renewal count per certificate as persisted in the Ring KV store (survives restarts and leader changes)",
 		},
 		[]string{"issuer", "owner", "domain", "name"},
 	)
@@ -77,68 +77,20 @@ var (
 		[]string{"issuer"},
 	)
 
-	runSuccessLocalCmd = prometheus.NewCounterVec(
+	localCmdRunTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "acme_manager_local_cmd_run_success_total",
-			Help: "Number of successful local cmd runs",
+			Name: "acme_manager_local_cmd_run_total",
+			Help: "Total number of local cmd runs by command and status",
 		},
-		[]string{"command"},
+		[]string{"command", "status"},
 	)
 
-	runFailedLocalCmd = prometheus.NewCounterVec(
+	vaultSecretOperationsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "acme_manager_local_cmd_run_failed_total",
-			Help: "Number of failed local cmd runs",
+			Name: "acme_manager_vault_secret_operations_total",
+			Help: "Total number of vault secret operations by operation and status",
 		},
-		[]string{"command"},
-	)
-
-	getSuccessVaultSecret = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_vault_get_secret_success_total",
-			Help: "Number of retrieved vault secrets",
-		},
-		[]string{"secret_type"},
-	)
-
-	putSuccessVaultSecret = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_vault_put_secret_success_total",
-			Help: "Number of created/updated vault secrets",
-		},
-		[]string{"secret_type"},
-	)
-
-	deleteSuccessVaultSecret = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_vault_delete_secret_success_total",
-			Help: "Number of deleted vault secrets",
-		},
-		[]string{"secret_type"},
-	)
-
-	getFailedVaultSecret = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_vault_get_secret_failed_total",
-			Help: "Number of failed vault secret retrievals",
-		},
-		[]string{"secret_type"},
-	)
-
-	putFailedVaultSecret = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_vault_put_secret_failed_total",
-			Help: "Number of failed vault secret creations/updates",
-		},
-		[]string{"secret_type"},
-	)
-
-	deleteFailedVaultSecret = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_vault_delete_secret_failed_total",
-			Help: "Number of failed vault secret deletions",
-		},
-		[]string{"secret_type"},
+		[]string{"secret_type", "operation", "status"},
 	)
 
 	certificateConfigReload = prometheus.NewCounterVec(
@@ -198,24 +150,6 @@ var (
 		[]string{"method", "path", "status_code"},
 	)
 
-	httpRequestSize = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "acme_manager_http_request_size_bytes",
-			Help:    "HTTP request size in bytes",
-			Buckets: prometheus.ExponentialBuckets(100, 10, 8),
-		},
-		[]string{"method", "path"},
-	)
-
-	httpResponseSize = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "acme_manager_http_response_size_bytes",
-			Help:    "HTTP response size in bytes",
-			Buckets: prometheus.ExponentialBuckets(100, 10, 8),
-		},
-		[]string{"method", "path"},
-	)
-
 	httpRequestsInFlight = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "acme_manager_http_requests_in_flight",
@@ -228,7 +162,7 @@ var (
 			Name: "acme_manager_rate_limit_blocked_total",
 			Help: "Total certificate requests blocked by rate limiting",
 		},
-		[]string{"owner", "issuer", "domain", "name", "operation"},
+		[]string{"issuer", "owner", "operation"},
 	)
 )
 
@@ -289,35 +223,35 @@ func IncDeletedLocalCertificate(issuer string) {
 }
 
 func IncRunSuccessLocalCmd(command string) {
-	runSuccessLocalCmd.WithLabelValues(command).Inc()
+	localCmdRunTotal.WithLabelValues(command, "success").Inc()
 }
 
 func IncRunFailedLocalCmd(command string) {
-	runFailedLocalCmd.WithLabelValues(command).Inc()
+	localCmdRunTotal.WithLabelValues(command, "failed").Inc()
 }
 
 func IncGetSuccessVaultSecret(secretType string) {
-	getSuccessVaultSecret.WithLabelValues(secretType).Inc()
+	vaultSecretOperationsTotal.WithLabelValues(secretType, "get", "success").Inc()
 }
 
 func IncPutSuccessVaultSecret(secretType string) {
-	putSuccessVaultSecret.WithLabelValues(secretType).Inc()
+	vaultSecretOperationsTotal.WithLabelValues(secretType, "put", "success").Inc()
 }
 
 func IncDeleteSuccessVaultSecret(secretType string) {
-	deleteSuccessVaultSecret.WithLabelValues(secretType).Inc()
+	vaultSecretOperationsTotal.WithLabelValues(secretType, "delete", "success").Inc()
 }
 
 func IncGetFailedVaultSecret(secretType string) {
-	getFailedVaultSecret.WithLabelValues(secretType).Inc()
+	vaultSecretOperationsTotal.WithLabelValues(secretType, "get", "failed").Inc()
 }
 
 func IncPutFailedVaultSecret(secretType string) {
-	putFailedVaultSecret.WithLabelValues(secretType).Inc()
+	vaultSecretOperationsTotal.WithLabelValues(secretType, "put", "failed").Inc()
 }
 
 func IncDeleteFailedVaultSecret(secretType string) {
-	deleteFailedVaultSecret.WithLabelValues(secretType).Inc()
+	vaultSecretOperationsTotal.WithLabelValues(secretType, "delete", "failed").Inc()
 }
 
 func IncCertificateConfigReload() {
@@ -340,15 +274,9 @@ func SetIssuerConfigError(issuer string, value float64) {
 	issuerConfigError.WithLabelValues(issuer).Set(value)
 }
 
-func RecordHTTPRequest(method, path, statusCode string, duration float64, requestSize, responseSize int) {
+func RecordHTTPRequest(method, path, statusCode string, duration float64) {
 	httpRequestsTotal.WithLabelValues(method, path, statusCode).Inc()
 	httpRequestDuration.WithLabelValues(method, path, statusCode).Observe(duration)
-	if requestSize > 0 {
-		httpRequestSize.WithLabelValues(method, path).Observe(float64(requestSize))
-	}
-	if responseSize > 0 {
-		httpResponseSize.WithLabelValues(method, path).Observe(float64(responseSize))
-	}
 }
 
 func IncHTTPRequestsInFlight() {
@@ -359,8 +287,8 @@ func DecHTTPRequestsInFlight() {
 	httpRequestsInFlight.Dec()
 }
 
-func IncRateLimitBlocked(owner, issuer, domain, name, operation string) {
-	rateLimitBlockedTotal.WithLabelValues(owner, issuer, domain, name, operation).Inc()
+func IncRateLimitBlocked(owner, issuer, operation string) {
+	rateLimitBlockedTotal.WithLabelValues(issuer, owner, operation).Inc()
 }
 
 func init() {
@@ -374,14 +302,8 @@ func init() {
 		certificateRenewalErrorsTotal,
 		createdLocalCertificate,
 		deletedLocalCertificate,
-		runSuccessLocalCmd,
-		runFailedLocalCmd,
-		getSuccessVaultSecret,
-		putSuccessVaultSecret,
-		deleteSuccessVaultSecret,
-		getFailedVaultSecret,
-		putFailedVaultSecret,
-		deleteFailedVaultSecret,
+		localCmdRunTotal,
+		vaultSecretOperationsTotal,
 		certificateConfigReload,
 		certificateConfigError,
 		configReload,
@@ -389,8 +311,6 @@ func init() {
 		issuerConfigError,
 		httpRequestsTotal,
 		httpRequestDuration,
-		httpRequestSize,
-		httpResponseSize,
 		httpRequestsInFlight,
 		rateLimitBlockedTotal,
 	}
