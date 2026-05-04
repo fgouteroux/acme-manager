@@ -176,7 +176,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", "local private key file created", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("local private key file '%s' created", keyFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 
 			err = createLocalCertificateFile(newCert)
 			if err != nil {
@@ -184,7 +184,8 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", "local certificate file created", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+			certFilePath := certLocalPath(GlobalConfig.Common.CertDir, newCert.Issuer, newCert.Name, newCert.Domain, GlobalConfig.Common.CertFileExt)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("local certificate file '%s' created", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 			metrics.IncCreatedLocalCertificate(certData.Issuer)
 		}
 	}
@@ -261,7 +262,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", "local private key file updated", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("local private key file '%s' updated", keyFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 
 			err = createLocalCertificateFile(newCert)
 			if err != nil {
@@ -269,7 +270,8 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", "local certificate file updated", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+			certFilePath := certLocalPath(GlobalConfig.Common.CertDir, newCert.Issuer, newCert.Name, newCert.Domain, GlobalConfig.Common.CertFileExt)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("local certificate file '%s' updated", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 			metrics.IncCreatedLocalCertificate(certData.Issuer)
 		}
 	}
@@ -321,15 +323,16 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", "local private key file deleted", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("local private key file '%s' deleted", keyFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 
+			certFilePath := certLocalPath(GlobalConfig.Common.CertDir, certData.Issuer, certData.Name, certData.Domain, GlobalConfig.Common.CertFileExt)
 			err = deleteLocalCertificateFile(certData.Issuer, certData.Name, certData.Domain)
 			if err != nil {
 				hasErrors = true
 				_ = level.Error(logger).Log("err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 				continue
 			}
-			_ = level.Info(logger).Log("msg", "local certificate file deleted", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("local certificate file '%s' deleted", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 			metrics.IncDeletedLocalCertificate(certData.Issuer)
 		}
 	}
