@@ -64,7 +64,6 @@ func WatchConfigFileChanges(logger log.Logger, customLogger *logrus.Logger, inte
 				continue
 			}
 			config.GlobalConfig = cfg
-			metrics.IncConfigReload()
 			metrics.SetConfigError(0)
 		}
 		_ = level.Debug(logger).Log("msg", "check config file changes done")

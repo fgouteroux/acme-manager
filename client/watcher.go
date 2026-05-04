@@ -11,7 +11,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
-	"github.com/fgouteroux/acme-manager/metrics"
 	"github.com/fgouteroux/acme-manager/restclient"
 )
 
@@ -76,7 +75,6 @@ func WatchCertificateEventChange(logger log.Logger, configPath string, acmeClien
 				}
 				debounceTimer = time.AfterFunc(debounceDelay, func() {
 					_ = level.Info(logger).Log("msg", fmt.Sprintf("modified file: %s", configPath))
-					metrics.IncCertificateConfigReload()
 					CheckCertificate(logger, configPath, acmeClient)
 				})
 				debounceMu.Unlock()

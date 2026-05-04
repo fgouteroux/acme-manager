@@ -13,36 +13,12 @@ var (
 		[]string{"issuer", "owner", "domain", "name"},
 	)
 
-	certificateCreationsTotal = prometheus.NewCounterVec(
+	certificateOperationsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "acme_manager_certificate_creations_total",
-			Help: "Total number of successfully created certificates by issuer, owner, domain and name",
+			Name: "acme_manager_certificate_operations_total",
+			Help: "Total number of certificate operations by issuer, owner, domain, name, operation and status",
 		},
-		[]string{"issuer", "owner", "domain", "name"},
-	)
-
-	certificateCreationErrorsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_certificate_creation_errors_total",
-			Help: "Total number of certificate creation errors by issuer, owner, domain and name",
-		},
-		[]string{"issuer", "owner", "domain", "name"},
-	)
-
-	revokedCertificateTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_certificate_revoked_total",
-			Help: "Total number of successfully revoked certificates by issuer, owner, domain and name",
-		},
-		[]string{"issuer", "owner", "domain", "name"},
-	)
-
-	revokedCertificateErrorsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_certificate_revoked_errors_total",
-			Help: "Total number of certificate revocation errors by issuer, owner, domain and name",
-		},
-		[]string{"issuer", "owner", "domain", "name"},
+		[]string{"issuer", "owner", "domain", "name", "operation", "status"},
 	)
 
 	certificateRenewalsTotal = prometheus.NewGaugeVec(
@@ -53,28 +29,12 @@ var (
 		[]string{"issuer", "owner", "domain", "name"},
 	)
 
-	certificateRenewalErrorsTotal = prometheus.NewCounterVec(
+	localCertificateOperationsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "acme_manager_certificate_renewal_errors_total",
-			Help: "Total number of certificate renewal errors by issuer, owner, domain and name",
+			Name: "acme_manager_local_certificate_operations_total",
+			Help: "Total number of local certificate operations by issuer and operation",
 		},
-		[]string{"issuer", "owner", "domain", "name"},
-	)
-
-	createdLocalCertificate = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_local_certificate_created_total",
-			Help: "Number of created local certificates by issuer",
-		},
-		[]string{"issuer"},
-	)
-
-	deletedLocalCertificate = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_local_certificate_deleted_total",
-			Help: "Number of deleted local certificates by issuer",
-		},
-		[]string{"issuer"},
+		[]string{"issuer", "operation"},
 	)
 
 	localCmdRunTotal = prometheus.NewCounterVec(
@@ -93,26 +53,10 @@ var (
 		[]string{"secret_type", "operation", "status"},
 	)
 
-	certificateConfigReload = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_certificate_config_reload_total",
-			Help: "Total number of certificate config file reloads",
-		},
-		[]string{},
-	)
-
 	certificateConfigError = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "acme_manager_certificate_config_error",
 			Help: "1 if there was an error opening or reading the certificate config file, 0 otherwise",
-		},
-		[]string{},
-	)
-
-	configReload = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "acme_manager_config_reload_total",
-			Help: "Total number of config file reloads",
 		},
 		[]string{},
 	)
@@ -147,7 +91,7 @@ var (
 			Help:    "HTTP request duration in seconds",
 			Buckets: prometheus.DefBuckets,
 		},
-		[]string{"method", "path", "status_code"},
+		[]string{"method", "path"},
 	)
 
 	httpRequestsInFlight = prometheus.NewGauge(
@@ -175,19 +119,19 @@ func DecManagedCertificate(issuer, owner, domain, name string) {
 }
 
 func IncCertificateCreated(issuer, owner, domain, name string) {
-	certificateCreationsTotal.WithLabelValues(issuer, owner, domain, name).Inc()
+	certificateOperationsTotal.WithLabelValues(issuer, owner, domain, name, "create", "success").Inc()
 }
 
 func IncCertificateCreationError(issuer, owner, domain, name string) {
-	certificateCreationErrorsTotal.WithLabelValues(issuer, owner, domain, name).Inc()
+	certificateOperationsTotal.WithLabelValues(issuer, owner, domain, name, "create", "error").Inc()
 }
 
 func IncRevokedCertificate(issuer, owner, domain, name string) {
-	revokedCertificateTotal.WithLabelValues(issuer, owner, domain, name).Inc()
+	certificateOperationsTotal.WithLabelValues(issuer, owner, domain, name, "revoke", "success").Inc()
 }
 
 func IncRevokedCertificateErrors(issuer, owner, domain, name string) {
-	revokedCertificateErrorsTotal.WithLabelValues(issuer, owner, domain, name).Inc()
+	certificateOperationsTotal.WithLabelValues(issuer, owner, domain, name, "revoke", "error").Inc()
 }
 
 func SetCertificateRenewed(issuer, owner, domain, name string, count int64) {
@@ -195,31 +139,29 @@ func SetCertificateRenewed(issuer, owner, domain, name string, count int64) {
 }
 
 func IncCertificateRenewalError(issuer, owner, domain, name string) {
-	certificateRenewalErrorsTotal.WithLabelValues(issuer, owner, domain, name).Inc()
+	certificateOperationsTotal.WithLabelValues(issuer, owner, domain, name, "renew", "error").Inc()
 }
 
-// InitCertificateErrorMetrics initializes renewal error counter to 0 at startup
-// so that increase() works correctly on the first renewal error for a known domain.
-// Creation errors are NOT pre-initialized: the cert doesn't exist in the KV ring yet
-// when a creation fails, so label values are unknown at startup.
+// InitCertificateErrorMetrics initializes the renew/error series to 0 at startup
+// so that increase() works correctly on the first renewal error for a known cert.
 func InitCertificateErrorMetrics(issuer, owner, domain, name string) {
-	certificateRenewalErrorsTotal.WithLabelValues(issuer, owner, domain, name).Add(0)
+	certificateOperationsTotal.WithLabelValues(issuer, owner, domain, name, "renew", "error").Add(0)
 }
 
 // DeleteCertificateMetrics removes all metric series for the given label set.
 // Call this when a cert's issuer or domain changes so stale series don't linger.
 func DeleteCertificateMetrics(issuer, owner, domain, name string) {
 	managedCertificate.DeleteLabelValues(issuer, owner, domain, name)
-	certificateRenewalErrorsTotal.DeleteLabelValues(issuer, owner, domain, name)
+	certificateOperationsTotal.DeleteLabelValues(issuer, owner, domain, name, "renew", "error")
 	certificateRenewalsTotal.DeleteLabelValues(issuer, owner, domain, name)
 }
 
 func IncCreatedLocalCertificate(issuer string) {
-	createdLocalCertificate.WithLabelValues(issuer).Inc()
+	localCertificateOperationsTotal.WithLabelValues(issuer, "created").Inc()
 }
 
 func IncDeletedLocalCertificate(issuer string) {
-	deletedLocalCertificate.WithLabelValues(issuer).Inc()
+	localCertificateOperationsTotal.WithLabelValues(issuer, "deleted").Inc()
 }
 
 func IncRunSuccessLocalCmd(command string) {
@@ -254,16 +196,8 @@ func IncDeleteFailedVaultSecret(secretType string) {
 	vaultSecretOperationsTotal.WithLabelValues(secretType, "delete", "failed").Inc()
 }
 
-func IncCertificateConfigReload() {
-	certificateConfigReload.WithLabelValues().Inc()
-}
-
 func SetCertificateConfigError(value float64) {
 	certificateConfigError.WithLabelValues().Set(value)
-}
-
-func IncConfigReload() {
-	configReload.WithLabelValues().Inc()
 }
 
 func SetConfigError(value float64) {
@@ -276,7 +210,7 @@ func SetIssuerConfigError(issuer string, value float64) {
 
 func RecordHTTPRequest(method, path, statusCode string, duration float64) {
 	httpRequestsTotal.WithLabelValues(method, path, statusCode).Inc()
-	httpRequestDuration.WithLabelValues(method, path, statusCode).Observe(duration)
+	httpRequestDuration.WithLabelValues(method, path).Observe(duration)
 }
 
 func IncHTTPRequestsInFlight() {
@@ -294,19 +228,12 @@ func IncRateLimitBlocked(owner, issuer, operation string) {
 func init() {
 	collectors := []prometheus.Collector{
 		managedCertificate,
-		certificateCreationsTotal,
-		certificateCreationErrorsTotal,
-		revokedCertificateTotal,
-		revokedCertificateErrorsTotal,
+		certificateOperationsTotal,
 		certificateRenewalsTotal,
-		certificateRenewalErrorsTotal,
-		createdLocalCertificate,
-		deletedLocalCertificate,
+		localCertificateOperationsTotal,
 		localCmdRunTotal,
 		vaultSecretOperationsTotal,
-		certificateConfigReload,
 		certificateConfigError,
-		configReload,
 		configError,
 		issuerConfigError,
 		httpRequestsTotal,
