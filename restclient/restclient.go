@@ -196,11 +196,14 @@ func (c *Client) ReadCertificate(data models.Certificate, timeout int) (models.C
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	baseErrMsg := fmt.Sprintf("error reading certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
-
-	readPath := fmt.Sprintf("/certificate/%s/%s", data.Issuer, data.Domain)
+	var readPath string
+	var baseErrMsg string
 	if data.Name != "" {
-		readPath += "?name=" + data.Name
+		readPath = fmt.Sprintf("/certificate/%s", data.Name)
+		baseErrMsg = fmt.Sprintf("error reading certificate with name '%s':", data.Name)
+	} else {
+		readPath = fmt.Sprintf("/certificate/%s/%s", data.Issuer, data.Domain)
+		baseErrMsg = fmt.Sprintf("error reading certificate with issuer '%s' and domain '%s':", data.Issuer, data.Domain)
 	}
 	resp, err := c.doRequest(ctx, "GET", readPath, headers, bytes.NewReader(reqBody), timeout)
 	if err != nil {
@@ -295,9 +298,11 @@ func (c *Client) DeleteCertificate(issuer, domain, name string, revoke bool, tim
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	deletePath := fmt.Sprintf("/certificate/%s/%s?revoke=%v", issuer, domain, revoke)
+	var deletePath string
 	if name != "" {
-		deletePath += "&name=" + name
+		deletePath = fmt.Sprintf("/certificate/%s?revoke=%v", name, revoke)
+	} else {
+		deletePath = fmt.Sprintf("/certificate/%s/%s?revoke=%v", issuer, domain, revoke)
 	}
 	resp, err := c.doRequest(ctx, "DELETE", deletePath, headers, nil, timeout)
 	if err != nil {

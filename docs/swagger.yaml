@@ -8,6 +8,12 @@ definitions:
       id:
         example: 021b5075-2d1e-44bd-b5e5-ffc7be7ad4c3
         type: string
+      rate_limit_max_requests:
+        example: 5
+        type: integer
+      rate_limit_window:
+        example: 1h
+        type: string
       scope:
         example:
         - read
@@ -29,6 +35,10 @@ definitions:
         type: string
       id:
         type: string
+      rate_limit_max_requests:
+        type: integer
+      rate_limit_window:
+        type: string
       scope:
         items:
           type: string
@@ -45,6 +55,10 @@ definitions:
       duration:
         type: string
       expires:
+        type: string
+      rate_limit_max_requests:
+        type: integer
+      rate_limit_window:
         type: string
       scope:
         items:
@@ -105,8 +119,17 @@ definitions:
         type: string
       labels:
         type: string
+      name:
+        description: Optional logical name to namespace the KV key.
+        type: string
       owner:
         type: string
+      profile:
+        description: ACME profile for certificate issuance (draft-aaron-acme-profiles)
+        type: string
+      renewal_count:
+        description: Total number of successful renewals, persisted to survive restarts.
+        type: integer
       renewal_date:
         type: string
       renewal_days:
@@ -156,8 +179,17 @@ definitions:
         type: string
       labels:
         type: string
+      name:
+        description: Optional logical name to namespace the KV key.
+        type: string
       owner:
         type: string
+      profile:
+        description: ACME profile for certificate issuance (draft-aaron-acme-profiles)
+        type: string
+      renewal_count:
+        description: Total number of successful renewals, persisted to survive restarts.
+        type: integer
       renewal_date:
         type: string
       renewal_days:
@@ -195,6 +227,12 @@ definitions:
       key_type:
         type: string
       labels:
+        type: string
+      name:
+        example: prod
+        type: string
+      profile:
+        example: connect-direct
         type: string
       renewal_days:
         example: "30"
@@ -448,6 +486,110 @@ paths:
           schema:
             $ref: '#/definitions/api.responseErrorJSON'
       summary: Read certificate
+      tags:
+      - certificate
+  /certificate/{name}:
+    delete:
+      description: Delete certificate for the given name.
+      parameters:
+      - default: Bearer <Add access token here>
+        description: Access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Certificate name
+        in: path
+        name: name
+        required: true
+        type: string
+      - default: false
+        description: Revoke Certificate
+        in: query
+        name: revoke
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+      summary: Delete named certificate
+      tags:
+      - certificate
+    get:
+      description: Return certificate and issuer ca certificate for a named certificate.
+      parameters:
+      - default: Bearer <Add access token here>
+        description: Access token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Certificate name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.CertMap'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.responseErrorJSON'
+      summary: Read named certificate
       tags:
       - certificate
   /certificate/metadata:

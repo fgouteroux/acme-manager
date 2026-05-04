@@ -364,7 +364,7 @@ func GetCertificateHandler(logger log.Logger, proxyClient *http.Client) http.Han
 //	@Description	Create certificate for a given issuer and domain name.
 //	@Tags			certificate
 //	@Produce		application/json
-//	@Param			Authorization	header		string				true	"Access token"	default(Bearer <Add access token here>)
+//	@Param			Authorization	header		string						true	"Access token"	default(Bearer <Add access token here>)
 //	@Param			body			body		models.CertificateParams	true	"Certificate body"
 //	@Success		201				{object}	models.CertMap
 //	@Success		400				{object}	responseErrorJSON
@@ -566,7 +566,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 //	@Description	Update certificate will revoke the old and create a new certificate with given parameters.
 //	@Tags			certificate
 //	@Produce		application/json
-//	@Param			Authorization	header		string				true	"Access token"	default(Bearer <Add access token here>)
+//	@Param			Authorization	header		string						true	"Access token"	default(Bearer <Add access token here>)
 //	@Param			body			body		models.CertificateParams	true	"Certificate body"
 //	@Success		200				{object}	models.CertMap
 //	@Success		400				{object}	responseErrorJSON
@@ -1033,6 +1033,199 @@ func forwardRequest(logger log.Logger, proxyClient *http.Client, host string, w 
 		_ = level.Error(logger).Log("err", err)
 		responseJSON(w, nil, err, http.StatusInternalServerError)
 	}
+}
+
+// GetCertificateByNameHandler godoc
+//
+//	@Summary		Read named certificate
+//	@Description	Return certificate and issuer ca certificate for a named certificate.
+//	@Tags			certificate
+//	@Produce		application/json
+//	@Param			Authorization	header		string	true	"Access token"	default(Bearer <Add access token here>)
+//	@Param			name			path		string	true	"Certificate name"
+//	@Success		200				{object}	models.CertMap
+//	@Success		400				{object}	responseErrorJSON
+//	@Success		401				{object}	responseErrorJSON
+//	@Success		403				{object}	responseErrorJSON
+//	@Success		404				{object}	responseErrorJSON
+//	@Success		409				{object}	responseErrorJSON
+//	@Success		500				{object}	responseErrorJSON
+//	@Router			/certificate/{name} [get]
+func GetCertificateByNameHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger = utils.LoggerWithRequestID(r.Context(), logger)
+
+		tokenValue, err := checkAuth(r)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, nil, err, http.StatusUnauthorized)
+			return
+		}
+
+		w.Header().Set("owner", tokenValue.Username)
+
+		if !slices.Contains(tokenValue.Scope, "read") {
+			responseJSON(w, nil, fmt.Errorf("invalid scope, missing 'read' scope"), http.StatusForbidden)
+			return
+		}
+
+		name := r.PathValue("name")
+		jsonData := map[string]string{"owner": tokenValue.Username, "name": name}
+
+		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
+			return
+		}
+
+		if !isLeaderNow {
+			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
+			forwardRequest(logger, proxyClient, host, w, r)
+			return
+		}
+
+		certData, err := certstore.AmStore.GetCertificate(tokenValue.Username, "", name, "")
+		if err != nil {
+			if strings.Contains(err.Error(), "pending deletion") {
+				responseJSON(w, nil, err, http.StatusConflict)
+				return
+			} else if strings.Contains(err.Error(), "not found") {
+				responseJSON(w, jsonData, err, http.StatusNotFound)
+				return
+			}
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
+			return
+		}
+
+		secretKeyPath := certstore.GenerateCertificatePath(config.GlobalConfig.Storage.Vault.CertPrefix, tokenValue.Username, certData.Issuer, certData.Name, certData.Domain)
+		secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
+			return
+		}
+
+		responseJSON(w, certstore.MapInterfaceToCertMap(secret), nil, http.StatusOK)
+	})
+}
+
+// DeleteCertificateByNameHandler godoc
+//
+//	@Summary		Delete named certificate
+//	@Description	Delete certificate for the given name.
+//	@Tags			certificate
+//	@Produce		application/json
+//	@Param			Authorization	header	string	true	"Access token"	default(Bearer <Add access token here>)
+//	@Param			name			path	string	true	"Certificate name"
+//	@Param			revoke			query	bool	false	"Revoke Certificate"	default(false)
+//	@Success		204
+//	@Success		400	{object}	responseErrorJSON
+//	@Success		401	{object}	responseErrorJSON
+//	@Success		403	{object}	responseErrorJSON
+//	@Success		404	{object}	responseErrorJSON
+//	@Success		409	{object}	responseErrorJSON
+//	@Success		429	{object}	responseErrorJSON
+//	@Success		500	{object}	responseErrorJSON
+//	@Router			/certificate/{name} [delete]
+func DeleteCertificateByNameHandler(logger log.Logger, proxyClient *http.Client) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger = utils.LoggerWithRequestID(r.Context(), logger)
+
+		tokenValue, err := checkAuth(r)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, nil, err, http.StatusUnauthorized)
+			return
+		}
+
+		var revoke bool
+		if r.URL.Query().Get("revoke") == "true" {
+			revoke = true
+		}
+
+		w.Header().Set("owner", tokenValue.Username)
+
+		name := r.PathValue("name")
+		jsonData := map[string]string{"owner": tokenValue.Username, "name": name}
+
+		isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
+			return
+		}
+
+		if !isLeaderNow {
+			host, _ := ring.GetLeaderIP(certstore.AmStore.RingConfig)
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("Forwarding '%s' request to '%s'", r.Method, host))
+			body, _ := json.Marshal(jsonData)
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			forwardRequest(logger, proxyClient, host, w, r)
+			return
+		}
+
+		existingCert, err := certstore.AmStore.GetCertificate(tokenValue.Username, "", name, "")
+		if err != nil {
+			if strings.Contains(err.Error(), "pending deletion") {
+				responseJSON(w, nil, err, http.StatusConflict)
+				return
+			} else if strings.Contains(err.Error(), "not found") {
+				responseJSON(w, nil, err, http.StatusNotFound)
+				return
+			}
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, nil, err, http.StatusInternalServerError)
+			return
+		}
+
+		certLockKey := certstore.GenerateCertificateKey(tokenValue.Username, "", name, "")
+		_, locked := certLockMap.Load(certLockKey)
+		if locked {
+			_ = level.Info(logger).Log("msg", "another delete operation is in progress", "name", name, "owner", tokenValue.Username)
+			responseJSON(w, jsonData, fmt.Errorf("another operation is in progress"), http.StatusTooManyRequests)
+			return
+		}
+		certLockMap.Store(certLockKey, r.Method)
+		defer func() { certLockMap.Delete(certLockKey) }()
+
+		if !slices.Contains(tokenValue.Scope, "delete") {
+			responseJSON(w, jsonData, fmt.Errorf("invalid scope, missing 'delete' scope"), http.StatusForbidden)
+			return
+		}
+
+		if revoke {
+			_ = level.Info(logger).Log("msg", "revoking certificate", "name", name, "domain", existingCert.Domain, "issuer", existingCert.Issuer, "owner", tokenValue.Username)
+			err = certstore.DeleteRemoteCertificateResource(existingCert, logger)
+			if err != nil {
+				responseJSON(w, jsonData, err, http.StatusInternalServerError)
+				return
+			}
+			_ = level.Info(logger).Log("msg", "revoked certificate", "name", name, "domain", existingCert.Domain, "issuer", existingCert.Issuer, "owner", tokenValue.Username)
+		} else {
+			_ = level.Info(logger).Log("msg", "deleting certificate", "name", name, "domain", existingCert.Domain, "issuer", existingCert.Issuer, "owner", tokenValue.Username)
+			secretKeyPath := certstore.GenerateCertificatePath(config.GlobalConfig.Storage.Vault.CertPrefix, tokenValue.Username, existingCert.Issuer, existingCert.Name, existingCert.Domain)
+			err = vault.GlobalClient.DeleteSecretWithAppRole(secretKeyPath)
+			if err != nil {
+				_ = level.Error(logger).Log("err", err)
+				responseJSON(w, jsonData, err, http.StatusInternalServerError)
+				return
+			}
+			_ = level.Info(logger).Log("msg", "deleted certificate", "name", name, "domain", existingCert.Domain, "issuer", existingCert.Issuer, "owner", tokenValue.Username)
+		}
+
+		err = certstore.AmStore.DeleteCertificate(tokenValue.Username, "", name, "")
+		if err != nil {
+			_ = level.Error(logger).Log("err", err)
+			responseJSON(w, jsonData, err, http.StatusInternalServerError)
+			return
+		}
+		metrics.DecManagedCertificate(existingCert.Issuer, tokenValue.Username, existingCert.Domain, existingCert.Name)
+
+		w.WriteHeader(http.StatusNoContent)
+	})
 }
 
 func checkCSR(certParams models.CertificateParams) error {

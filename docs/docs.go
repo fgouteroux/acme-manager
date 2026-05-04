@@ -431,6 +431,160 @@ const docTemplate = `{
                 }
             }
         },
+        "/certificate/{name}": {
+            "get": {
+                "description": "Return certificate and issuer ca certificate for a named certificate.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "certificate"
+                ],
+                "summary": "Read named certificate",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "Bearer \u003cAdd access token here\u003e",
+                        "description": "Access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Certificate name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.CertMap"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete certificate for the given name.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "certificate"
+                ],
+                "summary": "Delete named certificate",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "Bearer \u003cAdd access token here\u003e",
+                        "description": "Access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Certificate name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Revoke Certificate",
+                        "name": "revoke",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.responseErrorJSON"
+                        }
+                    }
+                }
+            }
+        },
         "/token": {
             "put": {
                 "security": [
@@ -661,6 +815,14 @@ const docTemplate = `{
                     "type": "string",
                     "example": "021b5075-2d1e-44bd-b5e5-ffc7be7ad4c3"
                 },
+                "rate_limit_max_requests": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "rate_limit_window": {
+                    "type": "string",
+                    "example": "1h"
+                },
                 "scope": {
                     "type": "array",
                     "items": {
@@ -691,6 +853,12 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "rate_limit_max_requests": {
+                    "type": "integer"
+                },
+                "rate_limit_window": {
+                    "type": "string"
+                },
                 "scope": {
                     "type": "array",
                     "items": {
@@ -715,6 +883,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "expires": {
+                    "type": "string"
+                },
+                "rate_limit_max_requests": {
+                    "type": "integer"
+                },
+                "rate_limit_window": {
                     "type": "string"
                 },
                 "scope": {
@@ -791,8 +965,20 @@ const docTemplate = `{
                 "labels": {
                     "type": "string"
                 },
+                "name": {
+                    "description": "Optional logical name to namespace the KV key.",
+                    "type": "string"
+                },
                 "owner": {
                     "type": "string"
+                },
+                "profile": {
+                    "description": "ACME profile for certificate issuance (draft-aaron-acme-profiles)",
+                    "type": "string"
+                },
+                "renewal_count": {
+                    "description": "Total number of successful renewals, persisted to survive restarts.",
+                    "type": "integer"
                 },
                 "renewal_date": {
                     "type": "string"
@@ -859,8 +1045,20 @@ const docTemplate = `{
                 "labels": {
                     "type": "string"
                 },
+                "name": {
+                    "description": "Optional logical name to namespace the KV key.",
+                    "type": "string"
+                },
                 "owner": {
                     "type": "string"
+                },
+                "profile": {
+                    "description": "ACME profile for certificate issuance (draft-aaron-acme-profiles)",
+                    "type": "string"
+                },
+                "renewal_count": {
+                    "description": "Total number of successful renewals, persisted to survive restarts.",
+                    "type": "integer"
                 },
                 "renewal_date": {
                     "type": "string"
@@ -915,6 +1113,14 @@ const docTemplate = `{
                 },
                 "labels": {
                     "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "prod"
+                },
+                "profile": {
+                    "type": "string",
+                    "example": "connect-direct"
                 },
                 "renewal_days": {
                     "type": "string",

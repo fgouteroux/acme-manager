@@ -1358,6 +1358,7 @@ The server records HTTP request metrics using matched route patterns as the `pat
 | Raw request path | `path` label in metrics |
 |---|---|
 | `/api/v1/certificate/letsencrypt/example.com` | `/api/v1/certificate/{issuer}/{domain}` |
+| `/api/v1/certificate/myapp` | `/api/v1/certificate/{name}` |
 | `/api/v1/token/94e0c649-...` | `/api/v1/token/{id}` |
 | `/metrics` | `/metrics` |
 | `/toto` (unknown) | `unknown` |
@@ -1551,15 +1552,17 @@ graph TB
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/v1/certificate/{issuer}/{domain}` | Bearer | Get certificate |
+| GET | `/api/v1/certificate/{issuer}/{domain}` | Bearer | Get certificate by issuer and domain |
+| GET | `/api/v1/certificate/{name}` | Bearer | Get named certificate |
 | POST | `/api/v1/certificate` | Bearer | Create certificate |
 | PUT | `/api/v1/certificate` | Bearer | Update certificate |
-| DELETE | `/api/v1/certificate/{issuer}/{domain}` | Bearer | Delete certificate |
+| DELETE | `/api/v1/certificate/{issuer}/{domain}` | Bearer | Delete certificate by issuer and domain |
+| DELETE | `/api/v1/certificate/{name}` | Bearer | Delete named certificate |
 | GET | `/metrics` | None | Prometheus metrics |
 | GET | `/swagger` | None | API documentation |
 
 ---
 
 **Version:** 0.6.9+
-**Last Updated:** January 2026
-**Go Version:** 1.24+
+**Last Updated:** May 2026
+**Go Version:** 1.25+

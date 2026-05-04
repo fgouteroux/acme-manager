@@ -371,6 +371,8 @@ func main() {
 	http.Handle("POST /api/v1/certificate", LoggerHandler(api.CreateCertificateHandler(logger, proxyClient)))
 	http.Handle("GET /api/v1/certificate/{issuer}/{domain}", LoggerHandler(api.GetCertificateHandler(logger, proxyClient)))
 	http.Handle("DELETE /api/v1/certificate/{issuer}/{domain}", LoggerHandler(api.DeleteCertificateHandler(logger, proxyClient)))
+	http.Handle("GET /api/v1/certificate/{name}", LoggerHandler(api.GetCertificateByNameHandler(logger, proxyClient)))
+	http.Handle("DELETE /api/v1/certificate/{name}", LoggerHandler(api.DeleteCertificateByNameHandler(logger, proxyClient)))
 
 	http.Handle("PUT /api/v1/token", LoggerHandler(api.UpdateTokenHandler(logger, proxyClient)))
 	http.Handle("POST /api/v1/token", LoggerHandler(api.CreateTokenHandler(logger, proxyClient)))

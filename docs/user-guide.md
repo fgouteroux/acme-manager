@@ -322,10 +322,17 @@ systemctl kill --signal=USR1 acme-manager-client
 
 #### Get Certificate
 
-Retrieve a specific certificate:
+Retrieve a specific certificate by issuer and domain:
 
 ```bash
 GET /api/v1/certificate/{issuer}/{domain}
+Authorization: Bearer {token}
+```
+
+Or by name (for named certificates):
+
+```bash
+GET /api/v1/certificate/{name}
 Authorization: Bearer {token}
 ```
 
@@ -383,10 +390,24 @@ Content-Type: application/json
 
 #### Delete Certificate
 
-Delete and optionally revoke a certificate:
+Delete and optionally revoke a certificate by issuer and domain:
 
 ```bash
 DELETE /api/v1/certificate/{issuer}/{domain}
+Authorization: Bearer {token}
+```
+
+Or by name (for named certificates):
+
+```bash
+DELETE /api/v1/certificate/{name}
+Authorization: Bearer {token}
+```
+
+To revoke during deletion, append `?revoke=true`:
+
+```bash
+DELETE /api/v1/certificate/{name}?revoke=true
 Authorization: Bearer {token}
 ```
 
