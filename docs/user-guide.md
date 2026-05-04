@@ -101,6 +101,13 @@ common:
   revoke_on_delete: false
   delay_before_delete: ""             # e.g., "24h"
 
+  # HTTP client retry configuration
+  http_client_retry_max: 4            # Max retry attempts (default: 4)
+  http_client_retry_wait_min: 1       # Min wait between retries in seconds (default: 1)
+  http_client_retry_wait_max: 30      # Max wait between retries in seconds (default: 30)
+  http_client_retry_status_code: []   # Extra HTTP status codes to retry on (e.g. [429, 503])
+  http_client_debug: false            # Log full request/response for debugging
+
 certificate:
   - domain: "example.com"
     issuer: "letsencrypt"
@@ -611,6 +618,11 @@ http://localhost:8989/metrics
 | `revoke_on_update` | bool | false | Revoke old certificate on update |
 | `revoke_on_delete` | bool | false | Revoke certificate on delete |
 | `delay_before_delete` | string | "" | Duration to wait before deleting (e.g., "24h") |
+| `http_client_retry_max` | int | 4 | Maximum number of retry attempts for requests to the server |
+| `http_client_retry_wait_min` | int | 1 | Minimum wait time in seconds between retries |
+| `http_client_retry_wait_max` | int | 30 | Maximum wait time in seconds between retries |
+| `http_client_retry_status_code` | []int | [] | Additional HTTP status codes to trigger a retry (e.g. `[429, 503]`) |
+| `http_client_debug` | bool | false | Log full HTTP request and response bodies for debugging |
 
 ## Best Practices
 

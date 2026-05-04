@@ -75,6 +75,12 @@ type Common struct {
 	RevokeOnUpdate    bool        `yaml:"revoke_on_update"`
 	RevokeOnDelete    bool        `yaml:"revoke_on_delete"`
 	DelayBeforeDelete string      `yaml:"delay_before_delete"`
+
+	HTTPClientRetryMax        int   `yaml:"http_client_retry_max"`
+	HTTPClientRetryWaitMin    int   `yaml:"http_client_retry_wait_min"`
+	HTTPClientRetryWaitMax    int   `yaml:"http_client_retry_wait_max"`
+	HTTPClientRetryStatusCode []int `yaml:"http_client_retry_status_code"`
+	HTTPClientDebug           bool  `yaml:"http_client_debug"`
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.

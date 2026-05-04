@@ -20,6 +20,15 @@ import (
 	"github.com/fgouteroux/acme-manager/utils"
 )
 
+// RetryConfig controls the retryablehttp client behaviour.
+type RetryConfig struct {
+	RetryMax        int
+	RetryWaitMin    int // seconds
+	RetryWaitMax    int // seconds
+	RetryStatusCode []int
+	Debug           bool
+}
+
 type Client struct {
 	BaseURL    string
 	Logger     *logrus.Logger
@@ -62,17 +71,37 @@ func setTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Confi
 	return tlsConfig, nil
 }
 
-func NewClient(baseURL, token, certFile, keyFile, caFile string, insecure bool, logger *logrus.Logger) (*Client, error) {
+func NewClient(baseURL, token, certFile, keyFile, caFile string, insecure bool, logger *logrus.Logger, retryCfg RetryConfig) (*Client, error) {
 	var client Client
 	retryClient := retryablehttp.NewClient()
 
-	// Set the custom logger
+	retryClient.RetryMax = 4
+	if retryCfg.RetryMax != 0 {
+		retryClient.RetryMax = retryCfg.RetryMax
+	}
+	retryClient.RetryWaitMin = 1 * time.Second
+	if retryCfg.RetryWaitMin != 0 {
+		retryClient.RetryWaitMin = time.Duration(retryCfg.RetryWaitMin) * time.Second
+	}
+	retryClient.RetryWaitMax = 30 * time.Second
+	if retryCfg.RetryWaitMax != 0 {
+		retryClient.RetryWaitMax = time.Duration(retryCfg.RetryWaitMax) * time.Second
+	}
+
 	if logger != nil {
 		retryClient.Logger = logger
-		// Set the response log hook
-		retryClient.ResponseLogHook = utils.ResponseLogHook(logger, true)
+		if retryCfg.Debug {
+			retryClient.RequestLogHook = utils.RequestLogHook(logger)
+			retryClient.ResponseLogHook = utils.ResponseLogHookDebug(logger)
+		} else {
+			retryClient.ResponseLogHook = utils.ResponseLogHook(logger, true)
+		}
 	} else {
 		retryClient.Logger = nil
+	}
+
+	if len(retryCfg.RetryStatusCode) > 0 {
+		retryClient.CheckRetry = newStatusCodeRetryPolicy(retryCfg.RetryStatusCode)
 	}
 
 	tlsConfig, err := setTLSConfig(certFile, keyFile, caFile, insecure)
@@ -90,6 +119,23 @@ func NewClient(baseURL, token, certFile, keyFile, caFile string, insecure bool, 
 	client.httpclient = retryClient.StandardClient()
 
 	return &client, nil
+}
+
+func newStatusCodeRetryPolicy(retryStatusCodes []int) retryablehttp.CheckRetry {
+	return func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		shouldRetry, defaultErr := retryablehttp.DefaultRetryPolicy(ctx, resp, err)
+		if shouldRetry || defaultErr != nil {
+			return shouldRetry, defaultErr
+		}
+		if resp != nil {
+			for _, code := range retryStatusCodes {
+				if resp.StatusCode == code {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	}
 }
 
 func (c *Client) doRequest(ctx context.Context, method, path string, headers map[string]string, body io.Reader, timeout int) (*http.Response, error) {

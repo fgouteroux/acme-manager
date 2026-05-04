@@ -469,6 +469,11 @@ Optional Common parameters:
 - **revoke_on_update** (bool): If set to true, revoke the old certificate on update (default: false)
 - **revoke_on_delete** (bool): If set to true, revoke the certificate on delete (default: false)
 - **delay_before_delete** (string): If set, define a duration to wait before deleting certificate
+- **http_client_retry_max** (int): Maximum number of retry attempts for requests to the server (default: 4)
+- **http_client_retry_wait_min** (int): Minimum wait time in seconds between retries (default: 1)
+- **http_client_retry_wait_max** (int): Maximum wait time in seconds between retries (default: 30)
+- **http_client_retry_status_code** ([]int): Additional HTTP status codes to retry on (e.g. [429, 503])
+- **http_client_debug** (bool): Log full HTTP request and response bodies for debugging (default: false)
  
 Optional Certificate parameters:
 - **bundle** (bool): if true, add the issuers certificate to the new certificate. When false, CA chain is saved as a separate file (domain.ca.crt)

@@ -26,7 +26,7 @@ func (m *MockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 }
 
 func TestNewClient(t *testing.T) {
-	client, err := NewClient("http://example.com", "token", "", "", "", false, nil)
+	client, err := NewClient("http://example.com", "token", "", "", "", false, nil, RetryConfig{})
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.Equal(t, "http://example.com", client.BaseURL)

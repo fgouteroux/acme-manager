@@ -140,6 +140,13 @@ func main() {
 		*clientManagerTLSCAFile,
 		*clientManagerTLSSkipVerify,
 		logrusLogger,
+		restclient.RetryConfig{
+			RetryMax:        client.GlobalConfig.Common.HTTPClientRetryMax,
+			RetryWaitMin:    client.GlobalConfig.Common.HTTPClientRetryWaitMin,
+			RetryWaitMax:    client.GlobalConfig.Common.HTTPClientRetryWaitMax,
+			RetryStatusCode: client.GlobalConfig.Common.HTTPClientRetryStatusCode,
+			Debug:           client.GlobalConfig.Common.HTTPClientDebug,
+		},
 	)
 	if err != nil {
 		_ = level.Error(logger).Log("err", err)
