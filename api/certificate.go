@@ -526,7 +526,7 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		}
 
 		_ = level.Info(logger).Log("msg", "creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
-		newCert, err := certstore.CreateRemoteCertificateResource(certData, logger)
+		newCert, err := certstore.CreateRemoteCertificateResource(r.Context(), certData, logger)
 		if err != nil {
 			statusCode := http.StatusInternalServerError
 			if strings.Contains(err.Error(), "urn:ietf:params:acme:error:malformed") {
@@ -779,7 +779,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 					certToRevoke = &tmp
 				}
 				_ = level.Info(logger).Log("msg", "revoking certificate", "domain", certToRevoke.Domain, "issuer", certToRevoke.Issuer, "name", certToRevoke.Name, "owner", certToRevoke.Owner)
-				if revokeErr := certstore.DeleteRemoteCertificateResource(certToRevoke, logger); revokeErr != nil {
+				if revokeErr := certstore.DeleteRemoteCertificateResource(r.Context(), certToRevoke, logger); revokeErr != nil {
 					// Revocation is best-effort: some CAs reject it (e.g. unauthorized key).
 					// Log and proceed so the new cert is still issued.
 					_ = level.Warn(logger).Log("msg", "revocation failed, proceeding with new certificate", "err", revokeErr, "domain", certToRevoke.Domain, "issuer", certToRevoke.Issuer, "name", certToRevoke.Name, "owner", certToRevoke.Owner)
@@ -789,7 +789,7 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			}
 
 			_ = level.Info(logger).Log("msg", "re-creating certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
-			newCert, err = certstore.CreateRemoteCertificateResource(certData, logger)
+			newCert, err = certstore.CreateRemoteCertificateResource(r.Context(), certData, logger)
 			if err != nil {
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
@@ -968,7 +968,7 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		if revoke {
 			_ = level.Info(logger).Log("msg", "revoking certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
-			err = certstore.DeleteRemoteCertificateResource(certData, logger)
+			err = certstore.DeleteRemoteCertificateResource(r.Context(), certData, logger)
 			if err != nil {
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return
@@ -1198,7 +1198,7 @@ func DeleteCertificateByNameHandler(logger log.Logger, proxyClient *http.Client)
 
 		if revoke {
 			_ = level.Info(logger).Log("msg", "revoking certificate", "name", name, "domain", existingCert.Domain, "issuer", existingCert.Issuer, "owner", tokenValue.Username)
-			err = certstore.DeleteRemoteCertificateResource(existingCert, logger)
+			err = certstore.DeleteRemoteCertificateResource(r.Context(), existingCert, logger)
 			if err != nil {
 				responseJSON(w, jsonData, err, http.StatusInternalServerError)
 				return

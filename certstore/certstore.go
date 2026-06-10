@@ -51,13 +51,13 @@ type CertStore struct {
 //   - (true, nil): Certificate already revoked/expired in previous cycle - safe to destroy
 //   - (false, nil): Certificate freshly revoked this cycle - wait for next cycle before destroying
 //   - (false, error): Revocation failed - do not proceed with destruction
-func RevokeCertificateWithVerification(logger log.Logger, issuerAcmeClient *lego.Client, certBytes []byte, issuer, owner, domain, name string, version *int) (bool, error) {
+func RevokeCertificateWithVerification(ctx context.Context, logger log.Logger, issuerAcmeClient *lego.Client, certBytes []byte, issuer, owner, domain, name string, version *int) (bool, error) {
 	versionStr := ""
 	if version != nil {
 		versionStr = fmt.Sprintf(", version=%d", *version)
 	}
 
-	err := issuerAcmeClient.Certificate.Revoke(context.Background(), certBytes)
+	err := issuerAcmeClient.Certificate.Revoke(ctx, certBytes)
 	switch {
 	case err == nil:
 		_ = level.Info(logger).Log("msg", "certificate revoked successfully, will destroy in next cleanup cycle"+versionStr, "domain", domain, "issuer", issuer, "name", name, "owner", owner)
@@ -93,7 +93,7 @@ func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resou
 	}
 }
 
-func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Logger) (*models.Certificate, error) {
+func CreateRemoteCertificateResource(ctx context.Context, certData *models.Certificate, logger log.Logger) (*models.Certificate, error) {
 	vaultSecretPath := GenerateCertificatePath(config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 	domain := utils.SanitizedDomain(logger, certData.Domain)
 
@@ -251,7 +251,7 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 		}
 	}
 
-	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(context.Background(), request)
+	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(ctx, request)
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "failed to obtain certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner, "err", err)
 		metrics.IncCertificateCreationError(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
@@ -324,7 +324,7 @@ func CreateRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 	return certData, nil
 }
 
-func DeleteRemoteCertificateResource(certData *models.Certificate, logger log.Logger) error {
+func DeleteRemoteCertificateResource(ctx context.Context, certData *models.Certificate, logger log.Logger) error {
 	vaultSecretPath := GenerateCertificatePath(config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 	data, err := vault.GlobalClient.GetSecretWithAppRole(vaultSecretPath)
 	if err != nil {
@@ -339,7 +339,7 @@ func DeleteRemoteCertificateResource(certData *models.Certificate, logger log.Lo
 			return fmt.Errorf("could not delete certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
 		}
 
-		_, err = RevokeCertificateWithVerification(logger, issuerAcmeClient, []byte(certBytes.(string)), certData.Issuer, certData.Owner, certData.Domain, certData.Name, nil)
+		_, err = RevokeCertificateWithVerification(ctx, logger, issuerAcmeClient, []byte(certBytes.(string)), certData.Issuer, certData.Owner, certData.Domain, certData.Name, nil)
 		if err != nil {
 			return err
 		}
@@ -378,7 +378,9 @@ func CheckCertExpiration(amStore *CertStore, logger log.Logger) error {
 		if currentDate.After(renewalDate) || currentDate.Equal(renewalDate) {
 			_ = level.Info(logger).Log("msg", "trying renewal certificate", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 			certData.RenewalCount++
-			cert, err := CreateRemoteCertificateResource(certData, logger)
+			renewCtx, renewCancel := context.WithTimeout(context.Background(), time.Duration(config.GlobalConfig.Common.CertTimeout)*time.Second)
+			cert, err := CreateRemoteCertificateResource(renewCtx, certData, logger)
+			renewCancel()
 			if err != nil {
 				certData.RenewalCount-- // revert: Vault write did not happen
 				metrics.IncCertificateRenewalError(certData.Issuer, certData.Owner, certData.Domain, certData.Name)

@@ -39,6 +39,7 @@ type Plugin struct {
 type Common struct {
 	APIKeyHash                string   `yaml:"api_key_hash"`
 	CertDaysRenewal           string   `yaml:"cert_days_renewal"`
+	CertTimeout               int      `yaml:"cert_timeout"`
 	RootPathAccount           string   `yaml:"rootpath_account"`
 	RootPathCertificate       string   `yaml:"rootpath_certificate"`
 	Plugins                   []Plugin `yaml:"plugins"`
@@ -97,6 +98,10 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		s.Common.CertDaysRenewal = "20-30"
 	} else if _, _, err := utils.ValidateRenewalDays(s.Common.CertDaysRenewal); err != nil {
 		return err
+	}
+
+	if s.Common.CertTimeout == 0 {
+		s.Common.CertTimeout = 600
 	}
 
 	// Rate limiting defaults and validation
