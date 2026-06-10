@@ -101,7 +101,7 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	if s.Common.CertTimeout == 0 {
-		s.Common.CertTimeout = 600
+		s.Common.CertTimeout = 240
 	}
 
 	// Rate limiting defaults and validation

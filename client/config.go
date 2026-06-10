@@ -109,7 +109,9 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	if s.Common.CertTimeout == 0 {
-		s.Common.CertTimeout = 180
+		// Must exceed the server's cert_timeout (default 240s) so the client
+		// waits long enough to receive the response and save the private key.
+		s.Common.CertTimeout = 270
 	}
 
 	if s.Common.CertFileExt == "" {
