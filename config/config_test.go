@@ -50,6 +50,7 @@ storage:
 				Common: Common{
 					APIKeyHash:          "hash123",
 					CertDaysRenewal:     "25-35",
+					CertTimeout:         240,
 					RootPathAccount:     "/account",
 					RootPathCertificate: "/cert",
 				},

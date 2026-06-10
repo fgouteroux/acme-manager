@@ -237,14 +237,14 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		tokenHash := utils.SHA1Hash(randomToken)
 
 		newData := map[string]interface{}{
-			"id":                     ID,
-			"token":                  base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", ID, randomToken))),
-			"tokenHash":              tokenHash,
-			"scope":                  token.Scope,
-			"username":               token.Username,
-			"expires":                expires,
-			"duration":               token.Duration,
-			"rate_limit_window":      token.RateLimitWindow,
+			"id":                      ID,
+			"token":                   base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", ID, randomToken))),
+			"tokenHash":               tokenHash,
+			"scope":                   token.Scope,
+			"username":                token.Username,
+			"expires":                 expires,
+			"duration":                token.Duration,
+			"rate_limit_window":       token.RateLimitWindow,
 			"rate_limit_max_requests": token.RateLimitMaxRequests,
 		}
 
@@ -403,14 +403,14 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		tokenHash := utils.SHA1Hash(randomToken)
 
 		newData := map[string]interface{}{
-			"id":                     token.ID,
-			"token":                  base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", token.ID, randomToken))),
-			"tokenHash":              tokenHash,
-			"scope":                  token.Scope,
-			"username":               token.Username,
-			"expires":                expires,
-			"duration":               token.Duration,
-			"rate_limit_window":      token.RateLimitWindow,
+			"id":                      token.ID,
+			"token":                   base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", token.ID, randomToken))),
+			"tokenHash":               tokenHash,
+			"scope":                   token.Scope,
+			"username":                token.Username,
+			"expires":                 expires,
+			"duration":                token.Duration,
+			"rate_limit_window":       token.RateLimitWindow,
 			"rate_limit_max_requests": token.RateLimitMaxRequests,
 		}
 
