@@ -2,6 +2,7 @@ package vault
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -19,6 +20,9 @@ import (
 
 var (
 	GlobalClient *Client
+
+	// ErrSecretNotFound is returned by GetSecretWithAppRole when the secret path does not exist.
+	ErrSecretNotFound = errors.New("vault secret not found")
 )
 
 type Client struct {
@@ -156,6 +160,11 @@ func (client *Client) GetSecretWithAppRole(secretPath string) (map[string]interf
 
 	secret, err := client.APIClient.KVv2(client.Config.SecretEngine).Get(context.Background(), secretPath)
 	if err != nil {
+		// Vault SDK returns this message when the path is not found (nil secret, nil err from
+		// Logical().Read, which KVv2.Get converts to a plain error — not a *ResponseError).
+		if strings.Contains(err.Error(), "secret not found") {
+			return nil, fmt.Errorf("%w at %s", ErrSecretNotFound, secretPath)
+		}
 		metrics.IncGetFailedVaultSecret(secretTypeFromPath(secretPath))
 		return data, err
 	}

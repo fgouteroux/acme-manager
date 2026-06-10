@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -1042,6 +1043,12 @@ func getPrivateKeyFromVault(logger log.Logger, certKeyFilePath, certFilePath, is
 	secretKeyPath := certVaultPath(GlobalConfig.Storage.Vault.CertPrefix, Owner, issuer, name, domain)
 	secret, err := vault.GlobalClient.GetSecretWithAppRole(secretKeyPath)
 	if err != nil {
+		if errors.Is(err, vault.ErrSecretNotFound) {
+			// Key was never backed up (e.g., client timed out before the vault write).
+			// Trigger recreation so a new key pair is generated and stored.
+			_ = level.Info(logger).Log("msg", fmt.Sprintf("no vault backup found for '%s', recreation needed", certKeyFilePath), "domain", domain, "issuer", issuer, "name", name, "owner", Owner)
+			return true, false
+		}
 		_ = level.Error(logger).Log("err", err, "domain", domain, "issuer", issuer, "name", name, "owner", Owner)
 		return false, false
 	}
