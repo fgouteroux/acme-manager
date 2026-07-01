@@ -70,6 +70,9 @@ var (
 	cleanupCertExpDays           = flag.Int("cleanup.cert-expire-days", 10, "Number of days before old certificate expires to revoke and delete vault secret version.")
 	cleanupCertRevokeLastVersion = flag.Bool("cleanup.cert-revoke-last-version", false, "Revoke last certificate version and delete vault secret version.")
 
+	// Security flags
+	allowUnverifiedPlugins = flag.Bool("allow-unverified-plugins", false, "Allow plugins configured without a checksum to be loaded and executed (insecure).")
+
 	// Help flags
 	showVersion = flag.Bool("version", false, "Show version information")
 	configCheck = flag.Bool("config-check", false, "Validate config file and exit")
@@ -218,6 +221,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Propagate the opt-out before parsing so plugin checksum validation can
+	// enforce it during unmarshalling.
+	config.AllowUnverifiedPlugins = *allowUnverifiedPlugins
+
 	var cfg config.Config
 	err = yaml.Unmarshal(configBytes, &cfg)
 	if err != nil {
@@ -226,6 +233,11 @@ func main() {
 	}
 
 	config.GlobalConfig = cfg
+
+	// Loudly warn about any plugin allowed to run without checksum verification.
+	for _, name := range config.UnverifiedPlugins {
+		_ = level.Warn(logger).Log("msg", "plugin configured without checksum will run UNVERIFIED", "plugin", name)
+	}
 
 	if *configCheck {
 		fmt.Println("config file is valid")

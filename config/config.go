@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"os"
 	"time"
 
@@ -17,6 +16,15 @@ var (
 	SupportedIssuers []string
 	GlobalConfig     Config
 	SecuredPlugins   []string
+
+	// AllowUnverifiedPlugins permits plugins configured without a checksum to be
+	// loaded and executed. It defaults to false so an empty-checksum plugin fails
+	// config validation. It is set from the --allow-unverified-plugins flag.
+	AllowUnverifiedPlugins bool
+
+	// UnverifiedPlugins lists the names of plugins that were allowed to load
+	// without a checksum (only populated when AllowUnverifiedPlugins is true).
+	UnverifiedPlugins []string
 )
 
 // Config represents config.
@@ -139,36 +147,33 @@ func (s *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	var checkedPlugins []string
+	var unverifiedPlugins []string
 	for _, item := range s.Common.Plugins {
-		if item.Checksum != "" {
-			// Open the file
-			file, err := os.Open(item.Path)
-			if err != nil {
-				return fmt.Errorf("error opening plugin '%s': %v", item.Name, err)
+		if item.Checksum == "" {
+			if !AllowUnverifiedPlugins {
+				return fmt.Errorf("plugin '%s' has no checksum configured; set a checksum or start the server with --allow-unverified-plugins to permit it", item.Name)
 			}
-			defer file.Close()
-
-			// Create a new SHA-256 hash
-			hash := sha256.New()
-
-			// Copy the file contents to the hash
-			if _, err := io.Copy(hash, file); err != nil {
-				return fmt.Errorf("error reading plugin '%s': %v", item.Name, err)
-			}
-
-			// Get the checksum as a byte slice
-			checksum := hash.Sum(nil)
-
-			// Convert the checksum to a hexadecimal string
-			checksumHex := hex.EncodeToString(checksum)
-
-			if item.Checksum != checksumHex {
-				return fmt.Errorf("plugin '%s' checksum '%s' doesn't match current config checksum '%s", item.Name, checksumHex, item.Checksum)
-			}
-			checkedPlugins = append(checkedPlugins, item.Name)
+			unverifiedPlugins = append(unverifiedPlugins, item.Name)
+			continue
 		}
+
+		// Read the whole file and hash it. Using os.ReadFile avoids accumulating
+		// open file descriptors across loop iterations (no defer-in-loop).
+		data, err := os.ReadFile(item.Path)
+		if err != nil {
+			return fmt.Errorf("error reading plugin '%s': %v", item.Name, err)
+		}
+
+		sum := sha256.Sum256(data)
+		checksumHex := hex.EncodeToString(sum[:])
+
+		if item.Checksum != checksumHex {
+			return fmt.Errorf("plugin '%s' checksum '%s' doesn't match current config checksum '%s'", item.Name, checksumHex, item.Checksum)
+		}
+		checkedPlugins = append(checkedPlugins, item.Name)
 	}
 	SecuredPlugins = checkedPlugins
+	UnverifiedPlugins = unverifiedPlugins
 
 	SupportedIssuers = maps.Keys(s.Issuer)
 
