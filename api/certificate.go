@@ -830,7 +830,8 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				return
 			}
 
-			expiresDate, _ := time.Parse("2006-01-02 15:04:05 -0700 MST", secret["expires"].(string))
+			expiresStr, _ := secret["expires"].(string)
+			expiresDate, _ := time.Parse("2006-01-02 15:04:05 -0700 MST", expiresStr)
 			renewalDate = utils.RandomWeekdayBeforeExpiration(expiresDate, certRenewalMinDays, certRenewalMaxDays).String()
 
 			secret["renewal_date"] = renewalDate

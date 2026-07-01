@@ -83,7 +83,10 @@ func (c *CertStore) GetCertificate(owner, issuer, name, domain string) (*models.
 		return nil, fmt.Errorf("certificate '%s' %w", key, ErrNotFound)
 	}
 
-	cert := cached.(*models.Certificate)
+	cert, ok := cached.(*models.Certificate)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type %T for certificate key %s", cached, key)
+	}
 
 	// Check for deletion
 	if cert.DeletedAt > 0 {
@@ -109,7 +112,10 @@ func (c *CertStore) DeleteCertificate(owner, issuer, name, domain string) error 
 		return fmt.Errorf("certificate '%s' %w", key, ErrNotFound)
 	}
 
-	cert := cached.(*models.Certificate)
+	cert, ok := cached.(*models.Certificate)
+	if !ok {
+		return fmt.Errorf("unexpected type %T for certificate key %s", cached, key)
+	}
 
 	// Mark as deleted
 	cert.DeletedAt = timestamp.FromTime(time.Now())
@@ -151,7 +157,11 @@ func (c *CertStore) ListCertificatesForOwner(owner string) ([]*models.Certificat
 			continue
 		}
 
-		cert := cached.(*models.Certificate)
+		cert, ok := cached.(*models.Certificate)
+		if !ok {
+			_ = level.Error(c.Logger).Log("msg", "unexpected type for certificate", "key", key, "type", fmt.Sprintf("%T", cached))
+			continue
+		}
 
 		// Skip deleted certificates (pending deletion)
 		if cert.DeletedAt == 0 {
@@ -183,7 +193,11 @@ func (c *CertStore) ListAllCertificates() (map[string]*models.Certificate, error
 			continue
 		}
 
-		cert := cached.(*models.Certificate)
+		cert, ok := cached.(*models.Certificate)
+		if !ok {
+			_ = level.Error(c.Logger).Log("msg", "unexpected type for certificate", "key", key, "type", fmt.Sprintf("%T", cached))
+			continue
+		}
 
 		if cert.DeletedAt == 0 {
 			certificates[key] = cert
@@ -250,7 +264,10 @@ func (c *CertStore) GetToken(tokenID string) (*models.Token, error) {
 		return nil, fmt.Errorf("token id '%s' %w", tokenID, ErrNotFound)
 	}
 
-	token := cached.(*models.Token)
+	token, ok := cached.(*models.Token)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type %T for token key %s", cached, key)
+	}
 
 	// Check for deletion
 	if token.DeletedAt > 0 {
@@ -276,7 +293,10 @@ func (c *CertStore) DeleteToken(tokenID string) error {
 		return fmt.Errorf("token id '%s' %w", tokenID, ErrNotFound)
 	}
 
-	token := cached.(*models.Token)
+	token, ok := cached.(*models.Token)
+	if !ok {
+		return fmt.Errorf("unexpected type %T for token key %s", cached, key)
+	}
 
 	// Mark as deleted
 	token.DeletedAt = timestamp.FromTime(time.Now())
@@ -316,7 +336,11 @@ func (c *CertStore) ListAllTokens() (map[string]*models.Token, error) {
 			continue
 		}
 
-		token := cached.(*models.Token)
+		token, ok := cached.(*models.Token)
+		if !ok {
+			_ = level.Error(c.Logger).Log("msg", "unexpected type for token", "key", key, "type", fmt.Sprintf("%T", cached))
+			continue
+		}
 		tokens[key] = token
 	}
 
@@ -368,7 +392,10 @@ func (c *CertStore) GetChallenge(challengeID string) (string, error) {
 		return "", fmt.Errorf("challenge id '%s' %w", challengeID, ErrNotFound)
 	}
 
-	challenge := cached.(*models.Challenge)
+	challenge, ok := cached.(*models.Challenge)
+	if !ok {
+		return "", fmt.Errorf("unexpected type %T for challenge key %s", cached, key)
+	}
 
 	// Check for deletion
 	if challenge.DeletedAt > 0 {
@@ -407,7 +434,11 @@ func (c *CertStore) ListAllChallenges() (map[string]string, error) {
 			continue
 		}
 
-		challenge := cached.(*models.Challenge)
+		challenge, ok := cached.(*models.Challenge)
+		if !ok {
+			_ = level.Error(c.Logger).Log("msg", "unexpected type for challenge", "key", key, "type", fmt.Sprintf("%T", cached))
+			continue
+		}
 		if challenge.DeletedAt == 0 {
 			challenges[key] = challenge.KeyAuth
 		}
@@ -463,7 +494,10 @@ func (c *CertStore) GetRateLimit(owner, issuer, name, domain string) (*models.Ra
 		return nil, nil // Not found is not an error for rate limits
 	}
 
-	rateLimit := cached.(*models.RateLimit)
+	rateLimit, ok := cached.(*models.RateLimit)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type %T for rate limit key %s", cached, key)
+	}
 
 	// Check for deletion
 	if rateLimit.DeletedAt > 0 {
@@ -509,7 +543,11 @@ func (c *CertStore) ListAllRateLimits() (map[string]*models.RateLimit, error) {
 			continue
 		}
 
-		rateLimit := cached.(*models.RateLimit)
+		rateLimit, ok := cached.(*models.RateLimit)
+		if !ok {
+			_ = level.Error(c.Logger).Log("msg", "unexpected type for rate limit", "key", key, "type", fmt.Sprintf("%T", cached))
+			continue
+		}
 		if rateLimit.DeletedAt == 0 {
 			rateLimits[key] = rateLimit
 		}

@@ -340,13 +340,18 @@ func DeleteRemoteCertificateResource(ctx context.Context, certData *models.Certi
 	}
 
 	if certBytes, ok := data["cert"]; ok {
+		certStr, ok := certBytes.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for cert in vault secret %s", certBytes, vaultSecretPath)
+		}
+
 		var issuerAcmeClient *lego.Client
 		var issuerFound bool
 		if issuerAcmeClient, issuerFound = AcmeClient[certData.Issuer]; !issuerFound {
 			return fmt.Errorf("could not delete certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
 		}
 
-		_, err = RevokeCertificateWithVerification(ctx, logger, issuerAcmeClient, []byte(certBytes.(string)), certData.Issuer, certData.Owner, certData.Domain, certData.Name, nil)
+		_, err = RevokeCertificateWithVerification(ctx, logger, issuerAcmeClient, []byte(certStr), certData.Issuer, certData.Owner, certData.Domain, certData.Name, nil)
 		if err != nil {
 			return err
 		}
