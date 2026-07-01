@@ -3,14 +3,10 @@ package restclient
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -34,41 +30,6 @@ type Client struct {
 	Logger     *logrus.Logger
 	Token      string
 	httpclient *http.Client
-}
-
-func setTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Config, error) {
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		MaxVersion: tls.VersionTLS13,
-	}
-
-	if insecure {
-		tlsConfig.InsecureSkipVerify = insecure
-		return tlsConfig, nil
-	}
-
-	if cert != "" && key != "" {
-		// Load client cert
-		certificate, err := tls.LoadX509KeyPair(cert, key)
-		if err != nil {
-			return tlsConfig, err
-		}
-
-		tlsConfig.Certificates = []tls.Certificate{certificate}
-	}
-
-	if ca != "" {
-		// Load CA cert
-		caCert, err := os.ReadFile(filepath.Clean(ca))
-		if err != nil {
-			return tlsConfig, err
-		}
-
-		caCertPool := x509.NewCertPool()
-		caCertPool.AppendCertsFromPEM(caCert)
-		tlsConfig.RootCAs = caCertPool
-	}
-	return tlsConfig, nil
 }
 
 func NewClient(baseURL, token, certFile, keyFile, caFile string, insecure bool, logger *logrus.Logger, retryCfg RetryConfig) (*Client, error) {
@@ -104,7 +65,7 @@ func NewClient(baseURL, token, certFile, keyFile, caFile string, insecure bool, 
 		retryClient.CheckRetry = newStatusCodeRetryPolicy(retryCfg.RetryStatusCode)
 	}
 
-	tlsConfig, err := setTLSConfig(certFile, keyFile, caFile, insecure)
+	tlsConfig, err := utils.SetTLSConfig(certFile, keyFile, caFile, insecure)
 	if err != nil {
 		return &client, err
 	}
