@@ -84,13 +84,52 @@ func LoggerWithRequestID(ctx context.Context, logger log.Logger) log.Logger {
 	return logger
 }
 
-// SanitizedDomain Make sure no funny chars are in the cert names (like wildcards ;)).
-func SanitizedDomain(logger log.Logger, domain string) string {
+// domainLabelRegexp validates a single DNS label (letters, digits, hyphen; not
+// starting or ending with a hyphen). Underscores are allowed to accommodate
+// service labels seen in some ACME deployments.
+var domainLabelRegexp = regexp.MustCompile(`^[A-Za-z0-9_]([A-Za-z0-9_-]*[A-Za-z0-9_])?$`)
+
+// SanitizedDomain validates a domain and returns a filesystem/Vault-path safe
+// representation. It rejects empty, over-long or malformed domains, and allows
+// at most a single leading "*." wildcard label. On any failure it returns a
+// non-nil error instead of a partial value so callers never build paths from
+// unvalidated input.
+func SanitizedDomain(logger log.Logger, domain string) (string, error) {
+	if domain == "" {
+		return "", fmt.Errorf("domain is empty")
+	}
+	// RFC 1035: total length of a domain name is at most 253 octets.
+	if len(domain) > 253 {
+		return "", fmt.Errorf("domain %q exceeds maximum length of 253 characters", domain)
+	}
+
+	labels := strings.Split(domain, ".")
+	for i, label := range labels {
+		// A single leading wildcard label ("*") is allowed.
+		if label == "*" {
+			if i != 0 {
+				return "", fmt.Errorf("domain %q has a wildcard label in a non-leading position", domain)
+			}
+			continue
+		}
+		if label == "" {
+			return "", fmt.Errorf("domain %q contains an empty label", domain)
+		}
+		if len(label) > 63 {
+			return "", fmt.Errorf("domain %q has a label longer than 63 characters", domain)
+		}
+		if !domainLabelRegexp.MatchString(label) {
+			return "", fmt.Errorf("domain %q contains an invalid label %q", domain, label)
+		}
+	}
+
+	// Make sure no funny chars are in the cert names (like wildcards ;)).
 	safe, err := idna.ToASCII(strings.NewReplacer(":", "-", "*", "_").Replace(domain))
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
+		_ = level.Error(logger).Log("msg", "failed to sanitize domain", "domain", domain, "err", err)
+		return "", fmt.Errorf("failed to sanitize domain %q: %w", domain, err)
 	}
-	return safe
+	return safe, nil
 }
 
 func CreateNonExistingFolder(path string, mode fs.FileMode) error {

@@ -79,8 +79,12 @@ func RevokeCertificateWithVerification(ctx context.Context, logger log.Logger, i
 }
 
 func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resource) {
-	domain := utils.SanitizedDomain(logger, certRes.Domain)
-	err := os.WriteFile(filepath+domain+".crt", certRes.Certificate, 0600)
+	domain, err := utils.SanitizedDomain(logger, certRes.Domain)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "unable to save certificate: invalid domain", "domain", certRes.Domain, "err", err)
+		return
+	}
+	err = os.WriteFile(filepath+domain+".crt", certRes.Certificate, 0600)
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "unable to save certificate", "domain", domain, "err", err)
 	}
@@ -95,10 +99,13 @@ func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resou
 
 func CreateRemoteCertificateResource(ctx context.Context, certData *models.Certificate, logger log.Logger) (*models.Certificate, error) {
 	vaultSecretPath := GenerateCertificatePath(config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Name, certData.Domain)
-	domain := utils.SanitizedDomain(logger, certData.Domain)
+	domain, err := utils.SanitizedDomain(logger, certData.Domain)
+	if err != nil {
+		return certData, fmt.Errorf("invalid domain %q: %w", certData.Domain, err)
+	}
 
 	baseCertificateFilePath := GenerateCertificatePath(config.GlobalConfig.Common.RootPathCertificate, certData.Owner, certData.Issuer, certData.Name, domain) + "/"
-	err := utils.CreateNonExistingFolder(baseCertificateFilePath, 0750)
+	err = utils.CreateNonExistingFolder(baseCertificateFilePath, 0750)
 	if err != nil {
 		return certData, err
 	}

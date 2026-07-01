@@ -1,8 +1,49 @@
 package utils
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/go-kit/log"
 )
+
+func TestSanitizedDomain(t *testing.T) {
+	logger := log.NewNopLogger()
+
+	tests := []struct {
+		name    string
+		domain  string
+		want    string
+		wantErr bool
+	}{
+		{name: "valid", domain: "example.com", want: "example.com"},
+		{name: "valid subdomain", domain: "api.example.com", want: "api.example.com"},
+		{name: "wildcard", domain: "*.example.com", want: "_.example.com"},
+		{name: "empty", domain: "", wantErr: true},
+		{name: "wildcard non-leading", domain: "example.*.com", wantErr: true},
+		{name: "bad chars", domain: "exa mple.com", wantErr: true},
+		{name: "empty label", domain: "example..com", wantErr: true},
+		{name: "too long", domain: strings.Repeat("a", 254) + ".com", wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := SanitizedDomain(logger, tc.domain)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("SanitizedDomain(%q) expected error, got nil (result %q)", tc.domain, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("SanitizedDomain(%q) unexpected error: %v", tc.domain, err)
+			}
+			if got != tc.want {
+				t.Errorf("SanitizedDomain(%q) = %q, want %q", tc.domain, got, tc.want)
+			}
+		})
+	}
+}
 
 func TestSecureCompare(t *testing.T) {
 	if !SecureCompare("abc123", "abc123") {

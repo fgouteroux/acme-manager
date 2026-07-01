@@ -407,6 +407,11 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
+		if _, err := utils.SanitizedDomain(logger, certParams.Domain); err != nil {
+			responseJSON(w, nil, fmt.Errorf("invalid 'domain' parameter: %w", err), http.StatusBadRequest)
+			return
+		}
+
 		var renewalDays string
 		if certParams.RenewalDays != "" {
 			renewalDays = certParams.RenewalDays
@@ -607,6 +612,11 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		if !slices.Contains(config.SupportedIssuers, certParams.Issuer) {
 			responseJSON(w, nil, fmt.Errorf("invalid issuer '%s' must be one of %v", certParams.Issuer, config.SupportedIssuers), http.StatusBadRequest)
+			return
+		}
+
+		if _, err := utils.SanitizedDomain(logger, certParams.Domain); err != nil {
+			responseJSON(w, nil, fmt.Errorf("invalid 'domain' parameter: %w", err), http.StatusBadRequest)
 			return
 		}
 
