@@ -128,14 +128,17 @@ func (u UTCFormatter) Format(e *logrus.Entry) ([]byte, error) {
 	return u.Formatter.Format(e)
 }
 
-func RandomStringCrypto(length int) (string, error) {
-	bytes := make([]byte, length)
+// RandomStringCrypto returns a base64url-encoded string derived from numBytes
+// of cryptographically secure random data. The full encoding is returned
+// without truncation so the caller keeps the requested entropy.
+func RandomStringCrypto(numBytes int) (string, error) {
+	bytes := make([]byte, numBytes)
 	_, err := rand.Read(bytes)
 	if err != nil {
 		return "", err
 	}
 
-	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
+	return base64.RawURLEncoding.EncodeToString(bytes), nil
 }
 
 func StructToMapInterface(data interface{}) map[string]interface{} {
