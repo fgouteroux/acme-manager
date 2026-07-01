@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -144,11 +145,47 @@ func StructToMapInterface(data interface{}) map[string]interface{} {
 	return result
 }
 
-// Get sha1 from string
+// SHA1Hash returns the sha1 hex digest of a string.
+// Kept for legacy dual-read verification only; do not use on write paths.
 func SHA1Hash(content string) string {
 	hash := sha1.New()
 	hash.Write([]byte(content))
 	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// SHA256Hash returns the sha256 hex digest of a string.
+func SHA256Hash(content string) string {
+	hash := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(hash[:])
+}
+
+// SecureCompare reports whether a and b are equal using a constant-time
+// comparison to avoid leaking secret length/content through timing.
+func SecureCompare(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+// HashToken returns the hash used to store/emit a bearer token.
+// The write/emit algorithm is centralized here (sha256).
+func HashToken(token string) string {
+	return SHA256Hash(token)
+}
+
+// HashAPIKey returns the hash used to store a management API key.
+// The write/emit algorithm is centralized here (sha256).
+func HashAPIKey(apiKey string) string {
+	return SHA256Hash(apiKey)
+}
+
+// VerifyHash implements a dual-read verification: it returns true when the
+// stored hash constant-time-matches the sha256 hash of plaintext (current
+// write algorithm) OR the legacy sha1 hash of plaintext. This lets existing
+// sha1-stored hashes keep working while all new writes use sha256.
+func VerifyHash(storedHash, plaintext string) bool {
+	if SecureCompare(storedHash, SHA256Hash(plaintext)) {
+		return true
+	}
+	return SecureCompare(storedHash, SHA1Hash(plaintext))
 }
 
 func SetTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Config, error) {

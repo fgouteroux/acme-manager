@@ -99,7 +99,7 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 			return
 		}
 
-		if utils.SHA1Hash(authHeader) != config.GlobalConfig.Common.APIKeyHash {
+		if !utils.VerifyHash(config.GlobalConfig.Common.APIKeyHash, authHeader) {
 			responseJSON(w, nil, fmt.Errorf("API Key not valid"), http.StatusUnauthorized)
 			return
 		}
@@ -151,7 +151,7 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		if utils.SHA1Hash(authHeader) != config.GlobalConfig.Common.APIKeyHash {
+		if !utils.VerifyHash(config.GlobalConfig.Common.APIKeyHash, authHeader) {
 			responseJSON(w, nil, fmt.Errorf("API Key not valid"), http.StatusUnauthorized)
 			return
 		}
@@ -234,7 +234,7 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			expires = expiresRaw.UTC().Format("2006-01-02 15:04:05 +0000 UTC")
 		}
 
-		tokenHash := utils.SHA1Hash(randomToken)
+		tokenHash := utils.HashToken(randomToken)
 
 		newData := map[string]interface{}{
 			"id":                      ID,
@@ -303,7 +303,7 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		if utils.SHA1Hash(authHeader) != config.GlobalConfig.Common.APIKeyHash {
+		if !utils.VerifyHash(config.GlobalConfig.Common.APIKeyHash, authHeader) {
 			responseJSON(w, nil, fmt.Errorf("API Key not valid"), http.StatusUnauthorized)
 			return
 		}
@@ -400,7 +400,7 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			expires = expiresRaw.UTC().Format("2006-01-02 15:04:05 +0000 UTC")
 		}
 
-		tokenHash := utils.SHA1Hash(randomToken)
+		tokenHash := utils.HashToken(randomToken)
 
 		newData := map[string]interface{}{
 			"id":                      token.ID,
@@ -466,7 +466,7 @@ func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		if utils.SHA1Hash(authHeader) != config.GlobalConfig.Common.APIKeyHash {
+		if !utils.VerifyHash(config.GlobalConfig.Common.APIKeyHash, authHeader) {
 			responseJSON(w, nil, fmt.Errorf("API Key not valid"), http.StatusUnauthorized)
 			return
 		}

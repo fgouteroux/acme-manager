@@ -163,7 +163,7 @@ func checkAuth(r *http.Request) (*models.Token, error) {
 		return tokenData, err
 	}
 
-	if tokenData.TokenHash != utils.SHA1Hash(token[1]) {
+	if !utils.VerifyHash(tokenData.TokenHash, token[1]) {
 		return tokenData, fmt.Errorf("invalid token")
 	}
 
