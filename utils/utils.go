@@ -194,7 +194,6 @@ func VerifyHash(storedHash, plaintext string) bool {
 func SetTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
-		MaxVersion: tls.VersionTLS13,
 	}
 
 	if insecure {
