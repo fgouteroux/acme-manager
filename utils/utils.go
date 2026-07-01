@@ -461,6 +461,57 @@ func ValidateRenewalDays(value string) (int, int, error) {
 	return certRenewalMinDays, certRenewalMaxDays, nil
 }
 
+const redactedPlaceholder = "***REDACTED***"
+
+// redactedHeaderNames are HTTP header names whose values are always redacted
+// from debug logs (compared case-insensitively).
+var redactedHeaderNames = map[string]struct{}{
+	"authorization": {},
+	"x-api-key":     {},
+}
+
+// redactedBodyFields are JSON body field names whose values are redacted from
+// debug logs.
+var redactedBodyFields = map[string]struct{}{
+	"token":     {},
+	"secret_id": {},
+	"hmac":      {},
+}
+
+// redactHeaderValue returns the header value, or a placeholder when the header
+// name is a known secret-bearing header (case-insensitive).
+func redactHeaderValue(name, value string) string {
+	if _, ok := redactedHeaderNames[strings.ToLower(name)]; ok {
+		return redactedPlaceholder
+	}
+	return value
+}
+
+// redactBody redacts known secret fields from a JSON request/response body.
+// If the body is not valid JSON it is returned unchanged so logging never
+// crashes on arbitrary payloads.
+func redactBody(body string) string {
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(body), &data); err != nil {
+		return body
+	}
+	redacted := false
+	for key := range data {
+		if _, ok := redactedBodyFields[strings.ToLower(key)]; ok {
+			data[key] = redactedPlaceholder
+			redacted = true
+		}
+	}
+	if !redacted {
+		return body
+	}
+	out, err := json.Marshal(data)
+	if err != nil {
+		return body
+	}
+	return string(out)
+}
+
 // ResponseLogHook logs the response status code and body
 func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.ResponseLogHook {
 	return func(_ retryablehttp.Logger, resp *http.Response) {
@@ -481,7 +532,7 @@ func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.Resp
 				return
 			}
 
-			errMsg := fmt.Sprintf("url: %s\nbody: %s", resp.Request.URL.String(), string(body))
+			errMsg := fmt.Sprintf("url: %s\nbody: %s", resp.Request.URL.String(), redactBody(string(body)))
 			fields := logrus.Fields{"err": errMsg}
 
 			if logJSONBody {
@@ -494,6 +545,9 @@ func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.Resp
 				} else {
 					// If JSON, log each field in addition to the err field
 					for key, value := range jsonData {
+						if _, secret := redactedBodyFields[strings.ToLower(key)]; secret {
+							value = redactedPlaceholder
+						}
 						if key == "err" {
 							// Rename conflicting err field from JSON to avoid overwriting our err field
 							fields["response_err"] = value
@@ -534,12 +588,12 @@ func ResponseLogHookDebug(logger *logrus.Logger) retryablehttp.ResponseLogHook {
 			"method":      resp.Request.Method,
 			"url":         resp.Request.URL.String(),
 			"status_code": resp.StatusCode,
-			"body":        string(body),
+			"body":        redactBody(string(body)),
 		}
 
 		// Log response headers
 		for key, values := range resp.Header {
-			fields[fmt.Sprintf("header_%s", key)] = strings.Join(values, ",")
+			fields[fmt.Sprintf("header_%s", key)] = redactHeaderValue(key, strings.Join(values, ","))
 		}
 
 		logger.WithFields(fields).Debugf("HTTP Response")
@@ -560,14 +614,14 @@ func RequestLogHook(logger *logrus.Logger) retryablehttp.RequestLogHook {
 
 		// Log request headers
 		for key, values := range req.Header {
-			fields[fmt.Sprintf("header_%s", key)] = strings.Join(values, ",")
+			fields[fmt.Sprintf("header_%s", key)] = redactHeaderValue(key, strings.Join(values, ","))
 		}
 
 		// Log request body if present
 		if req.Body != nil && req.Body != http.NoBody {
 			bodyBytes, err := io.ReadAll(req.Body)
 			if err == nil && len(bodyBytes) > 0 {
-				fields["body"] = string(bodyBytes)
+				fields["body"] = redactBody(string(bodyBytes))
 				// Restore the body for the actual request
 				req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 			}

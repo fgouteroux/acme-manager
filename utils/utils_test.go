@@ -45,6 +45,40 @@ func TestSanitizedDomain(t *testing.T) {
 	}
 }
 
+func TestRedactHeaderValue(t *testing.T) {
+	if got := redactHeaderValue("Authorization", "Bearer secret"); got != redactedPlaceholder {
+		t.Errorf("Authorization value not redacted, got %q", got)
+	}
+	if got := redactHeaderValue("x-api-key", "abc123"); got != redactedPlaceholder {
+		t.Errorf("X-API-Key value not redacted (case-insensitive), got %q", got)
+	}
+	if got := redactHeaderValue("Content-Type", "application/json"); got != "application/json" {
+		t.Errorf("non-secret header should not be redacted, got %q", got)
+	}
+}
+
+func TestRedactBody(t *testing.T) {
+	in := `{"token":"abc","secret_id":"sid","hmac":"h","name":"keep"}`
+	out := redactBody(in)
+	for _, secret := range []string{"abc", "sid", `"hmac":"h"`} {
+		if strings.Contains(out, secret) {
+			t.Errorf("redactBody left a secret in output: %q -> %q", secret, out)
+		}
+	}
+	if !strings.Contains(out, "keep") {
+		t.Errorf("redactBody should preserve non-secret fields, got %q", out)
+	}
+	if strings.Count(out, redactedPlaceholder) != 3 {
+		t.Errorf("expected 3 redacted fields, got %q", out)
+	}
+
+	// Non-JSON body must be returned unchanged and not crash.
+	plain := "not json at all"
+	if got := redactBody(plain); got != plain {
+		t.Errorf("redactBody mangled non-JSON body: %q", got)
+	}
+}
+
 func TestSecureCompare(t *testing.T) {
 	if !SecureCompare("abc123", "abc123") {
 		t.Error("SecureCompare should return true for equal strings")
