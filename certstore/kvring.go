@@ -96,7 +96,11 @@ func (c *CertStore) GetCertificate(owner, issuer, name, domain string) (*models.
 	return cert, nil
 }
 
-// Delete certificate
+// Delete certificate marks the entry deleted (CAS sets DeletedAt) and then
+// Deletes it from the ring. These two steps are not atomic: if the process dies
+// between them, a tombstone (DeletedAt > 0) lingers and GetCertificate reports
+// "pending deletion" (409) until the periodic reaper (ReapDeletedRingEntries)
+// removes it. This is an accepted eventual-consistency window.
 func (c *CertStore) DeleteCertificate(owner, issuer, name, domain string) error {
 	key := GenerateCertificateKey(owner, issuer, name, domain)
 
@@ -277,7 +281,11 @@ func (c *CertStore) GetToken(tokenID string) (*models.Token, error) {
 	return token, nil
 }
 
-// Delete token
+// Delete token marks the entry deleted (CAS sets DeletedAt) and then Deletes it
+// from the ring. As with DeleteCertificate these steps are not atomic: a crash
+// in between leaves a tombstone (DeletedAt > 0) that GetToken reports as
+// "pending deletion" (409) until the periodic reaper (ReapDeletedRingEntries)
+// removes it. This is an accepted eventual-consistency window.
 func (c *CertStore) DeleteToken(tokenID string) error {
 	key := GenerateTokenKey(tokenID)
 
