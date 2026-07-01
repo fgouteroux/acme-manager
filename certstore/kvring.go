@@ -80,14 +80,14 @@ func (c *CertStore) GetCertificate(owner, issuer, name, domain string) (*models.
 	}
 
 	if cached == nil {
-		return nil, fmt.Errorf("certificate '%s' not found", key)
+		return nil, fmt.Errorf("certificate '%s' %w", key, ErrNotFound)
 	}
 
 	cert := cached.(*models.Certificate)
 
 	// Check for deletion
 	if cert.DeletedAt > 0 {
-		return nil, fmt.Errorf("certificate '%s' is pending deletion", key)
+		return nil, fmt.Errorf("certificate '%s' is %w", key, ErrPendingDeletion)
 	}
 
 	return cert, nil
@@ -106,7 +106,7 @@ func (c *CertStore) DeleteCertificate(owner, issuer, name, domain string) error 
 	}
 
 	if cached == nil {
-		return fmt.Errorf("certificate not found")
+		return fmt.Errorf("certificate '%s' %w", key, ErrNotFound)
 	}
 
 	cert := cached.(*models.Certificate)
@@ -247,14 +247,14 @@ func (c *CertStore) GetToken(tokenID string) (*models.Token, error) {
 	}
 
 	if cached == nil {
-		return nil, fmt.Errorf("token id '%s' not found", tokenID)
+		return nil, fmt.Errorf("token id '%s' %w", tokenID, ErrNotFound)
 	}
 
 	token := cached.(*models.Token)
 
 	// Check for deletion
 	if token.DeletedAt > 0 {
-		return nil, fmt.Errorf("token id '%s' is pending deletion", tokenID)
+		return nil, fmt.Errorf("token id '%s' is %w", tokenID, ErrPendingDeletion)
 	}
 
 	return token, nil
@@ -273,7 +273,7 @@ func (c *CertStore) DeleteToken(tokenID string) error {
 	}
 
 	if cached == nil {
-		return fmt.Errorf("token not found")
+		return fmt.Errorf("token id '%s' %w", tokenID, ErrNotFound)
 	}
 
 	token := cached.(*models.Token)
@@ -365,14 +365,14 @@ func (c *CertStore) GetChallenge(challengeID string) (string, error) {
 	}
 
 	if cached == nil {
-		return "", fmt.Errorf("challenge id '%s' not found", challengeID)
+		return "", fmt.Errorf("challenge id '%s' %w", challengeID, ErrNotFound)
 	}
 
 	challenge := cached.(*models.Challenge)
 
 	// Check for deletion
 	if challenge.DeletedAt > 0 {
-		return "", fmt.Errorf("challenge id '%s' is pending deletion", challengeID)
+		return "", fmt.Errorf("challenge id '%s' is %w", challengeID, ErrPendingDeletion)
 	}
 
 	return challenge.KeyAuth, nil

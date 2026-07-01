@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/go-kit/log"
@@ -108,7 +108,7 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 		if ID != "" {
 			data, err := certstore.AmStore.GetToken(ID)
 			if err != nil {
-				if strings.Contains(err.Error(), "not found") {
+				if errors.Is(err, certstore.ErrNotFound) {
 					responseJSON(w, nil, err, http.StatusNotFound)
 					return
 				}
@@ -324,10 +324,10 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 
 		data, err := certstore.AmStore.GetToken(token.ID)
 		if err != nil {
-			if strings.Contains(err.Error(), "pending deletion") {
+			if errors.Is(err, certstore.ErrPendingDeletion) {
 				responseJSON(w, nil, err, http.StatusConflict)
 				return
-			} else if strings.Contains(err.Error(), "not found") {
+			} else if errors.Is(err, certstore.ErrNotFound) {
 				responseJSON(w, nil, fmt.Errorf("token ID '%s' not found", token.ID), http.StatusNotFound)
 				return
 			}
@@ -482,10 +482,10 @@ func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		if ID != "" {
 			data, err := certstore.AmStore.GetToken(ID)
 			if err != nil {
-				if strings.Contains(err.Error(), "pending deletion") {
+				if errors.Is(err, certstore.ErrPendingDeletion) {
 					responseJSON(w, nil, err, http.StatusConflict)
 					return
-				} else if strings.Contains(err.Error(), "not found") {
+				} else if errors.Is(err, certstore.ErrNotFound) {
 					responseJSON(w, nil, err, http.StatusNotFound)
 					return
 				}
