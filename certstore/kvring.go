@@ -16,7 +16,6 @@ import (
 const (
 	CertificatePrefix = "certificate"
 	TokenPrefix       = "token"
-	ChallengePrefix   = "challenge"
 	RateLimitPrefix   = "ratelimit"
 )
 
@@ -353,106 +352,6 @@ func (c *CertStore) ListAllTokens() (map[string]*models.Token, error) {
 	}
 
 	return tokens, nil
-}
-
-// =================== CHALLENGES ===================
-
-// GenerateChallengeKey creates a hierarchical key for challenges
-func GenerateChallengeKey(challengeID string) string {
-	return fmt.Sprintf("%s/%s", ChallengePrefix, challengeID)
-}
-
-func (c *CertStore) ListChallengeKVRingKeys() ([]string, error) {
-	return c.RingConfig.ChallengeClient.List(context.Background(), ChallengePrefix+"/")
-}
-
-// Store challenge
-func (c *CertStore) PutChallenge(challengeID string, keyAuth string) error {
-	key := GenerateChallengeKey(challengeID)
-
-	challenge := &models.Challenge{
-		KeyAuth:   keyAuth,
-		UpdatedAt: timestamp.FromTime(time.Now()),
-	}
-
-	ctx := context.Background()
-	err := c.RingConfig.ChallengeClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
-		return challenge, true, nil
-	})
-
-	if err != nil {
-		_ = level.Error(c.Logger).Log("msg", "Failed to store challenge", "key", key, "err", err)
-	}
-	return err
-}
-
-// Get challenge
-func (c *CertStore) GetChallenge(challengeID string) (string, error) {
-	key := GenerateChallengeKey(challengeID)
-
-	ctx := context.Background()
-	cached, err := c.RingConfig.ChallengeClient.Get(ctx, key)
-	if err != nil {
-		return "", err
-	}
-
-	if cached == nil {
-		return "", fmt.Errorf("challenge id '%s' %w", challengeID, ErrNotFound)
-	}
-
-	challenge, ok := cached.(*models.Challenge)
-	if !ok {
-		return "", fmt.Errorf("unexpected type %T for challenge key %s", cached, key)
-	}
-
-	// Check for deletion
-	if challenge.DeletedAt > 0 {
-		return "", fmt.Errorf("challenge id '%s' is %w", challengeID, ErrPendingDeletion)
-	}
-
-	return challenge.KeyAuth, nil
-}
-
-// Delete challenge
-func (c *CertStore) DeleteChallenge(challengeID string) error {
-	key := GenerateChallengeKey(challengeID)
-
-	ctx := context.Background()
-	return c.RingConfig.ChallengeClient.Delete(ctx, key)
-}
-
-// List all challenges
-func (c *CertStore) ListAllChallenges() (map[string]string, error) {
-	keys, err := c.ListChallengeKVRingKeys()
-	if err != nil {
-		return nil, err
-	}
-
-	challenges := make(map[string]string, len(keys))
-	ctx := context.Background()
-
-	for _, key := range keys {
-		cached, err := c.RingConfig.ChallengeClient.Get(ctx, key)
-		if err != nil {
-			_ = level.Error(c.Logger).Log("msg", "Failed to get challenge", "key", key, "err", err)
-			continue
-		}
-
-		if cached == nil {
-			continue
-		}
-
-		challenge, ok := cached.(*models.Challenge)
-		if !ok {
-			_ = level.Error(c.Logger).Log("msg", "unexpected type for challenge", "key", key, "type", fmt.Sprintf("%T", cached))
-			continue
-		}
-		if challenge.DeletedAt == 0 {
-			challenges[key] = challenge.KeyAuth
-		}
-	}
-
-	return challenges, nil
 }
 
 // =================== RATE LIMITS ===================

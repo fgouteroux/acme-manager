@@ -418,7 +418,7 @@ func main() {
 	http.Handle("/ratelimits", LoggerHandler(rateLimitListHandler()))
 
 	http.Handle(ChallengePath, MetricsHandler(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		httpChallengeHandler(w, req)
+		httpChallengeHandler(w, req, proxyClient, *serverListenAddress)
 	})))
 
 	http.Handle("/swagger/", MetricsHandler(http.HandlerFunc(httpSwagger.WrapHandler)))

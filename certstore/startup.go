@@ -108,17 +108,6 @@ func OnStartup(logger log.Logger) error {
 		_ = level.Info(logger).Log("msg", "found existing tokens in KV ring", "count", len(tokenData))
 	}
 
-	// Handle challenges
-	challengeData, err := AmStore.ListAllChallenges()
-	if err != nil {
-		_ = level.Error(logger).Log("msg", "failed to get challenge data from KV ring", "err", err)
-		return err
-	}
-
-	if len(challengeData) > 0 {
-		_ = level.Info(logger).Log("msg", "found existing challenges in KV ring", "count", len(challengeData))
-	}
-
 	return nil
 }
 

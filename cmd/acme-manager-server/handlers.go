@@ -3,9 +3,11 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
+	"net"
 	"net/http"
 	"path"
 	"sort"
@@ -212,15 +214,30 @@ func certificateListHandler() http.HandlerFunc {
 	})
 }
 
-func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
+func httpChallengeHandler(w http.ResponseWriter, r *http.Request, proxyClient *http.Client, listenAddr string) {
 	challengeID := strings.TrimPrefix(r.RequestURI, ChallengePath)
 	if challengeID == "" {
 		http.Error(w, "", http.StatusBadRequest)
 		return
 	}
+
+	// Challenges live in the leader's local memory (not the ring). If this node
+	// isn't the leader, forward the validation request to the leader, which holds
+	// the challenge.
+	isLeaderNow, err := ring.IsLeader(certstore.AmStore.RingConfig)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "failed to determine ring leader for challenge", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !isLeaderNow {
+		forwardChallengeToLeader(proxyClient, listenAddr, w, r)
+		return
+	}
+
 	challenge, err := certstore.AmStore.GetChallenge(challengeID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, certstore.ErrNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -229,6 +246,52 @@ func httpChallengeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = io.WriteString(w, challenge)
+}
+
+// forwardChallengeToLeader proxies an HTTP-01 validation request to the ring
+// leader, which holds the challenge in local memory. The leader is reached on
+// this node's own listen port (homogeneous cluster), using the same scheme as the
+// incoming request.
+func forwardChallengeToLeader(proxyClient *http.Client, listenAddr string, w http.ResponseWriter, r *http.Request) {
+	host, err := ring.GetLeaderIP(certstore.AmStore.RingConfig)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "failed to get leader IP for challenge", "err", err)
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	_, port, err := net.SplitHostPort(listenAddr)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "invalid server listen address", "addr", listenAddr, "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	url := fmt.Sprintf("%s://%s:%s%s", scheme, host, port, r.RequestURI)
+
+	proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "failed to build challenge forward request", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := proxyClient.Do(proxyReq)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "failed to forward challenge to leader", "leader", host, "err", err)
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.WriteHeader(resp.StatusCode)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		_ = level.Error(logger).Log("msg", "failed to relay challenge response", "err", err)
+	}
 }
 
 //go:embed templates/token.gohtml
