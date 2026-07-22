@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof" // registers /debug/pprof/ handlers on http.DefaultServeMux
 	"os"
 	"os/signal"
 	"strings"
