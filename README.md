@@ -183,15 +183,19 @@ See swagger page: http://localhost:8989/swagger/index.html
 # Generate a random string
 API_KEY=$(openssl rand -base64 32)
 
-# Hash the random string with SHA1 and put it in the `api_key_hash` of acme manager config
-$ echo -n $API_KEY | sha1sum
-96a0585f6d3c3f90f74cdb963e7664f2ee8a10bb  -
+# Hash the random string with SHA256 and put it in the `api_key_hash` of acme manager config
+$ echo -n $API_KEY | sha256sum
+d8f0dd8f2c7b3f4a5e6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2  -
 
 # Your API KEY to use for curl command and others.
 $ echo $API_KEY
 GMZgFB3nYxTgISIqr8YAezgNpxePJqgOeU9o3/JRwS8=
 
 ```
+
+> Note: existing `api_key_hash` values generated with `sha1sum` continue to work
+> thanks to a dual-read verification window, but new API keys and tokens are
+> hashed with SHA256. Regenerate your hash with `sha256sum` when convenient.
 
 #### Token endpoint
 

@@ -5,13 +5,14 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -79,8 +80,12 @@ func RevokeCertificateWithVerification(ctx context.Context, logger log.Logger, i
 }
 
 func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resource) {
-	domain := utils.SanitizedDomain(logger, certRes.Domain)
-	err := os.WriteFile(filepath+domain+".crt", certRes.Certificate, 0600)
+	domain, err := utils.SanitizedDomain(logger, certRes.Domain)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "unable to save certificate: invalid domain", "domain", certRes.Domain, "err", err)
+		return
+	}
+	err = os.WriteFile(filepath+domain+".crt", certRes.Certificate, 0600)
 	if err != nil {
 		_ = level.Error(logger).Log("msg", "unable to save certificate", "domain", domain, "err", err)
 	}
@@ -95,10 +100,13 @@ func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resou
 
 func CreateRemoteCertificateResource(ctx context.Context, certData *models.Certificate, logger log.Logger) (*models.Certificate, error) {
 	vaultSecretPath := GenerateCertificatePath(config.GlobalConfig.Storage.Vault.CertPrefix, certData.Owner, certData.Issuer, certData.Name, certData.Domain)
-	domain := utils.SanitizedDomain(logger, certData.Domain)
+	domain, err := utils.SanitizedDomain(logger, certData.Domain)
+	if err != nil {
+		return certData, fmt.Errorf("invalid domain %q: %w", certData.Domain, err)
+	}
 
 	baseCertificateFilePath := GenerateCertificatePath(config.GlobalConfig.Common.RootPathCertificate, certData.Owner, certData.Issuer, certData.Name, domain) + "/"
-	err := utils.CreateNonExistingFolder(baseCertificateFilePath, 0750)
+	err = utils.CreateNonExistingFolder(baseCertificateFilePath, 0750)
 	if err != nil {
 		return certData, err
 	}
@@ -240,15 +248,21 @@ func CreateRemoteCertificateResource(ctx context.Context, certData *models.Certi
 
 	// exec plugins
 	for _, plugin := range config.GlobalConfig.Common.Plugins {
-		if (plugin.Checksum != "" && slices.Contains(config.SecuredPlugins, plugin.Name)) || plugin.Checksum == "" {
-			err = executeCommand(logger, plugin.Path, []string{certDomains, certData.Issuer, challengeType}, plugin.Timeout, plugin.Env)
-			if err != nil {
-				_ = level.Error(logger).Log("msg", fmt.Sprintf("plugin command '%s' execution failed", plugin.Path), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
-				metrics.IncCertificateCreationError(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
-				return certData, err
-			}
-			_ = level.Info(logger).Log("msg", fmt.Sprintf("plugin command '%s' successfully executed", plugin.Path), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
+		// Verify the plugin binary checksum at execution time (defends against
+		// TOCTOU between config load and execution). Refuse to run on mismatch.
+		if err = verifyPluginChecksum(plugin); err != nil {
+			_ = level.Error(logger).Log("msg", "refusing to execute plugin: checksum verification failed", "plugin", plugin.Name, "path", plugin.Path, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner, "err", err)
+			metrics.IncCertificateCreationError(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
+			return certData, err
 		}
+
+		err = executeCommand(logger, plugin.Path, []string{certDomains, certData.Issuer, challengeType}, plugin.Timeout, plugin.Env)
+		if err != nil {
+			_ = level.Error(logger).Log("msg", fmt.Sprintf("plugin command '%s' execution failed", plugin.Path), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
+			metrics.IncCertificateCreationError(certData.Issuer, certData.Owner, certData.Domain, certData.Name)
+			return certData, err
+		}
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("plugin command '%s' successfully executed", plugin.Path), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", certData.Owner)
 	}
 
 	resource, err := issuerAcmeClient.Certificate.ObtainForCSR(ctx, request)
@@ -333,13 +347,18 @@ func DeleteRemoteCertificateResource(ctx context.Context, certData *models.Certi
 	}
 
 	if certBytes, ok := data["cert"]; ok {
+		certStr, ok := certBytes.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for cert in vault secret %s", certBytes, vaultSecretPath)
+		}
+
 		var issuerAcmeClient *lego.Client
 		var issuerFound bool
 		if issuerAcmeClient, issuerFound = AcmeClient[certData.Issuer]; !issuerFound {
 			return fmt.Errorf("could not delete certificate domain %s, issuer %s not found", certData.Domain, certData.Issuer)
 		}
 
-		_, err = RevokeCertificateWithVerification(ctx, logger, issuerAcmeClient, []byte(certBytes.(string)), certData.Issuer, certData.Owner, certData.Domain, certData.Name, nil)
+		_, err = RevokeCertificateWithVerification(ctx, logger, issuerAcmeClient, []byte(certStr), certData.Issuer, certData.Owner, certData.Domain, certData.Name, nil)
 		if err != nil {
 			return err
 		}
@@ -413,6 +432,31 @@ func checkPropagationExclusiveOptions(dnsPropagationDisableANS, dnsPropagationRN
 
 	if dnsPropagationRNS && dnsPropagationWait > 0 {
 		return fmt.Errorf("env var 'ACME_MANAGER_DNS_PROPAGATIONRNS' and 'ACME_MANAGER_DNS_PROPAGATIONWAIT' are mutually exclusive")
+	}
+	return nil
+}
+
+// verifyPluginChecksum computes the SHA-256 of the plugin binary at plugin.Path
+// and compares it (constant-time, case-insensitive hex) against the configured
+// checksum. When the checksum is empty it only proceeds if unverified plugins
+// have been explicitly allowed, otherwise it refuses.
+func verifyPluginChecksum(plugin config.Plugin) error {
+	if plugin.Checksum == "" {
+		if config.AllowUnverifiedPlugins {
+			return nil
+		}
+		return fmt.Errorf("plugin '%s' has no checksum configured and unverified plugins are not allowed", plugin.Name)
+	}
+
+	data, err := os.ReadFile(plugin.Path)
+	if err != nil {
+		return fmt.Errorf("failed to read plugin '%s' at '%s' for checksum verification: %w", plugin.Name, plugin.Path, err)
+	}
+
+	sum := sha256.Sum256(data)
+	computed := hex.EncodeToString(sum[:])
+	if !utils.SecureCompare(strings.ToLower(computed), strings.ToLower(plugin.Checksum)) {
+		return fmt.Errorf("plugin '%s' checksum mismatch: computed '%s' does not match configured '%s'", plugin.Name, computed, plugin.Checksum)
 	}
 	return nil
 }

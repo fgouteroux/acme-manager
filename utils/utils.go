@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -83,13 +84,52 @@ func LoggerWithRequestID(ctx context.Context, logger log.Logger) log.Logger {
 	return logger
 }
 
-// SanitizedDomain Make sure no funny chars are in the cert names (like wildcards ;)).
-func SanitizedDomain(logger log.Logger, domain string) string {
+// domainLabelRegexp validates a single DNS label (letters, digits, hyphen; not
+// starting or ending with a hyphen). Underscores are allowed to accommodate
+// service labels seen in some ACME deployments.
+var domainLabelRegexp = regexp.MustCompile(`^[A-Za-z0-9_]([A-Za-z0-9_-]*[A-Za-z0-9_])?$`)
+
+// SanitizedDomain validates a domain and returns a filesystem/Vault-path safe
+// representation. It rejects empty, over-long or malformed domains, and allows
+// at most a single leading "*." wildcard label. On any failure it returns a
+// non-nil error instead of a partial value so callers never build paths from
+// unvalidated input.
+func SanitizedDomain(logger log.Logger, domain string) (string, error) {
+	if domain == "" {
+		return "", fmt.Errorf("domain is empty")
+	}
+	// RFC 1035: total length of a domain name is at most 253 octets.
+	if len(domain) > 253 {
+		return "", fmt.Errorf("domain %q exceeds maximum length of 253 characters", domain)
+	}
+
+	labels := strings.Split(domain, ".")
+	for i, label := range labels {
+		// A single leading wildcard label ("*") is allowed.
+		if label == "*" {
+			if i != 0 {
+				return "", fmt.Errorf("domain %q has a wildcard label in a non-leading position", domain)
+			}
+			continue
+		}
+		if label == "" {
+			return "", fmt.Errorf("domain %q contains an empty label", domain)
+		}
+		if len(label) > 63 {
+			return "", fmt.Errorf("domain %q has a label longer than 63 characters", domain)
+		}
+		if !domainLabelRegexp.MatchString(label) {
+			return "", fmt.Errorf("domain %q contains an invalid label %q", domain, label)
+		}
+	}
+
+	// Make sure no funny chars are in the cert names (like wildcards ;)).
 	safe, err := idna.ToASCII(strings.NewReplacer(":", "-", "*", "_").Replace(domain))
 	if err != nil {
-		_ = level.Error(logger).Log("err", err)
+		_ = level.Error(logger).Log("msg", "failed to sanitize domain", "domain", domain, "err", err)
+		return "", fmt.Errorf("failed to sanitize domain %q: %w", domain, err)
 	}
-	return safe
+	return safe, nil
 }
 
 func CreateNonExistingFolder(path string, mode fs.FileMode) error {
@@ -127,14 +167,17 @@ func (u UTCFormatter) Format(e *logrus.Entry) ([]byte, error) {
 	return u.Formatter.Format(e)
 }
 
-func RandomStringCrypto(length int) (string, error) {
-	bytes := make([]byte, length)
+// RandomStringCrypto returns a base64url-encoded string derived from numBytes
+// of cryptographically secure random data. The full encoding is returned
+// without truncation so the caller keeps the requested entropy.
+func RandomStringCrypto(numBytes int) (string, error) {
+	bytes := make([]byte, numBytes)
 	_, err := rand.Read(bytes)
 	if err != nil {
 		return "", err
 	}
 
-	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
+	return base64.RawURLEncoding.EncodeToString(bytes), nil
 }
 
 func StructToMapInterface(data interface{}) map[string]interface{} {
@@ -144,17 +187,52 @@ func StructToMapInterface(data interface{}) map[string]interface{} {
 	return result
 }
 
-// Get sha1 from string
+// SHA1Hash returns the sha1 hex digest of a string.
+// Kept for legacy dual-read verification only; do not use on write paths.
 func SHA1Hash(content string) string {
 	hash := sha1.New()
 	hash.Write([]byte(content))
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
+// SHA256Hash returns the sha256 hex digest of a string.
+func SHA256Hash(content string) string {
+	hash := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(hash[:])
+}
+
+// SecureCompare reports whether a and b are equal using a constant-time
+// comparison to avoid leaking secret length/content through timing.
+func SecureCompare(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+// HashToken returns the hash used to store/emit a bearer token.
+// The write/emit algorithm is centralized here (sha256).
+func HashToken(token string) string {
+	return SHA256Hash(token)
+}
+
+// HashAPIKey returns the hash used to store a management API key.
+// The write/emit algorithm is centralized here (sha256).
+func HashAPIKey(apiKey string) string {
+	return SHA256Hash(apiKey)
+}
+
+// VerifyHash implements a dual-read verification: it returns true when the
+// stored hash constant-time-matches the sha256 hash of plaintext (current
+// write algorithm) OR the legacy sha1 hash of plaintext. This lets existing
+// sha1-stored hashes keep working while all new writes use sha256.
+func VerifyHash(storedHash, plaintext string) bool {
+	if SecureCompare(storedHash, SHA256Hash(plaintext)) {
+		return true
+	}
+	return SecureCompare(storedHash, SHA1Hash(plaintext))
+}
+
 func SetTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
-		MaxVersion: tls.VersionTLS13,
 	}
 
 	if insecure {
@@ -383,6 +461,57 @@ func ValidateRenewalDays(value string) (int, int, error) {
 	return certRenewalMinDays, certRenewalMaxDays, nil
 }
 
+const redactedPlaceholder = "***REDACTED***"
+
+// redactedHeaderNames are HTTP header names whose values are always redacted
+// from debug logs (compared case-insensitively).
+var redactedHeaderNames = map[string]struct{}{
+	"authorization": {},
+	"x-api-key":     {},
+}
+
+// redactedBodyFields are JSON body field names whose values are redacted from
+// debug logs.
+var redactedBodyFields = map[string]struct{}{
+	"token":     {},
+	"secret_id": {},
+	"hmac":      {},
+}
+
+// redactHeaderValue returns the header value, or a placeholder when the header
+// name is a known secret-bearing header (case-insensitive).
+func redactHeaderValue(name, value string) string {
+	if _, ok := redactedHeaderNames[strings.ToLower(name)]; ok {
+		return redactedPlaceholder
+	}
+	return value
+}
+
+// redactBody redacts known secret fields from a JSON request/response body.
+// If the body is not valid JSON it is returned unchanged so logging never
+// crashes on arbitrary payloads.
+func redactBody(body string) string {
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(body), &data); err != nil {
+		return body
+	}
+	redacted := false
+	for key := range data {
+		if _, ok := redactedBodyFields[strings.ToLower(key)]; ok {
+			data[key] = redactedPlaceholder
+			redacted = true
+		}
+	}
+	if !redacted {
+		return body
+	}
+	out, err := json.Marshal(data)
+	if err != nil {
+		return body
+	}
+	return string(out)
+}
+
 // ResponseLogHook logs the response status code and body
 func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.ResponseLogHook {
 	return func(_ retryablehttp.Logger, resp *http.Response) {
@@ -403,7 +532,7 @@ func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.Resp
 				return
 			}
 
-			errMsg := fmt.Sprintf("url: %s\nbody: %s", resp.Request.URL.String(), string(body))
+			errMsg := fmt.Sprintf("url: %s\nbody: %s", resp.Request.URL.String(), redactBody(string(body)))
 			fields := logrus.Fields{"err": errMsg}
 
 			if logJSONBody {
@@ -416,6 +545,9 @@ func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.Resp
 				} else {
 					// If JSON, log each field in addition to the err field
 					for key, value := range jsonData {
+						if _, secret := redactedBodyFields[strings.ToLower(key)]; secret {
+							value = redactedPlaceholder
+						}
 						if key == "err" {
 							// Rename conflicting err field from JSON to avoid overwriting our err field
 							fields["response_err"] = value
@@ -456,12 +588,12 @@ func ResponseLogHookDebug(logger *logrus.Logger) retryablehttp.ResponseLogHook {
 			"method":      resp.Request.Method,
 			"url":         resp.Request.URL.String(),
 			"status_code": resp.StatusCode,
-			"body":        string(body),
+			"body":        redactBody(string(body)),
 		}
 
 		// Log response headers
 		for key, values := range resp.Header {
-			fields[fmt.Sprintf("header_%s", key)] = strings.Join(values, ",")
+			fields[fmt.Sprintf("header_%s", key)] = redactHeaderValue(key, strings.Join(values, ","))
 		}
 
 		logger.WithFields(fields).Debugf("HTTP Response")
@@ -482,14 +614,14 @@ func RequestLogHook(logger *logrus.Logger) retryablehttp.RequestLogHook {
 
 		// Log request headers
 		for key, values := range req.Header {
-			fields[fmt.Sprintf("header_%s", key)] = strings.Join(values, ",")
+			fields[fmt.Sprintf("header_%s", key)] = redactHeaderValue(key, strings.Join(values, ","))
 		}
 
 		// Log request body if present
 		if req.Body != nil && req.Body != http.NoBody {
 			bodyBytes, err := io.ReadAll(req.Body)
 			if err == nil && len(bodyBytes) > 0 {
-				fields["body"] = string(bodyBytes)
+				fields["body"] = redactBody(string(bodyBytes))
 				// Restore the body for the actual request
 				req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 			}

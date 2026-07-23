@@ -16,7 +16,6 @@ import (
 const (
 	CertificatePrefix = "certificate"
 	TokenPrefix       = "token"
-	ChallengePrefix   = "challenge"
 	RateLimitPrefix   = "ratelimit"
 )
 
@@ -80,20 +79,27 @@ func (c *CertStore) GetCertificate(owner, issuer, name, domain string) (*models.
 	}
 
 	if cached == nil {
-		return nil, fmt.Errorf("certificate '%s' not found", key)
+		return nil, fmt.Errorf("certificate '%s' %w", key, ErrNotFound)
 	}
 
-	cert := cached.(*models.Certificate)
+	cert, ok := cached.(*models.Certificate)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type %T for certificate key %s", cached, key)
+	}
 
 	// Check for deletion
 	if cert.DeletedAt > 0 {
-		return nil, fmt.Errorf("certificate '%s' is pending deletion", key)
+		return nil, fmt.Errorf("certificate '%s' is %w", key, ErrPendingDeletion)
 	}
 
 	return cert, nil
 }
 
-// Delete certificate
+// Delete certificate marks the entry deleted (CAS sets DeletedAt) and then
+// Deletes it from the ring. These two steps are not atomic: if the process dies
+// between them, a tombstone (DeletedAt > 0) lingers and GetCertificate reports
+// "pending deletion" (409) until the periodic reaper (ReapDeletedRingEntries)
+// removes it. This is an accepted eventual-consistency window.
 func (c *CertStore) DeleteCertificate(owner, issuer, name, domain string) error {
 	key := GenerateCertificateKey(owner, issuer, name, domain)
 
@@ -106,10 +112,13 @@ func (c *CertStore) DeleteCertificate(owner, issuer, name, domain string) error 
 	}
 
 	if cached == nil {
-		return fmt.Errorf("certificate not found")
+		return fmt.Errorf("certificate '%s' %w", key, ErrNotFound)
 	}
 
-	cert := cached.(*models.Certificate)
+	cert, ok := cached.(*models.Certificate)
+	if !ok {
+		return fmt.Errorf("unexpected type %T for certificate key %s", cached, key)
+	}
 
 	// Mark as deleted
 	cert.DeletedAt = timestamp.FromTime(time.Now())
@@ -151,7 +160,11 @@ func (c *CertStore) ListCertificatesForOwner(owner string) ([]*models.Certificat
 			continue
 		}
 
-		cert := cached.(*models.Certificate)
+		cert, ok := cached.(*models.Certificate)
+		if !ok {
+			_ = level.Error(c.Logger).Log("msg", "unexpected type for certificate", "key", key, "type", fmt.Sprintf("%T", cached))
+			continue
+		}
 
 		// Skip deleted certificates (pending deletion)
 		if cert.DeletedAt == 0 {
@@ -183,7 +196,11 @@ func (c *CertStore) ListAllCertificates() (map[string]*models.Certificate, error
 			continue
 		}
 
-		cert := cached.(*models.Certificate)
+		cert, ok := cached.(*models.Certificate)
+		if !ok {
+			_ = level.Error(c.Logger).Log("msg", "unexpected type for certificate", "key", key, "type", fmt.Sprintf("%T", cached))
+			continue
+		}
 
 		if cert.DeletedAt == 0 {
 			certificates[key] = cert
@@ -247,20 +264,27 @@ func (c *CertStore) GetToken(tokenID string) (*models.Token, error) {
 	}
 
 	if cached == nil {
-		return nil, fmt.Errorf("token id '%s' not found", tokenID)
+		return nil, fmt.Errorf("token id '%s' %w", tokenID, ErrNotFound)
 	}
 
-	token := cached.(*models.Token)
+	token, ok := cached.(*models.Token)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type %T for token key %s", cached, key)
+	}
 
 	// Check for deletion
 	if token.DeletedAt > 0 {
-		return nil, fmt.Errorf("token id '%s' is pending deletion", tokenID)
+		return nil, fmt.Errorf("token id '%s' is %w", tokenID, ErrPendingDeletion)
 	}
 
 	return token, nil
 }
 
-// Delete token
+// Delete token marks the entry deleted (CAS sets DeletedAt) and then Deletes it
+// from the ring. As with DeleteCertificate these steps are not atomic: a crash
+// in between leaves a tombstone (DeletedAt > 0) that GetToken reports as
+// "pending deletion" (409) until the periodic reaper (ReapDeletedRingEntries)
+// removes it. This is an accepted eventual-consistency window.
 func (c *CertStore) DeleteToken(tokenID string) error {
 	key := GenerateTokenKey(tokenID)
 
@@ -273,10 +297,13 @@ func (c *CertStore) DeleteToken(tokenID string) error {
 	}
 
 	if cached == nil {
-		return fmt.Errorf("token not found")
+		return fmt.Errorf("token id '%s' %w", tokenID, ErrNotFound)
 	}
 
-	token := cached.(*models.Token)
+	token, ok := cached.(*models.Token)
+	if !ok {
+		return fmt.Errorf("unexpected type %T for token key %s", cached, key)
+	}
 
 	// Mark as deleted
 	token.DeletedAt = timestamp.FromTime(time.Now())
@@ -316,104 +343,15 @@ func (c *CertStore) ListAllTokens() (map[string]*models.Token, error) {
 			continue
 		}
 
-		token := cached.(*models.Token)
+		token, ok := cached.(*models.Token)
+		if !ok {
+			_ = level.Error(c.Logger).Log("msg", "unexpected type for token", "key", key, "type", fmt.Sprintf("%T", cached))
+			continue
+		}
 		tokens[key] = token
 	}
 
 	return tokens, nil
-}
-
-// =================== CHALLENGES ===================
-
-// GenerateChallengeKey creates a hierarchical key for challenges
-func GenerateChallengeKey(challengeID string) string {
-	return fmt.Sprintf("%s/%s", ChallengePrefix, challengeID)
-}
-
-func (c *CertStore) ListChallengeKVRingKeys() ([]string, error) {
-	return c.RingConfig.ChallengeClient.List(context.Background(), ChallengePrefix+"/")
-}
-
-// Store challenge
-func (c *CertStore) PutChallenge(challengeID string, keyAuth string) error {
-	key := GenerateChallengeKey(challengeID)
-
-	challenge := &models.Challenge{
-		KeyAuth:   keyAuth,
-		UpdatedAt: timestamp.FromTime(time.Now()),
-	}
-
-	ctx := context.Background()
-	err := c.RingConfig.ChallengeClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
-		return challenge, true, nil
-	})
-
-	if err != nil {
-		_ = level.Error(c.Logger).Log("msg", "Failed to store challenge", "key", key, "err", err)
-	}
-	return err
-}
-
-// Get challenge
-func (c *CertStore) GetChallenge(challengeID string) (string, error) {
-	key := GenerateChallengeKey(challengeID)
-
-	ctx := context.Background()
-	cached, err := c.RingConfig.ChallengeClient.Get(ctx, key)
-	if err != nil {
-		return "", err
-	}
-
-	if cached == nil {
-		return "", fmt.Errorf("challenge id '%s' not found", challengeID)
-	}
-
-	challenge := cached.(*models.Challenge)
-
-	// Check for deletion
-	if challenge.DeletedAt > 0 {
-		return "", fmt.Errorf("challenge id '%s' is pending deletion", challengeID)
-	}
-
-	return challenge.KeyAuth, nil
-}
-
-// Delete challenge
-func (c *CertStore) DeleteChallenge(challengeID string) error {
-	key := GenerateChallengeKey(challengeID)
-
-	ctx := context.Background()
-	return c.RingConfig.ChallengeClient.Delete(ctx, key)
-}
-
-// List all challenges
-func (c *CertStore) ListAllChallenges() (map[string]string, error) {
-	keys, err := c.ListChallengeKVRingKeys()
-	if err != nil {
-		return nil, err
-	}
-
-	challenges := make(map[string]string, len(keys))
-	ctx := context.Background()
-
-	for _, key := range keys {
-		cached, err := c.RingConfig.ChallengeClient.Get(ctx, key)
-		if err != nil {
-			_ = level.Error(c.Logger).Log("msg", "Failed to get challenge", "key", key, "err", err)
-			continue
-		}
-
-		if cached == nil {
-			continue
-		}
-
-		challenge := cached.(*models.Challenge)
-		if challenge.DeletedAt == 0 {
-			challenges[key] = challenge.KeyAuth
-		}
-	}
-
-	return challenges, nil
 }
 
 // =================== RATE LIMITS ===================
@@ -463,7 +401,10 @@ func (c *CertStore) GetRateLimit(owner, issuer, name, domain string) (*models.Ra
 		return nil, nil // Not found is not an error for rate limits
 	}
 
-	rateLimit := cached.(*models.RateLimit)
+	rateLimit, ok := cached.(*models.RateLimit)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type %T for rate limit key %s", cached, key)
+	}
 
 	// Check for deletion
 	if rateLimit.DeletedAt > 0 {
@@ -509,7 +450,11 @@ func (c *CertStore) ListAllRateLimits() (map[string]*models.RateLimit, error) {
 			continue
 		}
 
-		rateLimit := cached.(*models.RateLimit)
+		rateLimit, ok := cached.(*models.RateLimit)
+		if !ok {
+			_ = level.Error(c.Logger).Log("msg", "unexpected type for rate limit", "key", key, "type", fmt.Sprintf("%T", cached))
+			continue
+		}
 		if rateLimit.DeletedAt == 0 {
 			rateLimits[key] = rateLimit
 		}

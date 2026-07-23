@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -163,7 +164,7 @@ func checkAuth(r *http.Request) (*models.Token, error) {
 		return tokenData, err
 	}
 
-	if tokenData.TokenHash != utils.SHA1Hash(token[1]) {
+	if !utils.VerifyHash(tokenData.TokenHash, token[1]) {
 		return tokenData, fmt.Errorf("invalid token")
 	}
 
@@ -235,10 +236,10 @@ func CertificateMetadataHandler(logger log.Logger, proxyClient *http.Client) htt
 		if issuer != "" && domain != "" {
 			data, err := certstore.AmStore.GetCertificate(tokenValue.Username, issuer, name, domain)
 			if err != nil {
-				if strings.Contains(err.Error(), "pending deletion") {
+				if errors.Is(err, certstore.ErrPendingDeletion) {
 					responseJSON(w, nil, err, http.StatusConflict)
 					return
-				} else if strings.Contains(err.Error(), "not found") {
+				} else if errors.Is(err, certstore.ErrNotFound) {
 					responseJSON(w, nil, err, http.StatusNotFound)
 					return
 				}
@@ -332,10 +333,10 @@ func GetCertificateHandler(logger log.Logger, proxyClient *http.Client) http.Han
 
 		_, err = certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 		if err != nil {
-			if strings.Contains(err.Error(), "pending deletion") {
+			if errors.Is(err, certstore.ErrPendingDeletion) {
 				responseJSON(w, nil, err, http.StatusConflict)
 				return
-			} else if strings.Contains(err.Error(), "not found") {
+			} else if errors.Is(err, certstore.ErrNotFound) {
 				responseJSON(w, jsonData, err, http.StatusNotFound)
 				return
 			}
@@ -404,6 +405,11 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		if !slices.Contains(config.SupportedIssuers, certParams.Issuer) {
 			responseJSON(w, nil, fmt.Errorf("invalid issuer '%s' must be one of %v", certParams.Issuer, config.SupportedIssuers), http.StatusBadRequest)
+			return
+		}
+
+		if _, err := utils.SanitizedDomain(logger, certParams.Domain); err != nil {
+			responseJSON(w, nil, fmt.Errorf("invalid 'domain' parameter: %w", err), http.StatusBadRequest)
 			return
 		}
 
@@ -483,10 +489,10 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 		if err == nil {
 			responseJSON(w, jsonData, fmt.Errorf("certificate already exists"), http.StatusConflict)
 			return
-		} else if strings.Contains(err.Error(), "pending deletion") {
+		} else if errors.Is(err, certstore.ErrPendingDeletion) {
 			responseJSON(w, nil, err, http.StatusConflict)
 			return
-		} else if !strings.Contains(err.Error(), "not found") {
+		} else if !errors.Is(err, certstore.ErrNotFound) {
 			responseJSON(w, nil, err, http.StatusInternalServerError)
 			return
 		}
@@ -610,6 +616,11 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
+		if _, err := utils.SanitizedDomain(logger, certParams.Domain); err != nil {
+			responseJSON(w, nil, fmt.Errorf("invalid 'domain' parameter: %w", err), http.StatusBadRequest)
+			return
+		}
+
 		var certRenewalMinDays int
 		var certRenewalMaxDays int
 		var renewalDays string
@@ -688,10 +699,10 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		existingCert, err := certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 		if err != nil {
-			if strings.Contains(err.Error(), "pending deletion") {
+			if errors.Is(err, certstore.ErrPendingDeletion) {
 				responseJSON(w, nil, err, http.StatusConflict)
 				return
-			} else if strings.Contains(err.Error(), "not found") {
+			} else if errors.Is(err, certstore.ErrNotFound) {
 				responseJSON(w, nil, err, http.StatusNotFound)
 				return
 			}
@@ -819,7 +830,8 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 				return
 			}
 
-			expiresDate, _ := time.Parse("2006-01-02 15:04:05 -0700 MST", secret["expires"].(string))
+			expiresStr, _ := secret["expires"].(string)
+			expiresDate, _ := time.Parse("2006-01-02 15:04:05 -0700 MST", expiresStr)
 			renewalDate = utils.RandomWeekdayBeforeExpiration(expiresDate, certRenewalMinDays, certRenewalMaxDays).String()
 
 			secret["renewal_date"] = renewalDate
@@ -935,10 +947,10 @@ func DeleteCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		_, err = certstore.AmStore.GetCertificate(certData.Owner, certData.Issuer, certData.Name, certData.Domain)
 		if err != nil {
-			if strings.Contains(err.Error(), "pending deletion") {
+			if errors.Is(err, certstore.ErrPendingDeletion) {
 				responseJSON(w, nil, err, http.StatusConflict)
 				return
-			} else if strings.Contains(err.Error(), "not found") {
+			} else if errors.Is(err, certstore.ErrNotFound) {
 				responseJSON(w, nil, err, http.StatusNotFound)
 				return
 			}
@@ -1088,10 +1100,10 @@ func GetCertificateByNameHandler(logger log.Logger, proxyClient *http.Client) ht
 
 		certData, err := certstore.AmStore.GetCertificate(tokenValue.Username, "", name, "")
 		if err != nil {
-			if strings.Contains(err.Error(), "pending deletion") {
+			if errors.Is(err, certstore.ErrPendingDeletion) {
 				responseJSON(w, nil, err, http.StatusConflict)
 				return
-			} else if strings.Contains(err.Error(), "not found") {
+			} else if errors.Is(err, certstore.ErrNotFound) {
 				responseJSON(w, jsonData, err, http.StatusNotFound)
 				return
 			}
@@ -1169,10 +1181,10 @@ func DeleteCertificateByNameHandler(logger log.Logger, proxyClient *http.Client)
 
 		existingCert, err := certstore.AmStore.GetCertificate(tokenValue.Username, "", name, "")
 		if err != nil {
-			if strings.Contains(err.Error(), "pending deletion") {
+			if errors.Is(err, certstore.ErrPendingDeletion) {
 				responseJSON(w, nil, err, http.StatusConflict)
 				return
-			} else if strings.Contains(err.Error(), "not found") {
+			} else if errors.Is(err, certstore.ErrNotFound) {
 				responseJSON(w, nil, err, http.StatusNotFound)
 				return
 			}

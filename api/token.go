@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/go-kit/log"
@@ -99,7 +99,7 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 			return
 		}
 
-		if utils.SHA1Hash(authHeader) != config.GlobalConfig.Common.APIKeyHash {
+		if !utils.VerifyHash(config.GlobalConfig.Common.APIKeyHash, authHeader) {
 			responseJSON(w, nil, fmt.Errorf("API Key not valid"), http.StatusUnauthorized)
 			return
 		}
@@ -108,7 +108,7 @@ func GetTokenHandler(logger log.Logger) http.HandlerFunc {
 		if ID != "" {
 			data, err := certstore.AmStore.GetToken(ID)
 			if err != nil {
-				if strings.Contains(err.Error(), "not found") {
+				if errors.Is(err, certstore.ErrNotFound) {
 					responseJSON(w, nil, err, http.StatusNotFound)
 					return
 				}
@@ -151,7 +151,7 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		if utils.SHA1Hash(authHeader) != config.GlobalConfig.Common.APIKeyHash {
+		if !utils.VerifyHash(config.GlobalConfig.Common.APIKeyHash, authHeader) {
 			responseJSON(w, nil, fmt.Errorf("API Key not valid"), http.StatusUnauthorized)
 			return
 		}
@@ -234,7 +234,7 @@ func CreateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			expires = expiresRaw.UTC().Format("2006-01-02 15:04:05 +0000 UTC")
 		}
 
-		tokenHash := utils.SHA1Hash(randomToken)
+		tokenHash := utils.HashToken(randomToken)
 
 		newData := map[string]interface{}{
 			"id":                      ID,
@@ -303,7 +303,7 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		if utils.SHA1Hash(authHeader) != config.GlobalConfig.Common.APIKeyHash {
+		if !utils.VerifyHash(config.GlobalConfig.Common.APIKeyHash, authHeader) {
 			responseJSON(w, nil, fmt.Errorf("API Key not valid"), http.StatusUnauthorized)
 			return
 		}
@@ -324,10 +324,10 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 
 		data, err := certstore.AmStore.GetToken(token.ID)
 		if err != nil {
-			if strings.Contains(err.Error(), "pending deletion") {
+			if errors.Is(err, certstore.ErrPendingDeletion) {
 				responseJSON(w, nil, err, http.StatusConflict)
 				return
-			} else if strings.Contains(err.Error(), "not found") {
+			} else if errors.Is(err, certstore.ErrNotFound) {
 				responseJSON(w, nil, fmt.Errorf("token ID '%s' not found", token.ID), http.StatusNotFound)
 				return
 			}
@@ -400,7 +400,7 @@ func UpdateTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			expires = expiresRaw.UTC().Format("2006-01-02 15:04:05 +0000 UTC")
 		}
 
-		tokenHash := utils.SHA1Hash(randomToken)
+		tokenHash := utils.HashToken(randomToken)
 
 		newData := map[string]interface{}{
 			"id":                      token.ID,
@@ -466,7 +466,7 @@ func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 			return
 		}
 
-		if utils.SHA1Hash(authHeader) != config.GlobalConfig.Common.APIKeyHash {
+		if !utils.VerifyHash(config.GlobalConfig.Common.APIKeyHash, authHeader) {
 			responseJSON(w, nil, fmt.Errorf("API Key not valid"), http.StatusUnauthorized)
 			return
 		}
@@ -482,10 +482,10 @@ func RevokeTokenHandler(logger log.Logger, proxyClient *http.Client) http.Handle
 		if ID != "" {
 			data, err := certstore.AmStore.GetToken(ID)
 			if err != nil {
-				if strings.Contains(err.Error(), "pending deletion") {
+				if errors.Is(err, certstore.ErrPendingDeletion) {
 					responseJSON(w, nil, err, http.StatusConflict)
 					return
-				} else if strings.Contains(err.Error(), "not found") {
+				} else if errors.Is(err, certstore.ErrNotFound) {
 					responseJSON(w, nil, err, http.StatusNotFound)
 					return
 				}

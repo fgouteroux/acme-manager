@@ -57,7 +57,6 @@ type AcmeManagerRing struct {
 	KvStore           *memberlist.KV
 	CertificateClient *memberlist.Client
 	TokenClient       *memberlist.Client
-	ChallengeClient   *memberlist.Client
 	RateLimitClient   *memberlist.Client
 }
 
@@ -171,11 +170,6 @@ func NewWithConfig(ringConfig Config, logger log.Logger, flagSet *flag.FlagSet, 
 		return config, err
 	}
 
-	challengeClient, err := memberlist.NewClient(store, models.GetChallengeCodec())
-	if err != nil {
-		return config, err
-	}
-
 	rateLimitClient, err := memberlist.NewClient(store, models.GetRateLimitCodec())
 	if err != nil {
 		return config, err
@@ -207,7 +201,6 @@ func NewWithConfig(ringConfig Config, logger log.Logger, flagSet *flag.FlagSet, 
 		KvStore:           store,
 		CertificateClient: certificateClient,
 		TokenClient:       tokenClient,
-		ChallengeClient:   challengeClient,
 		RateLimitClient:   rateLimitClient,
 	}, nil
 }
@@ -237,7 +230,7 @@ func NewMemberlistKVWithConfig(ringConfig Config, instanceID string, joinMembers
 
 	// Codecs is used to tell memberlist library how to serialize/de-serialize the messages between peers.
 	// `ring.GetCode()` uses default, which is protobuf.
-	config.Codecs = []codec.Codec{ring.GetCodec(), models.GetCertificateCodec(), models.GetTokenCodec(), models.GetChallengeCodec(), models.GetRateLimitCodec()}
+	config.Codecs = []codec.Codec{ring.GetCodec(), models.GetCertificateCodec(), models.GetTokenCodec(), models.GetRateLimitCodec()}
 
 	// TCPTransport defines what addr and port this particular peer should listen for.
 	// These may have been set via flags, but ensure they're set

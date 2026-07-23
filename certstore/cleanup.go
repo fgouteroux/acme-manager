@@ -11,9 +11,16 @@ import (
 
 	"github.com/go-acme/lego/v5/lego"
 
+	"github.com/fgouteroux/acme-manager/models"
 	"github.com/fgouteroux/acme-manager/ring"
 	"github.com/fgouteroux/acme-manager/storage/vault"
 )
+
+// tombstoneReapAge is how long a KV ring entry may remain marked for deletion
+// (DeletedAt > 0) before the reaper removes it. It is comfortably larger than
+// the gossip convergence / dead-node window so all peers have observed the
+// deletion before the entry is finally dropped.
+const tombstoneReapAge = time.Hour
 
 func Cleanup(logger log.Logger, interval time.Duration, certExpDays int, cleanupCertRevokeLastVersion bool) {
 	// create a new Ticker
@@ -25,6 +32,74 @@ func Cleanup(logger log.Logger, interval time.Duration, certExpDays int, cleanup
 		if isLeaderNow {
 			CleanupTokens(logger)
 			CleanupCertificateVersions(logger, certExpDays, cleanupCertRevokeLastVersion)
+			ReapDeletedRingEntries(logger)
+		}
+	}
+}
+
+// ReapDeletedRingEntries removes certificate and token KV ring entries that were
+// marked for deletion (DeletedAt > 0) more than tombstoneReapAge ago but whose
+// final Delete never completed — for example when the process died between the
+// mark-deleted CAS and the Delete in DeleteCertificate/DeleteToken. Without this
+// sweep such a tombstone lingers forever and GetCertificate/GetToken keep
+// reporting "pending deletion" (HTTP 409).
+func ReapDeletedRingEntries(logger log.Logger) {
+	reapDeletedCertificates(logger)
+	reapDeletedTokens(logger)
+}
+
+func reapDeletedCertificates(logger log.Logger) {
+	keys, err := AmStore.ListCertificateKVRingKeys(CertificatePrefix + "/")
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "tombstone reaper: failed to list certificates", "err", err)
+		return
+	}
+
+	ctx := context.Background()
+	now := time.Now()
+	for _, key := range keys {
+		cached, err := AmStore.RingConfig.CertificateClient.Get(ctx, key)
+		if err != nil || cached == nil {
+			continue
+		}
+		cert, ok := cached.(*models.Certificate)
+		if !ok {
+			continue
+		}
+		if cert.DeletedAt > 0 && now.Sub(time.UnixMilli(cert.DeletedAt)) > tombstoneReapAge {
+			if err := AmStore.RingConfig.CertificateClient.Delete(ctx, key); err != nil {
+				_ = level.Error(logger).Log("msg", "tombstone reaper: failed to delete certificate tombstone", "key", key, "err", err)
+				continue
+			}
+			_ = level.Info(logger).Log("msg", "tombstone reaper: removed stale certificate tombstone", "key", key)
+		}
+	}
+}
+
+func reapDeletedTokens(logger log.Logger) {
+	keys, err := AmStore.ListTokenKVRingKeys()
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "tombstone reaper: failed to list tokens", "err", err)
+		return
+	}
+
+	ctx := context.Background()
+	now := time.Now()
+	for _, key := range keys {
+		cached, err := AmStore.RingConfig.TokenClient.Get(ctx, key)
+		if err != nil || cached == nil {
+			continue
+		}
+		token, ok := cached.(*models.Token)
+		if !ok {
+			continue
+		}
+		if token.DeletedAt > 0 && now.Sub(time.UnixMilli(token.DeletedAt)) > tombstoneReapAge {
+			if err := AmStore.RingConfig.TokenClient.Delete(ctx, key); err != nil {
+				_ = level.Error(logger).Log("msg", "tombstone reaper: failed to delete token tombstone", "key", key, "err", err)
+				continue
+			}
+			_ = level.Info(logger).Log("msg", "tombstone reaper: removed stale token tombstone", "key", key)
 		}
 	}
 }

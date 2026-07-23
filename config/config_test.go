@@ -132,3 +132,44 @@ storage:
 		})
 	}
 }
+
+func TestPluginChecksumValidation(t *testing.T) {
+	const pluginYAML = `
+common:
+  api_key_hash: "hash123"
+  plugins:
+    - name: "myplugin"
+      path: "/nonexistent/plugin"
+issuer:
+  issuer1:
+    contact: "admin@example.com"
+    ca_dir_url: "https://ca.example.com"
+    dns_challenge: "dns-provider"
+storage:
+  vault:
+    role_id: "role123"
+`
+
+	// Preserve and restore the package-level opt-out.
+	prev := AllowUnverifiedPlugins
+	defer func() { AllowUnverifiedPlugins = prev }()
+
+	// Default (opt-out disabled): a plugin without a checksum must fail validation.
+	AllowUnverifiedPlugins = false
+	UnverifiedPlugins = nil
+	var cfg Config
+	if err := yaml.Unmarshal([]byte(pluginYAML), &cfg); err == nil {
+		t.Fatal("expected error for empty-checksum plugin when unverified plugins are not allowed, got nil")
+	}
+
+	// Opt-out enabled: the plugin is allowed and recorded as unverified.
+	AllowUnverifiedPlugins = true
+	UnverifiedPlugins = nil
+	var cfg2 Config
+	if err := yaml.Unmarshal([]byte(pluginYAML), &cfg2); err != nil {
+		t.Fatalf("unexpected error when unverified plugins are allowed: %v", err)
+	}
+	if len(UnverifiedPlugins) != 1 || UnverifiedPlugins[0] != "myplugin" {
+		t.Fatalf("expected UnverifiedPlugins to contain 'myplugin', got %v", UnverifiedPlugins)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -104,15 +105,26 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 
 	for issuer, issuerConf := range cfg.Issuer {
 		accountFilePath := fmt.Sprintf("%s/%s/account.json", cfg.Common.RootPathAccount, issuer)
+		var account Account
 		accountBytes, err := os.ReadFile(filepath.Clean(accountFilePath))
 		if err != nil {
-			_ = level.Warn(logger).Log("msg", "failed to read account file", "issuer", issuer, "path", accountFilePath, "err", err)
-		}
-		var account Account
-		if len(accountBytes) > 0 {
-			err = json.Unmarshal(accountBytes, &account)
-			if err != nil {
-				_ = level.Error(logger).Log("msg", "failed to unmarshal account data", "issuer", issuer, "err", err)
+			if errors.Is(err, os.ErrNotExist) {
+				// Legitimate first run: no account file yet, proceed to register below.
+				_ = level.Info(logger).Log("msg", "account file not found, will register a new account", "issuer", issuer, "path", accountFilePath)
+			} else {
+				// File exists but cannot be read (permissions, I/O error, ...).
+				// Do not continue with a half-populated account: flag the issuer and skip it.
+				_ = level.Error(logger).Log("msg", "failed to read account file", "issuer", issuer, "path", accountFilePath, "err", err)
+				metrics.SetIssuerConfigError(issuer, 1.0)
+				continue
+			}
+		} else if len(accountBytes) > 0 {
+			if err = json.Unmarshal(accountBytes, &account); err != nil {
+				// File is present but corrupt: skip this issuer rather than
+				// registering with a zero/partial account.
+				_ = level.Error(logger).Log("msg", "failed to unmarshal account data", "issuer", issuer, "path", accountFilePath, "err", err)
+				metrics.SetIssuerConfigError(issuer, 1.0)
+				continue
 			}
 		}
 		privateKeyPath := fmt.Sprintf("%s/%s/private_key.pem", cfg.Common.RootPathAccount, issuer)
