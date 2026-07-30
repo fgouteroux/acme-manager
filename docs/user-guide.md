@@ -146,7 +146,7 @@ acme-manager-client \
 | `-client.manager-url` | `http://localhost:8989/api/v1` | ACME Manager server URL (or env var `ACME_MANAGER_URL`) |
 | `-client.manager-token` | "" | Bearer token for authentication (or env var `ACME_MANAGER_TOKEN`) |
 | `-client.check-config-interval` | `5m` | Interval to check for config changes and sync certificates |
-| `-client.pull-only` | `false` | Enable pull-only (slave) mode |
+| `-client.pull-only` | `false` | Enable pull-only mode (no certificate management) |
 | `-client.cleanup-enabled` | `false` | Enable cleanup of orphaned local certificate files |
 | `-client.cleanup-interval` | `30m` | Interval to check for orphaned files to cleanup |
 | `-client.tls-ca-file` | "" | TLS CA certificate file for server connection |
@@ -158,13 +158,16 @@ acme-manager-client \
 | `-log.level` | `info` | Log level (debug, info, warn, error) |
 | `-log.format` | `logfmt` | Log format (logfmt, json) |
 
-### Master/Slave Mode
+### Full and Pull-Only Modes
 
-ACME Manager client supports two operational modes that enable a master/slave architecture for certificate management:
+ACME Manager client supports two operational modes, which together let one
+client manage certificates while others only deploy them. The mode is fixed by
+the `-client.pull-only` flag at startup and is reported by the
+`acme_manager_client_role` metric (`1` = full, `2` = pull-only).
 
-#### Master Mode (Default)
+#### Full Mode (Default)
 
-In master mode, the client is responsible for:
+In full mode, the client is responsible for:
 - Managing the full certificate lifecycle (create, update, delete)
 - Generating CSRs and private keys
 - Syncing certificates from the local config file to the ACME Manager server
@@ -177,18 +180,18 @@ acme-manager-client \
   -client.manager-token=your-bearer-token
 ```
 
-#### Slave Mode (Pull-Only)
+#### Pull-Only Mode
 
-In slave mode (`-client.pull-only=true`), the client only:
+In pull-only mode (`-client.pull-only=true`), the client only:
 - Lists certificates from the KV ring (server storage)
 - Pulls and deploys certificates locally
-- Restores private keys from Vault backup (requires `certificate_backup` enabled on master)
+- Restores private keys from Vault backup (requires `certificate_backup` enabled on the full-mode client)
 - Does NOT create, update, or delete certificates on the server
 
 This mode is useful for:
 - Deploying certificates to multiple servers without managing them
 - Separating certificate management from deployment
-- High-availability setups where one master manages certificates and multiple slaves deploy them
+- High-availability setups where one client manages certificates and several pull-only clients deploy them
 
 ```bash
 acme-manager-client \
@@ -200,7 +203,7 @@ acme-manager-client \
 
 **Note:** In pull-only mode, the `certificate` section in the config file is not required. The client will fetch all certificates available to the token from the server.
 
-#### Master/Slave Architecture Example
+#### Architecture Example
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -211,9 +214,9 @@ acme-manager-client \
            ┌────────────────┼────────────────┐
            │                │                │
     ┌──────┴──────┐  ┌──────┴──────┐  ┌──────┴──────┐
-    │   Master    │  │   Slave 1   │  │   Slave 2   │
-    │   Client    │  │   Client    │  │   Client    │
-    │             │  │ (pull-only) │  │ (pull-only) │
+    │    Full     │  │  Pull-only  │  │  Pull-only  │
+    │   Client    │  │   Client 1  │  │   Client 2  │
+    │  (role = 1) │  │ (role = 2)  │  │ (role = 2)  │
     │ - Manages   │  │             │  │             │
     │   certs     │  │ - Deploys   │  │ - Deploys   │
     │ - Creates   │  │   only      │  │   only      │
@@ -228,7 +231,7 @@ acme-manager-client \
     └─────────────┘  └─────────────┘  └─────────────┘
 ```
 
-**Configuration for Slave Mode:**
+**Configuration for Pull-Only Mode:**
 
 ```yaml
 common:
@@ -275,7 +278,7 @@ The client handles `SIGUSR1` to trigger an immediate certificate check or pull w
 kill -USR1 <pid>
 ```
 
-- In normal (master) mode: calls `CheckCertificate`, which compares the local config against the server and applies any necessary changes.
+- In full mode: calls `CheckCertificate`, which compares the local config against the server and applies any necessary changes.
 - In `--client.pull-only` mode: calls `PullAndCheckCertificateFromRing`, which fetches all certificates available to the token from the ring.
 
 Both functions use an internal `TryLock`. If a run is already in progress when the signal arrives, the signal is ignored and a message is logged at debug level. This prevents overlapping runs.
@@ -573,6 +576,18 @@ Client metrics are exposed at:
 ```
 http://localhost:8989/metrics
 ```
+
+Two of them describe the client itself:
+
+| Metric | Meaning |
+|---|---|
+| `acme_manager_client_role` | `1` = full mode, `2` = pull-only mode |
+| `acme_manager_client_build_info` | version, revision, branch and Go version, as a constant `1` |
+
+`acme_manager_client_role` is useful to confirm that exactly one client manages
+a given certificate set and the rest only deploy it. Unlike the server's
+`acme_manager_node_role`, it is not elected: it reflects the `-client.pull-only`
+flag and never changes while the process runs.
 
 ## Common Configuration Options
 

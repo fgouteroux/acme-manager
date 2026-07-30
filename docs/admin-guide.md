@@ -1300,8 +1300,24 @@ acme_manager_issuer_config_error{issuer}
 # Rate limiting
 acme_manager_rate_limit_blocked_total{issuer, owner, operation}
 
+# Ring KV key inventory (type=certificate|token|ratelimit)
+# Includes entries marked for deletion but not yet garbage-collected: the
+# memberlist KV List is a raw prefix scan that never inspects the Deleted
+# flag, so tombstones stay visible until ObsoleteEntriesTimeout (~30s).
+acme_manager_kv_keys{type}
+
+# Token expiry in days, +Inf for a token that never expires.
+# 'id' is required: several tokens can share username, scope and expiry.
+acme_manager_token_expiry{id, username, scope, expires}
+
+# Client operating mode: 1 = full, 2 = pull-only.
+# Exposed by acme-manager-client only. Encoded as a value rather than a
+# label because it is fixed for the lifetime of the process.
+acme_manager_client_role
+
 # System metrics
-acme_manager_build_info{version, revision, branch, goversion}
+acme_manager_server_build_info{version, revision, branch, goversion}
+acme_manager_client_build_info{version, revision, branch, goversion}
 ```
 
 **Ring/Cluster Metrics:**
