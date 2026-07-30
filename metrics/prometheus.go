@@ -108,6 +108,24 @@ var (
 		},
 		[]string{"issuer", "owner", "operation"},
 	)
+
+	clientRole = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_client_role",
+			Help: "Operating mode of the client: 1 = full (manages the certificate lifecycle), 2 = pull-only (deploys only)",
+		},
+		[]string{},
+	)
+)
+
+// Client roles reported by acme_manager_client_role. The mode is deliberately
+// encoded as a value rather than a label: it is fixed for the lifetime of the
+// process, so a label would leave a stale series behind whenever an operator
+// flips -client.pull-only and restarts. The values are named after the flag
+// rather than the server's leader/follower, which is elected at runtime.
+const (
+	ClientRoleFull     = 1
+	ClientRolePullOnly = 2
 )
 
 func IncManagedCertificate(issuer, owner, domain, name string) {
@@ -225,6 +243,16 @@ func IncRateLimitBlocked(owner, issuer, operation string) {
 	rateLimitBlockedTotal.WithLabelValues(issuer, owner, operation).Inc()
 }
 
+// SetClientRole reports whether the client runs in pull-only mode.
+// Call it once at startup, before serving metrics.
+func SetClientRole(pullOnly bool) {
+	role := ClientRoleFull
+	if pullOnly {
+		role = ClientRolePullOnly
+	}
+	clientRole.WithLabelValues().Set(float64(role))
+}
+
 func init() {
 	collectors := []prometheus.Collector{
 		managedCertificate,
@@ -240,6 +268,7 @@ func init() {
 		httpRequestDuration,
 		httpRequestsInFlight,
 		rateLimitBlockedTotal,
+		clientRole,
 	}
 
 	for _, collector := range collectors {

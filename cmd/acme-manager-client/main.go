@@ -12,11 +12,13 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
+	versioncollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
 	"github.com/sirupsen/logrus"
 
 	"github.com/fgouteroux/acme-manager/client"
+	"github.com/fgouteroux/acme-manager/metrics"
 	"github.com/fgouteroux/acme-manager/restclient"
 	"github.com/fgouteroux/acme-manager/storage/vault"
 	"github.com/fgouteroux/acme-manager/utils"
@@ -161,6 +163,12 @@ func main() {
 	client.Owner = token.Username
 
 	_ = prometheus.Register(client.NewCertificateCollector())
+
+	if err := prometheus.Register(versioncollector.NewCollector("acme_manager_client")); err != nil {
+		_ = level.Error(logger).Log("msg", "Error registering version collector", "err", err)
+	}
+
+	metrics.SetClientRole(*clientPullOnly)
 
 	if *clientPullOnly {
 		// On startup get certificates from remote server
