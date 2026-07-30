@@ -21,6 +21,8 @@ import (
 func OnStartup(logger log.Logger) error {
 	_ = prometheus.Register(NewCertificateCollector(logger))
 	_ = prometheus.Register(NewNodeCollector(logger))
+	_ = prometheus.Register(NewKVCollector(logger))
+	_ = prometheus.Register(NewTokenCollector(logger))
 
 	isLeaderNow, err := ring.IsLeader(AmStore.RingConfig)
 	if err != nil {

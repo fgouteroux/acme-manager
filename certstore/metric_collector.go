@@ -67,6 +67,119 @@ func NewCertificateCollector(logger log.Logger) *CertificateCollector {
 	return &CertificateCollector{Logger: logger}
 }
 
+// KVCollector reports how many keys the Ring KV store holds per key type.
+type KVCollector struct {
+	Logger log.Logger
+}
+
+func (c *KVCollector) Describe(_ chan<- *prometheus.Desc) {}
+
+// Collect emits one series per key type. Counts include entries that were
+// marked for deletion but not yet garbage-collected: the memberlist KV List
+// is a raw prefix scan over the local store and never inspects the Deleted
+// flag, so tombstones remain visible until ObsoleteEntriesTimeout elapses.
+func (c *KVCollector) Collect(ch chan<- prometheus.Metric) {
+	desc := prometheus.NewDesc(
+		"acme_manager_kv_keys",
+		"Number of keys in the ring KV store per key type, including entries marked for deletion but not yet garbage-collected",
+		[]string{"type"}, nil,
+	)
+
+	// Always report every known type, so a type that legitimately holds no key
+	// is reported as 0 rather than disappearing from the scrape.
+	for _, kv := range []struct {
+		keyType string
+		list    func() ([]string, error)
+	}{
+		{CertificatePrefix, func() ([]string, error) { return AmStore.ListCertificateKVRingKeys(CertificatePrefix + "/") }},
+		{TokenPrefix, AmStore.ListTokenKVRingKeys},
+		{RateLimitPrefix, func() ([]string, error) { return AmStore.ListRateLimitKVRingKeys(RateLimitPrefix + "/") }},
+	} {
+		keys, err := kv.list()
+		if err != nil {
+			_ = level.Error(c.Logger).Log("msg", "Failed to list kv ring keys", "type", kv.keyType, "err", err)
+			continue
+		}
+
+		ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, float64(len(keys)), kv.keyType)
+	}
+}
+
+func NewKVCollector(logger log.Logger) *KVCollector {
+	return &KVCollector{Logger: logger}
+}
+
+type TokenCollector struct {
+	Logger log.Logger
+}
+
+func (c *TokenCollector) Describe(_ chan<- *prometheus.Desc) {}
+
+func (c *TokenCollector) Collect(ch chan<- prometheus.Metric) {
+	data, err := AmStore.ListAllTokens()
+	if err != nil {
+		_ = level.Error(c.Logger).Log("err", err)
+		return
+	}
+
+	for key, token := range data {
+		// ListAllTokens does not filter tombstones, unlike ListAllCertificates.
+		if token.DeletedAt > 0 {
+			continue
+		}
+
+		tokenID, err := ParseTokenKey(key)
+		if err != nil {
+			_ = level.Error(c.Logger).Log("msg", "Failed to parse token key", "key", key, "err", err)
+			continue
+		}
+
+		daysUntilExpiration, err := tokenExpiryDays(token.Expires)
+		if err != nil {
+			_ = level.Error(c.Logger).Log("msg", "failed to parse token expiration time", "token_id", tokenID, "err", err)
+			continue
+		}
+
+		// The token hash is credential material and must never be exposed here.
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				"acme_manager_token_expiry",
+				"Token expiry in days with id, username and scope. Non-expiring tokens report +Inf.", nil,
+				prometheus.Labels{
+					"id":       tokenID,
+					"username": token.Username,
+					"scope":    strings.Join(token.Scope, ","),
+					"expires":  token.Expires,
+				},
+			),
+			prometheus.GaugeValue,
+			daysUntilExpiration,
+		)
+	}
+}
+
+func NewTokenCollector(logger log.Logger) *TokenCollector {
+	return &TokenCollector{Logger: logger}
+}
+
+// tokenExpiryDays returns the number of days until the token expires, or +Inf
+// for a token that never expires.
+func tokenExpiryDays(expires string) (float64, error) {
+	if expires == "Never" {
+		return math.Inf(1), nil
+	}
+
+	// Define the layout for the date string
+	layout := "2006-01-02 15:04:05 -0700 MST"
+
+	notAfter, err := time.Parse(layout, expires)
+	if err != nil {
+		return 0, err
+	}
+
+	return math.Trunc(time.Until(notAfter).Hours() / 24), nil
+}
+
 type NodeCollector struct {
 	Logger log.Logger
 }
