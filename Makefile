@@ -1,15 +1,17 @@
 TEST?=$$(go list ./... |grep -v 'vendor')
-# Container runtime used by the test fixtures. Override for Podman:
-#   make test COMPOSE="podman compose"
-COMPOSE      ?= docker compose
+# Container runtime used by the test fixtures. Auto-detected, preferring Docker
+# when both are installed. Override with: make test COMPOSE="podman compose"
+COMPOSE      ?= $(shell command -v docker >/dev/null 2>&1 && echo "docker compose" || echo "podman compose")
 # Server-side debug logs during tests. Without it TestMain installs a no-op
 # logger and failures surface as a bare HTTP status with no explanation.
 # Quiet it with: make test ENABLE_DEBUG=false
 ENABLE_DEBUG ?= true
-# SELinux relabel suffix for bind mounts. Empty by default so Docker behaves
-# exactly as before; required under Podman on RHEL-family hosts:
-#   make test COMPOSE="podman compose" MOUNT_LABEL=:z
-MOUNT_LABEL  ?=
+# SELinux relabel suffix for bind mounts, auto-detected. Without it the Pebble
+# mount is unreadable under Podman on SELinux hosts, and since that image is
+# built FROM scratch it exits silently when it cannot read its config. Stays
+# empty where SELinux is absent, so Docker behaves exactly as before.
+# Force off with: make test MOUNT_LABEL=
+MOUNT_LABEL  ?= $(shell (selinuxenabled 2>/dev/null || test -r /sys/fs/selinux/enforce) && echo :z)
 GO           ?= go
 GOFMT        ?= $(GO)fmt
 GOFMT_FILES?=$$(find . -name '*.go' |grep -v vendor)
