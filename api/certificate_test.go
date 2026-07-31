@@ -200,7 +200,7 @@ func TestAPIGetCertificateHandler(t *testing.T) {
 
 	enableLogging := os.Getenv("ENABLE_DEBUG") == "true"
 	vaultTest := testhelper.GetTestVaultServer(t, enableLogging)
-	defer vaultTest.Cluster.Cleanup()
+	defer vaultTest.Cleanup()
 
 	vault.GlobalClient = &vaultTest.Client
 
@@ -256,7 +256,7 @@ func TestAPICreateCertificateHandler(t *testing.T) {
 	enableLogging := os.Getenv("ENABLE_DEBUG") == "true"
 
 	vaultTest := testhelper.GetTestVaultServer(t, enableLogging)
-	defer vaultTest.Cluster.Cleanup()
+	defer vaultTest.Cleanup()
 
 	vault.GlobalClient = &vaultTest.Client
 
@@ -321,7 +321,7 @@ func TestAPIUpdateCertificateHandler(t *testing.T) {
 	enableLogging := os.Getenv("ENABLE_DEBUG") == "true"
 
 	vaultTest := testhelper.GetTestVaultServer(t, enableLogging)
-	defer vaultTest.Cluster.Cleanup()
+	defer vaultTest.Cleanup()
 
 	vault.GlobalClient = &vaultTest.Client
 
@@ -388,7 +388,7 @@ func TestAPIDeleteCertificateHandler(t *testing.T) {
 	enableLogging := os.Getenv("ENABLE_DEBUG") == "true"
 
 	vaultTest := testhelper.GetTestVaultServer(t, enableLogging)
-	defer vaultTest.Cluster.Cleanup()
+	defer vaultTest.Cleanup()
 
 	vault.GlobalClient = &vaultTest.Client
 

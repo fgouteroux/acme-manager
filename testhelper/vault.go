@@ -1,133 +1,166 @@
 package testhelper
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"strings"
 	"testing"
-
-	"github.com/hashicorp/go-hclog"
 
 	"github.com/fgouteroux/acme-manager/config"
 	vaultStorage "github.com/fgouteroux/acme-manager/storage/vault"
 
 	vaultApi "github.com/hashicorp/vault/api"
-	"github.com/hashicorp/vault/builtin/credential/approle"
-	vaulthttp "github.com/hashicorp/vault/http"
-	"github.com/hashicorp/vault/sdk/logical"
-	"github.com/hashicorp/vault/vault"
 )
 
 const (
-	// TestVaultToken is the Vault token used for tests
-	testVaultToken = "unittesttoken"
+	defaultVaultAddr  = "http://127.0.0.1:8200"
+	defaultVaultToken = "root"
 )
 
+// VaultTest wraps a client bound to a per-test AppRole and KV v2 mount on the
+// Vault instance started by `make compose-up`.
 type VaultTest struct {
-	Cluster *vault.TestCluster
-	Client  vaultStorage.Client
+	Client vaultStorage.Client
+
+	root   *vaultApi.Client
+	engine string
+	role   string
+	policy string
 }
 
-type Client struct {
-	APIClient *vaultApi.Client
-	Config    config.Vault
+// Cleanup removes the mount, role and policy created for the test. Vault runs
+// in dev mode and is discarded with the container, but every test shares the
+// same instance, so each one tidies up after itself.
+func (v VaultTest) Cleanup() {
+	if v.root == nil {
+		return
+	}
+	_ = v.root.Sys().Unmount(v.engine)
+	_, _ = v.root.Logical().Delete("auth/approle/role/" + v.role)
+	_ = v.root.Sys().DeletePolicy(v.policy)
 }
 
-// creates the test server
-func GetTestVaultServer(t *testing.T, debug bool) VaultTest {
+// GetTestVaultServer returns a Vault client authenticated against a KV v2 mount
+// created for this test alone.
+//
+// It talks to an external Vault dev server (VAULT_ADDR, default
+// http://127.0.0.1:8200) instead of an in-process test cluster. Running Vault as
+// a container alongside Pebble keeps github.com/hashicorp/vault and its
+// transitive tree — Docker, database drivers, cloud SDKs — out of the module
+// graph entirely.
+//
+// The debug argument is kept for backwards compatibility and ignored: server
+// logs now belong to the container.
+func GetTestVaultServer(t *testing.T, _ bool) VaultTest {
 	t.Helper()
 
-	logger := hclog.NewNullLogger()
-	if debug {
-		logger = hclog.New(&hclog.LoggerOptions{
-			Level: hclog.Debug,
-		})
+	addr := os.Getenv("VAULT_ADDR")
+	if addr == "" {
+		addr = defaultVaultAddr
+	}
+	token := os.Getenv("VAULT_TOKEN")
+	if token == "" {
+		token = defaultVaultToken
 	}
 
-	cluster := vault.NewTestCluster(t, &vault.CoreConfig{
-		DisableMlock: true,
-		DisableCache: true,
-		DevToken:     testVaultToken,
-		CredentialBackends: map[string]logical.Factory{
-			"approle": approle.Factory,
-		},
-		Logger: logger,
-	}, &vault.TestClusterOptions{
-		HandlerFunc: vaulthttp.Handler,
-	})
-	cluster.Start()
+	cfg := vaultApi.DefaultConfig()
+	cfg.Address = addr
+	client, err := vaultApi.NewClient(cfg)
+	if err != nil {
+		t.Fatalf("unable to create vault client for %s: %v", addr, err)
+	}
+	client.SetToken(token)
 
-	core := cluster.Cores[0].Core
-	vault.TestWaitActive(t, core)
-	client := cluster.Cores[0].Client
+	if _, err := client.Sys().Health(); err != nil {
+		t.Fatalf("vault is not reachable at %s (start it with `make compose-up`): %v", addr, err)
+	}
 
-	err := client.Sys().EnableAuthWithOptions("approle", &vaultApi.EnableAuthOptions{
-		Type: "approle",
+	name := uniqueName(t)
+
+	// The approle auth backend is shared by every test, so enabling it has to be
+	// idempotent: a second attempt reports the path as already in use.
+	err = client.Sys().EnableAuthWithOptions("approle", &vaultApi.EnableAuthOptions{Type: "approle"})
+	if err != nil && !strings.Contains(err.Error(), "path is already in use") {
+		t.Fatalf("unable to enable approle auth: %v", err)
+	}
+
+	err = client.Sys().Mount(name, &vaultApi.MountInput{
+		Type:    "kv",
+		Options: map[string]string{"version": "2"},
 	})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("unable to mount secret engine %s: %v", name, err)
 	}
 
-	// Create an approle
-	_, err = client.Logical().Write("auth/approle/role/unittest", map[string]interface{}{
-		"policies": []string{"unittest"},
+	v := VaultTest{root: client, engine: name, role: name, policy: name}
+
+	err = client.Sys().PutPolicy(name, fmt.Sprintf(
+		"path %q { capabilities = [\"create\", \"read\", \"list\", \"update\", \"delete\"] }", name+"/*"))
+	if err != nil {
+		v.Cleanup()
+		t.Fatalf("unable to write policy %s: %v", name, err)
+	}
+
+	_, err = client.Logical().Write("auth/approle/role/"+name, map[string]interface{}{
+		"token_policies": name,
 	})
 	if err != nil {
-		t.Fatal(err)
+		v.Cleanup()
+		t.Fatalf("unable to create approle role %s: %v", name, err)
 	}
 
-	// Gets the role ID, that is basically the 'username' used to log into vault
-	res, err := client.Logical().Read("auth/approle/role/unittest/role-id")
+	res, err := client.Logical().Read("auth/approle/role/" + name + "/role-id")
 	if err != nil {
-		t.Fatal(err)
+		v.Cleanup()
+		t.Fatalf("unable to read role-id: %v", err)
 	}
-
-	// Keep the roleID for later use
 	roleID, ok := res.Data["role_id"].(string)
 	if !ok {
-		t.Fatal("Could not read the approle")
+		v.Cleanup()
+		t.Fatal("role_id missing from vault response")
 	}
 
-	// Create a secretID that is basically the password for the approle
-	res, err = client.Logical().Write("auth/approle/role/unittest/secret-id", nil)
+	res, err = client.Logical().Write("auth/approle/role/"+name+"/secret-id", nil)
 	if err != nil {
-		t.Fatal(err)
+		v.Cleanup()
+		t.Fatalf("unable to generate secret-id: %v", err)
 	}
-	// Use thre secretID later
 	secretID, ok := res.Data["secret_id"].(string)
 	if !ok {
-		t.Fatal("Could not generate the secret id")
+		v.Cleanup()
+		t.Fatal("secret_id missing from vault response")
 	}
 
-	// Create a broad policy to allow the approle to do whatever
-	err = client.Sys().PutPolicy("unittest", `
-        path "*" {
-            capabilities = ["create", "read", "list", "update", "delete"]
-        }
-    `)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Enable the KV secret engine
-	mountPath := "unittest"
-	err = client.Sys().Mount(mountPath, &vaultApi.MountInput{
-		Type: "kv",
-		Options: map[string]string{
-			"version": "2", // Use version 2 of the KV secret engine
-		},
-	})
-	if err != nil {
-		t.Fatalf("Unable to mount secret engine: %v", err)
-	}
-
-	return VaultTest{
-		Cluster: cluster,
-		Client: vaultStorage.Client{
-			APIClient: client,
-			Config: config.Vault{
-				RoleID:       roleID,
-				SecretID:     secretID,
-				MountPath:    "approle",
-				SecretEngine: "unittest",
-			},
+	v.Client = vaultStorage.Client{
+		APIClient: client,
+		Config: config.Vault{
+			RoleID:       roleID,
+			SecretID:     secretID,
+			MountPath:    "approle",
+			SecretEngine: name,
 		},
 	}
+	return v
+}
+
+// uniqueName derives a Vault path from the test name plus random bytes, so
+// tests sharing the instance never collide, including across reruns.
+func uniqueName(t *testing.T) string {
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatalf("unable to generate a unique mount name: %v", err)
+	}
+	safe := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r + 32
+		default:
+			return '-'
+		}
+	}, t.Name())
+	return "unittest-" + safe + "-" + hex.EncodeToString(b)
 }

@@ -40,7 +40,7 @@ test: compose-up
 	mkdir -p api/tests/accounts/pebble
 	mkdir -p api/tests/certificates
 	[ ! -f api/tests/accounts/pebble/private_key.pem ] && openssl ecparam -name prime256v1 -genkey -noout -out api/tests/accounts/pebble/private_key.pem && echo "private_key.pem generated." || echo "private_key.pem already exists."
-	LEGO_CA_CERTIFICATES=/tmp/pebble/test/certs/pebble.minica.pem go test -v -timeout 60s -coverprofile=cover.out -cover $(TEST)
+	LEGO_CA_CERTIFICATES=/tmp/pebble/test/certs/pebble.minica.pem VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root go test -v -timeout 120s -coverprofile=cover.out -cover $(TEST)
 	go tool cover -func=cover.out
 
 compose-up: compose-down
