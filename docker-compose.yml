@@ -14,9 +14,10 @@ services:
   # Dev-mode Vault for the test suite. Running it as a container instead of an
   # in-process test cluster keeps github.com/hashicorp/vault out of go.mod.
   vault:
-    image: hashicorp/vault:latest
-    cap_add:
-      - IPC_LOCK
+    # Fully qualified so Podman resolves it without prompting for a registry.
+    # No IPC_LOCK: dev mode implies disable_mlock, and the capability is not
+    # grantable under rootless Podman.
+    image: docker.io/hashicorp/vault:latest
     environment:
       VAULT_DEV_ROOT_TOKEN_ID: root
       VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200

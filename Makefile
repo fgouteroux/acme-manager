@@ -1,4 +1,7 @@
 TEST?=$$(go list ./... |grep -v 'vendor')
+# Container runtime used by the test fixtures. Override for Podman:
+#   make test COMPOSE="podman compose"
+COMPOSE      ?= docker compose
 GO           ?= go
 GOFMT        ?= $(GO)fmt
 GOFMT_FILES?=$$(find . -name '*.go' |grep -v vendor)
@@ -46,11 +49,11 @@ test: compose-up
 compose-up: compose-down
 	rm -rf /tmp/pebble
 	git clone https://github.com/letsencrypt/pebble.git /tmp/pebble
-	docker compose -f ./docker-compose.yml up -d
+	$(COMPOSE) -f ./docker-compose.yml up -d
 	sleep 5  # Wait for containers to initialize
 
 compose-down:
-	docker compose -f ./docker-compose.yml stop
+	$(COMPOSE) -f ./docker-compose.yml stop
 
 release:
 	goreleaser release --skip-publish --rm-dist
