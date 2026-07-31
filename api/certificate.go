@@ -408,6 +408,11 @@ func CreateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 			return
 		}
 
+		if err := utils.ValidateCertificateName(certParams.Name); err != nil {
+			responseJSON(w, nil, fmt.Errorf("invalid 'name' parameter: %w", err), http.StatusBadRequest)
+			return
+		}
+
 		if _, err := utils.SanitizedDomain(logger, certParams.Domain); err != nil {
 			responseJSON(w, nil, fmt.Errorf("invalid 'domain' parameter: %w", err), http.StatusBadRequest)
 			return
@@ -613,6 +618,11 @@ func UpdateCertificateHandler(logger log.Logger, proxyClient *http.Client) http.
 
 		if !slices.Contains(config.SupportedIssuers, certParams.Issuer) {
 			responseJSON(w, nil, fmt.Errorf("invalid issuer '%s' must be one of %v", certParams.Issuer, config.SupportedIssuers), http.StatusBadRequest)
+			return
+		}
+
+		if err := utils.ValidateCertificateName(certParams.Name); err != nil {
+			responseJSON(w, nil, fmt.Errorf("invalid 'name' parameter: %w", err), http.StatusBadRequest)
 			return
 		}
 

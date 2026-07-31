@@ -2,7 +2,6 @@ package certstore
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"strings"
 
@@ -85,8 +84,6 @@ func OnStartup(logger log.Logger) error {
 
 		// Store in ring
 		for tokenID, token := range tokens {
-			fmt.Println(tokenID)
-
 			existing, err := AmStore.GetToken(tokenID)
 			if err != nil && !strings.Contains(err.Error(), "not found") {
 				_ = level.Error(logger).Log("msg", "failed to check token existence",

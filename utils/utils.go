@@ -94,6 +94,24 @@ var domainLabelRegexp = regexp.MustCompile(`^[A-Za-z0-9_]([A-Za-z0-9_-]*[A-Za-z0
 // at most a single leading "*." wildcard label. On any failure it returns a
 // non-nil error instead of a partial value so callers never build paths from
 // unvalidated input.
+// ValidateCertificateName rejects names that would escape the storage layout.
+// A named certificate is stored at "<prefix>/<owner>/<name>" in Vault and on
+// disk, so a name carrying a path separator or a parent reference would resolve
+// outside the owner's namespace. Anything else is accepted, to stay compatible
+// with names already in use.
+func ValidateCertificateName(name string) error {
+	if name == "" {
+		return nil
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return fmt.Errorf("name %q must not contain a path separator", name)
+	}
+	if name == "." || name == ".." || strings.Contains(name, "..") {
+		return fmt.Errorf("name %q must not contain a parent directory reference", name)
+	}
+	return nil
+}
+
 func SanitizedDomain(logger log.Logger, domain string) (string, error) {
 	if domain == "" {
 		return "", fmt.Errorf("domain is empty")
