@@ -611,6 +611,31 @@ acme_manager_vault_secret_operations_total{operation="delete",secret_type="certi
 acme_manager_vault_secret_operations_total{operation="get",secret_type="certificate",status="success"} 4
 acme_manager_vault_secret_operations_total{operation="get",secret_type="token",status="success"} 1
 acme_manager_vault_secret_operations_total{operation="put",secret_type="certificate",status="success"} 2
+
+# HELP acme_manager_kv_keys Number of keys held in the Ring KV store, per key type
+# TYPE acme_manager_kv_keys gauge
+acme_manager_kv_keys{type="certificate"} 12
+acme_manager_kv_keys{type="ratelimit"} 0
+acme_manager_kv_keys{type="token"} 3
+
+# HELP acme_manager_token_expiry Days until the token expires, +Inf if it never expires
+# TYPE acme_manager_token_expiry gauge
+acme_manager_token_expiry{expires="2026-12-31 23:59:59 +0000 UTC",id="6f1c...",scope="read,create",username="testfgx"} 154
+acme_manager_token_expiry{expires="Never",id="9ab2...",scope="read",username="testfgx"} +Inf
+```
+
+**Client metrics**
+
+The client exposes its own build info and operating mode.
+
+```
+# HELP acme_manager_client_build_info A metric with a constant '1' value labeled by version, revision, branch, goversion from which acme_manager_client was built.
+# TYPE acme_manager_client_build_info gauge
+acme_manager_client_build_info{branch="main",goarch="amd64",goos="linux",goversion="go1.26.0",revision="abc123",version="0.8.1"} 1
+
+# HELP acme_manager_client_role Operating mode of the client: 1 = full (manages the certificate lifecycle), 2 = pull-only (deploys only)
+# TYPE acme_manager_client_role gauge
+acme_manager_client_role 1
 ```
 
 ### Limitations
