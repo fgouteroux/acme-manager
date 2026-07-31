@@ -60,7 +60,7 @@ func TestCreateTokenHandler(t *testing.T) {
 
 	enableLogging := os.Getenv("ENABLE_DEBUG") == "true"
 	vaultTest := testhelper.GetTestVaultServer(t, enableLogging)
-	defer vaultTest.Cluster.Cleanup()
+	defer vaultTest.Cleanup()
 
 	vault.GlobalClient = &vaultTest.Client
 
@@ -121,7 +121,7 @@ func TestUpdateTokenHandler(t *testing.T) {
 
 	enableLogging := os.Getenv("ENABLE_DEBUG") == "true"
 	vaultTest := testhelper.GetTestVaultServer(t, enableLogging)
-	defer vaultTest.Cluster.Cleanup()
+	defer vaultTest.Cleanup()
 
 	vault.GlobalClient = &vaultTest.Client
 
@@ -183,7 +183,7 @@ func TestRevokeTokenHandler(t *testing.T) {
 
 	enableLogging := os.Getenv("ENABLE_DEBUG") == "true"
 	vaultTest := testhelper.GetTestVaultServer(t, enableLogging)
-	defer vaultTest.Cluster.Cleanup()
+	defer vaultTest.Cleanup()
 
 	vault.GlobalClient = &vaultTest.Client
 

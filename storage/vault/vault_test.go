@@ -8,7 +8,7 @@ import (
 
 func TestVaultGetPutSecret(t *testing.T) {
 	vaultTest := testhelper.GetTestVaultServer(t, false)
-	defer vaultTest.Cluster.Cleanup()
+	defer vaultTest.Cleanup()
 
 	err := vaultTest.Client.PutSecretWithAppRole("test", map[string]interface{}{"foo": "bar"})
 	if err != nil {
@@ -23,7 +23,7 @@ func TestVaultGetPutSecret(t *testing.T) {
 
 func TestVaultDeleteSecret(t *testing.T) {
 	vaultTest := testhelper.GetTestVaultServer(t, false)
-	defer vaultTest.Cluster.Cleanup()
+	defer vaultTest.Cleanup()
 
 	err := vaultTest.Client.PutSecretWithAppRole("test", map[string]interface{}{"foo": "bar"})
 	if err != nil {
@@ -38,7 +38,7 @@ func TestVaultDeleteSecret(t *testing.T) {
 
 func TestVaultDestroySecret(t *testing.T) {
 	vaultTest := testhelper.GetTestVaultServer(t, false)
-	defer vaultTest.Cluster.Cleanup()
+	defer vaultTest.Cleanup()
 
 	err := vaultTest.Client.PutSecretWithAppRole("test", map[string]interface{}{"foo": "bar"})
 	if err != nil {
@@ -53,7 +53,7 @@ func TestVaultDestroySecret(t *testing.T) {
 
 func TestVaultListSecret(t *testing.T) {
 	vaultTest := testhelper.GetTestVaultServer(t, false)
-	defer vaultTest.Cluster.Cleanup()
+	defer vaultTest.Cleanup()
 
 	err := vaultTest.Client.PutSecretWithAppRole("test/secret1", map[string]interface{}{"foo": "bar"})
 	if err != nil {

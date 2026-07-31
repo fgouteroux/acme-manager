@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/go-kit/log/level"
-	"github.com/prometheus/prometheus/model/timestamp"
 
 	"github.com/fgouteroux/acme-manager/models"
 )
@@ -55,7 +54,7 @@ func (c *CertStore) PutCertificate(cert *models.Certificate) error {
 	key := GenerateCertificateKey(cert.Owner, cert.Issuer, cert.Name, cert.Domain)
 
 	// Update the timestamp
-	cert.UpdatedAt = timestamp.FromTime(time.Now())
+	cert.UpdatedAt = time.Now().UnixMilli()
 
 	ctx := context.Background()
 	err := c.RingConfig.CertificateClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
@@ -121,8 +120,8 @@ func (c *CertStore) DeleteCertificate(owner, issuer, name, domain string) error 
 	}
 
 	// Mark as deleted
-	cert.DeletedAt = timestamp.FromTime(time.Now())
-	cert.UpdatedAt = timestamp.FromTime(time.Now())
+	cert.DeletedAt = time.Now().UnixMilli()
+	cert.UpdatedAt = time.Now().UnixMilli()
 
 	// Notify the deletion
 	err = c.RingConfig.CertificateClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
@@ -240,7 +239,7 @@ func (c *CertStore) PutToken(tokenID string, token *models.Token) error {
 	key := GenerateTokenKey(tokenID)
 
 	// Update the timestamp
-	token.UpdatedAt = timestamp.FromTime(time.Now())
+	token.UpdatedAt = time.Now().UnixMilli()
 
 	ctx := context.Background()
 	err := c.RingConfig.TokenClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
@@ -306,8 +305,8 @@ func (c *CertStore) DeleteToken(tokenID string) error {
 	}
 
 	// Mark as deleted
-	token.DeletedAt = timestamp.FromTime(time.Now())
-	token.UpdatedAt = timestamp.FromTime(time.Now())
+	token.DeletedAt = time.Now().UnixMilli()
+	token.UpdatedAt = time.Now().UnixMilli()
 
 	// Update
 	err = c.RingConfig.TokenClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
@@ -374,7 +373,7 @@ func (c *CertStore) PutRateLimit(rateLimit *models.RateLimit, name string) error
 	key := GenerateRateLimitKey(rateLimit.Owner, rateLimit.Issuer, name, rateLimit.Domain)
 
 	// Update the timestamp
-	rateLimit.UpdatedAt = timestamp.FromTime(time.Now())
+	rateLimit.UpdatedAt = time.Now().UnixMilli()
 
 	ctx := context.Background()
 	err := c.RingConfig.RateLimitClient.CAS(ctx, key, func(_ interface{}) (interface{}, bool, error) {
