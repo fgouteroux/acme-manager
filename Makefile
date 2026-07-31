@@ -50,7 +50,22 @@ compose-up: compose-down
 	rm -rf /tmp/pebble
 	git clone https://github.com/letsencrypt/pebble.git /tmp/pebble
 	$(COMPOSE) -f ./docker-compose.yml up -d
-	sleep 5  # Wait for containers to initialize
+	@echo "waiting for pebble (14000) and vault (8200)..."
+	@for i in $$(seq 1 30); do \
+		pebble=$$(curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1:14000/dir 2>/dev/null || echo 000); \
+		vault=$$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8200/v1/sys/health 2>/dev/null || echo 000); \
+		if [ "$$pebble" = "200" ] && [ "$$vault" = "200" ]; then \
+			echo "ready after $$i s (pebble=$$pebble vault=$$vault)"; \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo ""; \
+	echo "ERROR: services not ready (pebble=$$pebble vault=$$vault)"; \
+	echo "--- containers ---"; $(COMPOSE) -f ./docker-compose.yml ps || true; \
+	echo "--- pebble logs ---"; $(COMPOSE) -f ./docker-compose.yml logs pebble || true; \
+	echo "--- vault logs ---"; $(COMPOSE) -f ./docker-compose.yml logs vault || true; \
+	exit 1
 
 compose-down:
 	$(COMPOSE) -f ./docker-compose.yml stop

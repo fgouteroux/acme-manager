@@ -9,7 +9,11 @@ services:
       PEBBLE_VA_ALWAYS_VALID: 1
       PEBBLE_WFE_NONCEREJECT: 0
     volumes:
-      - /tmp/pebble/test:/test
+      # ':z' relabels for SELinux, without which the mount is unreadable under
+      # Podman on RHEL-family hosts. The image is built FROM scratch, so Pebble
+      # exits silently when it cannot read its config. Docker ignores the flag
+      # on hosts without SELinux.
+      - /tmp/pebble/test:/test:z
 
   # Dev-mode Vault for the test suite. Running it as a container instead of an
   # in-process test cluster keeps github.com/hashicorp/vault out of go.mod.
