@@ -1,5 +1,10 @@
 # acme_manager
 
+[![Test](https://github.com/fgouteroux/acme-manager/actions/workflows/ci.yaml/badge.svg)](https://github.com/fgouteroux/acme-manager/actions/workflows/ci.yaml)
+[![Go](https://img.shields.io/github/go-mod/go-version/fgouteroux/acme-manager)](go.mod)
+[![Release](https://img.shields.io/github/v/release/fgouteroux/acme-manager)](https://github.com/fgouteroux/acme-manager/releases)
+[![License](https://img.shields.io/github/license/fgouteroux/acme-manager)](LICENSE)
+
 ACME Manager is a tool designed to create, manage, and deploy ACME certificates on servers. It handles automatic renewal, monitors expiration dates, and ensures seamless deployment for applications or proxies.
 
 ![Acme Manager](img/home.png)
