@@ -2,6 +2,10 @@ TEST?=$$(go list ./... |grep -v 'vendor')
 # Container runtime used by the test fixtures. Override for Podman:
 #   make test COMPOSE="podman compose"
 COMPOSE      ?= docker compose
+# Server-side debug logs during tests. Without it TestMain installs a no-op
+# logger and failures surface as a bare HTTP status with no explanation.
+# Quiet it with: make test ENABLE_DEBUG=false
+ENABLE_DEBUG ?= true
 GO           ?= go
 GOFMT        ?= $(GO)fmt
 GOFMT_FILES?=$$(find . -name '*.go' |grep -v vendor)
@@ -43,7 +47,7 @@ test: compose-up
 	mkdir -p api/tests/accounts/pebble
 	mkdir -p api/tests/certificates
 	[ ! -f api/tests/accounts/pebble/private_key.pem ] && openssl ecparam -name prime256v1 -genkey -noout -out api/tests/accounts/pebble/private_key.pem && echo "private_key.pem generated." || echo "private_key.pem already exists."
-	LEGO_CA_CERTIFICATES=/tmp/pebble/test/certs/pebble.minica.pem VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root go test -v -timeout 120s -coverprofile=cover.out -cover $(TEST)
+	LEGO_CA_CERTIFICATES=/tmp/pebble/test/certs/pebble.minica.pem VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root ENABLE_DEBUG=$(ENABLE_DEBUG) go test -v -timeout 120s -coverprofile=cover.out -cover $(TEST)
 	go tool cover -func=cover.out
 
 compose-up: compose-down
