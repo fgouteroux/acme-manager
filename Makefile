@@ -6,6 +6,10 @@ COMPOSE      ?= docker compose
 # logger and failures surface as a bare HTTP status with no explanation.
 # Quiet it with: make test ENABLE_DEBUG=false
 ENABLE_DEBUG ?= true
+# SELinux relabel suffix for bind mounts. Empty by default so Docker behaves
+# exactly as before; required under Podman on RHEL-family hosts:
+#   make test COMPOSE="podman compose" MOUNT_LABEL=:z
+MOUNT_LABEL  ?=
 GO           ?= go
 GOFMT        ?= $(GO)fmt
 GOFMT_FILES?=$$(find . -name '*.go' |grep -v vendor)
@@ -53,7 +57,7 @@ test: compose-up
 compose-up: compose-down
 	rm -rf /tmp/pebble
 	git clone https://github.com/letsencrypt/pebble.git /tmp/pebble
-	$(COMPOSE) -f ./docker-compose.yml up -d
+	MOUNT_LABEL=$(MOUNT_LABEL) $(COMPOSE) -f ./docker-compose.yml up -d
 	@echo "waiting for pebble (14000) and vault (8200)..."
 	@for i in $$(seq 1 30); do \
 		pebble=$$(curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1:14000/dir 2>/dev/null || echo 000); \
@@ -66,13 +70,13 @@ compose-up: compose-down
 	done; \
 	echo ""; \
 	echo "ERROR: services not ready (pebble=$$pebble vault=$$vault)"; \
-	echo "--- containers ---"; $(COMPOSE) -f ./docker-compose.yml ps || true; \
-	echo "--- pebble logs ---"; $(COMPOSE) -f ./docker-compose.yml logs pebble || true; \
-	echo "--- vault logs ---"; $(COMPOSE) -f ./docker-compose.yml logs vault || true; \
+	echo "--- containers ---"; MOUNT_LABEL=$(MOUNT_LABEL) $(COMPOSE) -f ./docker-compose.yml ps || true; \
+	echo "--- pebble logs ---"; MOUNT_LABEL=$(MOUNT_LABEL) $(COMPOSE) -f ./docker-compose.yml logs pebble || true; \
+	echo "--- vault logs ---"; MOUNT_LABEL=$(MOUNT_LABEL) $(COMPOSE) -f ./docker-compose.yml logs vault || true; \
 	exit 1
 
 compose-down:
-	$(COMPOSE) -f ./docker-compose.yml stop
+	MOUNT_LABEL=$(MOUNT_LABEL) $(COMPOSE) -f ./docker-compose.yml stop
 
 release:
 	goreleaser release --skip-publish --rm-dist
