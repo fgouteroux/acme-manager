@@ -1,0 +1,42 @@
+version: 2
+
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # OpenTelemetry modules are released in lockstep and their APIs are
+      # coupled: contrib/* pins the exporter versions it was built against.
+      # Bumping go.opentelemetry.io/otel* without contrib/* leaves the set
+      # incoherent and breaks the build, so they must move together.
+      #
+      # Note this only covers version updates. Security updates bump just the
+      # vulnerable modules, so they can still produce an incoherent set and may
+      # need a manual follow-up commit raising contrib/* to match.
+      opentelemetry:
+        applies-to: version-updates
+        patterns:
+          - "go.opentelemetry.io/otel"
+          - "go.opentelemetry.io/otel/*"
+          - "go.opentelemetry.io/contrib/*"
+          - "go.opentelemetry.io/proto/*"
+      golang-x:
+        patterns:
+          - "golang.org/x/*"
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+      prometheus:
+        patterns:
+          - "github.com/prometheus/*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"
