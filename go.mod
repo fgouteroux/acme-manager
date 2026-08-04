@@ -3,7 +3,7 @@ module github.com/fgouteroux/acme-manager
 go 1.26.0
 
 require (
-	github.com/fsnotify/fsnotify v1.9.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-acme/lego/v5 v5.0.0-20260122172359-12a393888c0c
 	github.com/go-kit/log v0.2.1
 	github.com/gogo/protobuf v1.3.2
