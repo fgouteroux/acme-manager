@@ -577,17 +577,30 @@ Client metrics are exposed at:
 http://localhost:8989/metrics
 ```
 
-Two of them describe the client itself:
+Three of them are worth knowing about:
 
 | Metric | Meaning |
 |---|---|
 | `acme_manager_client_role` | `1` = full mode, `2` = pull-only mode |
 | `acme_manager_client_build_info` | version, revision, branch and Go version, as a constant `1` |
+| `acme_manager_local_certificate_metadata_mismatch{issuer,name,domain}` | `1` when the server's metadata and its certificate content disagree |
 
 `acme_manager_client_role` is useful to confirm that exactly one client manages
 a given certificate set and the rest only deploy it. Unlike the server's
 `acme_manager_node_role`, it is not elected: it reflects the `-client.pull-only`
 flag and never changes while the process runs.
+
+`acme_manager_local_certificate_metadata_mismatch` is `1` when the certificate the
+server returns does not hash to the `fingerprint` the same server publishes in its
+metadata. The client decides whether the local file is current by comparing it
+against that fingerprint, so it can never converge: it rewrites the file and runs
+`post_cmd` on every cycle, logging `deployed local certificate` each time.
+
+The client only reports the condition — it never re-issues the certificate on its
+own, since that would turn a server-side inconsistency into an unbounded issuance
+loop against the CA. Resolving it means making the server consistent again, by
+renewing or recreating the certificate. Alert on it over several cycles rather than
+instantly: it is briefly and legitimately `1` while a renewal propagates.
 
 ## Common Configuration Options
 

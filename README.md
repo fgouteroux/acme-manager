@@ -631,7 +631,8 @@ acme_manager_token_expiry{expires="Never",id="9ab2...",scope="read",username="te
 
 **Client metrics**
 
-The client exposes its own build info and operating mode.
+The client exposes its own build info and operating mode, plus the health of each
+certificate it deploys.
 
 ```
 # HELP acme_manager_client_build_info A metric with a constant '1' value labeled by version, revision, branch, goversion from which acme_manager_client was built.
@@ -641,7 +642,16 @@ acme_manager_client_build_info{branch="main",goarch="amd64",goos="linux",goversi
 # HELP acme_manager_client_role Operating mode of the client: 1 = full (manages the certificate lifecycle), 2 = pull-only (deploys only)
 # TYPE acme_manager_client_role gauge
 acme_manager_client_role 1
+
+# HELP acme_manager_local_certificate_metadata_mismatch 1 if the certificate content served by the remote server does not match the fingerprint advertised in its metadata, 0 otherwise
+# TYPE acme_manager_local_certificate_metadata_mismatch gauge
+acme_manager_local_certificate_metadata_mismatch{domain="example.com",issuer="letsencrypt",name=""} 0
 ```
+
+A lasting `acme_manager_local_certificate_metadata_mismatch` of `1` means the server's
+own metadata and certificate content disagree. The client cannot converge in that
+state: it rewrites the local file and runs `post_cmd` on every cycle. Resolving it
+means making the server consistent again, by renewing or recreating the certificate.
 
 ### Limitations
 

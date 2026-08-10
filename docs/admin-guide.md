@@ -1284,6 +1284,12 @@ acme_manager_certificate_renewals{issuer, owner, domain, name}
 # Local certificate operations (operation=created|deleted)
 acme_manager_local_certificate_operations_total{issuer, operation}
 
+# 1 when the certificate content the server returns does not hash to the
+# fingerprint the same server publishes in its metadata. The client cannot
+# converge in that state: it rewrites the local file and runs post_cmd on
+# every cycle. Exposed by acme-manager-client only.
+acme_manager_local_certificate_metadata_mismatch{issuer, name, domain}
+
 # Local command pre/post run (status=success|failed)
 acme_manager_local_cmd_run_total{command, status}
 
@@ -1440,6 +1446,31 @@ groups:
           summary: "ACME Manager cluster has no leader"
           description: "The ACME Manager cluster has no active leader. Certificate operations are blocked."
       
+      # More than one leader: the renewal loop runs on each of them, so a
+      # certificate can be renewed twice and the KV metadata can end up
+      # describing a different certificate than the one actually stored.
+      - alert: MultipleClusterLeaders
+        expr: count(acme_manager_node_role == 1) > 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ACME Manager cluster has {{ $value }} leaders"
+          description: "More than one node is acting as leader. Concurrent renewals may desynchronize certificate metadata from certificate content."
+
+      # Server metadata and certificate content disagree. The client redeploys
+      # the file and runs post_cmd on every cycle without ever converging.
+      # 'for' spans several client cycles: the mismatch is briefly and
+      # legitimately 1 while a renewal propagates.
+      - alert: CertificateMetadataMismatch
+        expr: max by (issuer, name, domain) (acme_manager_local_certificate_metadata_mismatch) == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Certificate {{ $labels.domain }} metadata does not match its content"
+          description: "The server publishes a fingerprint that does not match the certificate it serves for {{ $labels.domain }} ({{ $labels.issuer }}). Renew or recreate it to resynchronize."
+
       # Issuer health check failing
       - alert: IssuerUnhealthy
         expr: acme_manager_issuer_config_error > 0
