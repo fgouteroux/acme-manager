@@ -572,27 +572,35 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 							continue
 						}
 
-						err = os.WriteFile(certFilePath, []byte(certificate.Cert), GlobalConfig.Common.CertFilePerm)
-						if err != nil {
-							_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to save local certificate file %s", certFilePath), "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
-						} else {
-							hasChange = true
-							_ = level.Info(logger).Log("msg", fmt.Sprintf("deployed local certificate %s", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
-							metrics.IncCreatedLocalCertificate(certData.Issuer)
+						// The local file is compared against the fingerprint published in the
+						// server metadata, while its content comes from the secret store. When
+						// those two disagree the file already holds the exact bytes just
+						// fetched, and rewriting them would set hasChange and fire post_cmd —
+						// reloading the consuming service — on every cycle, indefinitely.
+						// Only a real content change is a deployment.
+						if !bytes.Equal(currentCertBytes, []byte(certificate.Cert)) {
+							err = os.WriteFile(certFilePath, []byte(certificate.Cert), GlobalConfig.Common.CertFilePerm)
+							if err != nil {
+								_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to save local certificate file %s", certFilePath), "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+							} else {
+								hasChange = true
+								_ = level.Info(logger).Log("msg", fmt.Sprintf("deployed local certificate %s", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+								metrics.IncCreatedLocalCertificate(certData.Issuer)
+							}
+
+							// Also restore CA chain file when bundle=false
+							if !certData.Bundle && certificate.CAIssuer != "" {
+								caFilePath := certLocalPath(GlobalConfig.Common.CertDir, certData.Issuer, certData.Name, certData.Domain, GlobalConfig.Common.CertCAFileExt)
+								err = os.WriteFile(caFilePath, []byte(certificate.CAIssuer), GlobalConfig.Common.CertFilePerm)
+								if err != nil {
+									_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to save CA chain file %s", caFilePath), "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+								} else {
+									_ = level.Info(logger).Log("msg", fmt.Sprintf("restored CA chain file %s", caFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+								}
+							}
 						}
 
 						checkServerFingerprint(logger, old[idx], certificate.Cert)
-
-						// Also restore CA chain file when bundle=false
-						if !certData.Bundle && certificate.CAIssuer != "" {
-							caFilePath := certLocalPath(GlobalConfig.Common.CertDir, certData.Issuer, certData.Name, certData.Domain, GlobalConfig.Common.CertCAFileExt)
-							err = os.WriteFile(caFilePath, []byte(certificate.CAIssuer), GlobalConfig.Common.CertFilePerm)
-							if err != nil {
-								_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to save CA chain file %s", caFilePath), "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
-							} else {
-								_ = level.Info(logger).Log("msg", fmt.Sprintf("restored CA chain file %s", caFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
-							}
-						}
 					} else {
 						metrics.SetLocalCertificateMetadataMismatch(old[idx].Issuer, old[idx].Name, old[idx].Domain, false)
 					}
@@ -906,27 +914,35 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 					continue
 				}
 
-				err = os.WriteFile(certFilePath, []byte(certificate.Cert), GlobalConfig.Common.CertFilePerm)
-				if err != nil {
-					_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to save local certificate file %s", certFilePath), "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
-				} else {
-					hasChange = true
-					_ = level.Info(logger).Log("msg", fmt.Sprintf("deployed local certificate %s", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
-					metrics.IncCreatedLocalCertificate(certData.Issuer)
+				// The local file is compared against the fingerprint published in the server
+				// metadata, while its content comes from the secret store. When those two
+				// disagree the file already holds the exact bytes just fetched, and rewriting
+				// them would set hasChange and fire post_cmd — reloading the consuming
+				// service — on every cycle, indefinitely. Only a real content change is a
+				// deployment.
+				if !bytes.Equal(currentCertBytes, []byte(certificate.Cert)) {
+					err = os.WriteFile(certFilePath, []byte(certificate.Cert), GlobalConfig.Common.CertFilePerm)
+					if err != nil {
+						_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to save local certificate file %s", certFilePath), "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+					} else {
+						hasChange = true
+						_ = level.Info(logger).Log("msg", fmt.Sprintf("deployed local certificate %s", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+						metrics.IncCreatedLocalCertificate(certData.Issuer)
+					}
+
+					// Also restore CA chain file when bundle=false
+					if !certData.Bundle && certificate.CAIssuer != "" {
+						caFilePath := certLocalPath(GlobalConfig.Common.CertDir, certData.Issuer, certData.Name, certData.Domain, GlobalConfig.Common.CertCAFileExt)
+						err = os.WriteFile(caFilePath, []byte(certificate.CAIssuer), GlobalConfig.Common.CertFilePerm)
+						if err != nil {
+							_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to save CA chain file %s", caFilePath), "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+						} else {
+							_ = level.Info(logger).Log("msg", fmt.Sprintf("restored CA chain file %s", caFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+						}
+					}
 				}
 
 				checkServerFingerprint(logger, certData, certificate.Cert)
-
-				// Also restore CA chain file when bundle=false
-				if !certData.Bundle && certificate.CAIssuer != "" {
-					caFilePath := certLocalPath(GlobalConfig.Common.CertDir, certData.Issuer, certData.Name, certData.Domain, GlobalConfig.Common.CertCAFileExt)
-					err = os.WriteFile(caFilePath, []byte(certificate.CAIssuer), GlobalConfig.Common.CertFilePerm)
-					if err != nil {
-						_ = level.Error(logger).Log("msg", fmt.Sprintf("unable to save CA chain file %s", caFilePath), "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
-					} else {
-						_ = level.Info(logger).Log("msg", fmt.Sprintf("restored CA chain file %s", caFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
-					}
-				}
 			} else {
 				metrics.SetLocalCertificateMetadataMismatch(certData.Issuer, certData.Name, certData.Domain, false)
 			}
