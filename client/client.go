@@ -372,7 +372,30 @@ func createLocalCertificateFile(certData models.CertMap) error {
 	return nil
 }
 
+// checkServerFingerprint verifies that the certificate content just written
+// locally matches the fingerprint the server advertises in its metadata.
+//
+// The two come from different places on the server side: the fingerprint from
+// the ring KV store, the content from the secret store. When they disagree —
+// after a lost KV update, a split-brain, a partial renewal — the local file can
+// never satisfy the comparison, so the client re-downloads and rewrites it (and
+// runs post_cmd) on every single cycle, silently, forever.
+//
+// This deliberately only reports: recreating the certificate here would turn any
+// server-side inconsistency into an unbounded ACME issuance loop.
+func checkServerFingerprint(logger log.Logger, meta models.Certificate, cert string) {
+	mismatch := utils.GenerateFingerprint([]byte(cert)) != meta.Fingerprint
+	if mismatch {
+		_ = level.Warn(logger).Log(
+			"msg", "server certificate content does not match the fingerprint in its metadata, the local file will be redeployed on every cycle until the server is resynced",
+			"domain", meta.Domain, "issuer", meta.Issuer, "name", meta.Name, "owner", Owner,
+		)
+	}
+	metrics.SetLocalCertificateMetadataMismatch(meta.Issuer, meta.Name, meta.Domain, mismatch)
+}
+
 func deleteLocalCertificateFile(issuer, name, domain string) error {
+	metrics.DeleteLocalCertificateMetadataMismatch(issuer, name, domain)
 	certFilePath := certLocalPath(GlobalConfig.Common.CertDir, issuer, name, domain, GlobalConfig.Common.CertFileExt)
 	if utils.FileExists(certFilePath) {
 		err := os.Remove(certFilePath)
@@ -529,6 +552,7 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 					hasChange = true
 					_ = level.Info(logger).Log("msg", fmt.Sprintf("local certificate file '%s' restored.", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 					metrics.IncCreatedLocalCertificate(certData.Issuer)
+					checkServerFingerprint(logger, old[idx], certificate.Cert)
 				} else {
 					var currentCertBytes []byte
 					currentCertBytes, err = os.ReadFile(filepath.Clean(certFilePath))
@@ -557,6 +581,8 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 							metrics.IncCreatedLocalCertificate(certData.Issuer)
 						}
 
+						checkServerFingerprint(logger, old[idx], certificate.Cert)
+
 						// Also restore CA chain file when bundle=false
 						if !certData.Bundle && certificate.CAIssuer != "" {
 							caFilePath := certLocalPath(GlobalConfig.Common.CertDir, certData.Issuer, certData.Name, certData.Domain, GlobalConfig.Common.CertCAFileExt)
@@ -567,6 +593,8 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 								_ = level.Info(logger).Log("msg", fmt.Sprintf("restored CA chain file %s", caFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 							}
 						}
+					} else {
+						metrics.SetLocalCertificateMetadataMismatch(old[idx].Issuer, old[idx].Name, old[idx].Domain, false)
 					}
 				}
 			}
@@ -858,6 +886,7 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 			hasChange = true
 			_ = level.Info(logger).Log("msg", fmt.Sprintf("local certificate file '%s' restored.", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 			metrics.IncCreatedLocalCertificate(certData.Issuer)
+			checkServerFingerprint(logger, certData, certificate.Cert)
 		} else {
 			var currentCertBytes []byte
 			currentCertBytes, err = os.ReadFile(filepath.Clean(certFilePath))
@@ -886,6 +915,8 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 					metrics.IncCreatedLocalCertificate(certData.Issuer)
 				}
 
+				checkServerFingerprint(logger, certData, certificate.Cert)
+
 				// Also restore CA chain file when bundle=false
 				if !certData.Bundle && certificate.CAIssuer != "" {
 					caFilePath := certLocalPath(GlobalConfig.Common.CertDir, certData.Issuer, certData.Name, certData.Domain, GlobalConfig.Common.CertCAFileExt)
@@ -896,6 +927,8 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 						_ = level.Info(logger).Log("msg", fmt.Sprintf("restored CA chain file %s", caFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 					}
 				}
+			} else {
+				metrics.SetLocalCertificateMetadataMismatch(certData.Issuer, certData.Name, certData.Domain, false)
 			}
 		}
 

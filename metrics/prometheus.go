@@ -109,6 +109,14 @@ var (
 		[]string{"issuer", "owner", "operation"},
 	)
 
+	localCertificateMetadataMismatch = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "acme_manager_local_certificate_metadata_mismatch",
+			Help: "1 if the certificate content served by the remote server does not match the fingerprint advertised in its metadata, 0 otherwise",
+		},
+		[]string{"issuer", "name", "domain"},
+	)
+
 	clientRole = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "acme_manager_client_role",
@@ -180,6 +188,25 @@ func IncCreatedLocalCertificate(issuer string) {
 
 func IncDeletedLocalCertificate(issuer string) {
 	localCertificateOperationsTotal.WithLabelValues(issuer, "deleted").Inc()
+}
+
+// SetLocalCertificateMetadataMismatch reports whether the certificate content
+// returned by the remote server matches the fingerprint published in its
+// metadata. A lasting mismatch means the server's own metadata store and the
+// certificate content disagree: the client then rewrites the same file on every
+// cycle without ever converging.
+func SetLocalCertificateMetadataMismatch(issuer, name, domain string, mismatch bool) {
+	var value float64
+	if mismatch {
+		value = 1
+	}
+	localCertificateMetadataMismatch.WithLabelValues(issuer, name, domain).Set(value)
+}
+
+// DeleteLocalCertificateMetadataMismatch removes the series for a certificate
+// that is no longer deployed locally, so it doesn't linger at 1 forever.
+func DeleteLocalCertificateMetadataMismatch(issuer, name, domain string) {
+	localCertificateMetadataMismatch.DeleteLabelValues(issuer, name, domain)
 }
 
 func IncRunSuccessLocalCmd(command string) {
@@ -268,6 +295,7 @@ func init() {
 		httpRequestDuration,
 		httpRequestsInFlight,
 		rateLimitBlockedTotal,
+		localCertificateMetadataMismatch,
 		clientRole,
 	}
 
