@@ -2,7 +2,6 @@ package certstore
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"time"
 
@@ -253,7 +252,7 @@ func CleanupCertificateVersions(logger log.Logger, certExpDays int, cleanupCertR
 				var issuerAcmeClient *lego.Client
 				var issuerFound bool
 				if issuerAcmeClient, issuerFound = AcmeClient[data.Issuer]; !issuerFound {
-					fmt.Printf("Could not cleanup certificate domain %s, issuer %s not found", data.Domain, data.Issuer)
+					_ = level.Error(logger).Log("msg", "could not cleanup certificate, issuer not found", "domain", data.Domain, "issuer", data.Issuer, "version", versionNumber, "secret_path", secretPath)
 					continue
 				}
 
