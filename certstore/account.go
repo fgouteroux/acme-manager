@@ -49,6 +49,47 @@ type Account struct {
 	key          crypto.Signer
 }
 
+// legacyRegistration is the pre-v5.5.2 on-disk shape of the registration
+// field: the ACME account nested under "body", with its URL in "uri". lego
+// v5.5.2 replaced registration.Resource with acme.ExtendedAccount, which
+// serializes the account fields flat and names the URL "accountURL".
+type legacyRegistration struct {
+	Body *acme.Account `json:"body"`
+	URI  string        `json:"uri"`
+}
+
+// UnmarshalJSON reads both the current and the legacy account file layouts, so
+// that upgrading does not lose the account URL and send every issuer through
+// registration recovery against the CA.
+func (a *Account) UnmarshalJSON(data []byte) error {
+	type plain Account // sheds this method, so no recursion
+	var current plain
+	if err := json.Unmarshal(data, &current); err != nil {
+		return err
+	}
+	*a = Account(current)
+
+	if a.Registration != nil && a.Registration.Status != "" {
+		return nil
+	}
+
+	var legacy struct {
+		Registration *legacyRegistration `json:"registration"`
+	}
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return nil
+	}
+	if legacy.Registration == nil || legacy.Registration.Body == nil {
+		return nil
+	}
+	a.Registration = &acme.ExtendedAccount{
+		Account:  *legacy.Registration.Body,
+		Location: legacy.Registration.URI,
+	}
+
+	return nil
+}
+
 /** Implementation of the registration.User interface **/
 
 // GetEmail returns the email address for the account.
