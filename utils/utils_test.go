@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
+	"github.com/sirupsen/logrus"
 )
 
 func TestSanitizedDomain(t *testing.T) {
@@ -127,5 +128,45 @@ func TestVerifyHash(t *testing.T) {
 	}
 	if HashAPIKey(good) != SHA256Hash(good) {
 		t.Error("HashAPIKey must use sha256")
+	}
+}
+
+func TestResponseLogLevel(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want logrus.Level
+	}{
+		{
+			name: "badNonce is replayed by lego",
+			body: `{"type":"urn:ietf:params:acme:error:badNonce","status":400,"detail":"The Replay Nonce is not recognized"}`,
+			want: logrus.WarnLevel,
+		},
+		{
+			name: "alreadyRevoked confirms a previous cycle",
+			body: `{"type":"urn:ietf:params:acme:error:alreadyRevoked","status":400,"detail":"The certificate is already revoked"}`,
+			want: logrus.InfoLevel,
+		},
+		{
+			name: "expired certificate needs no revocation",
+			body: `{"type":"urn:ietf:params:acme:error:malformed","status":400,"detail":"Certificate is expired"}`,
+			want: logrus.InfoLevel,
+		},
+		{
+			name: "other ACME problems stay errors",
+			body: `{"type":"urn:ietf:params:acme:error:rateLimited","status":429,"detail":"too many requests"}`,
+			want: logrus.ErrorLevel,
+		},
+		{
+			name: "non-JSON body stays an error",
+			body: "<html><head><title>502 Bad Gateway</title></head></html>",
+			want: logrus.ErrorLevel,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := responseLogLevel([]byte(tc.body)); got != tc.want {
+				t.Errorf("responseLogLevel() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

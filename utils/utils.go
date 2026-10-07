@@ -530,6 +530,41 @@ func redactBody(body string) string {
 	return string(out)
 }
 
+// ACME problem types that belong to the normal protocol flow and must not be
+// reported as errors: badNonce is replayed transparently by lego
+// (RFC 8555 section 6.5), and alreadyRevoked is how
+// certstore.RevokeCertificateWithVerification confirms a revocation issued in a
+// previous cleanup cycle.
+const (
+	acmeErrBadNonce       = "urn:ietf:params:acme:error:badNonce"
+	acmeErrAlreadyRevoked = "urn:ietf:params:acme:error:alreadyRevoked"
+)
+
+// responseLogLevel returns the level a non-2xx response must be logged at.
+// Failures are errors by default, except for the expected ACME problems above,
+// which are routine and would otherwise drown the error level in noise.
+func responseLogLevel(body []byte) logrus.Level {
+	var problem struct {
+		Type   string `json:"type"`
+		Detail string `json:"detail"`
+	}
+	if err := json.Unmarshal(body, &problem); err != nil {
+		return logrus.ErrorLevel
+	}
+
+	switch {
+	case problem.Type == acmeErrBadNonce:
+		return logrus.WarnLevel
+	case problem.Type == acmeErrAlreadyRevoked:
+		return logrus.InfoLevel
+	case strings.Contains(problem.Detail, "Certificate is expired"):
+		// Revoking an already expired certificate is a no-op for the caller.
+		return logrus.InfoLevel
+	default:
+		return logrus.ErrorLevel
+	}
+}
+
 // ResponseLogHook logs the response status code and body
 func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.ResponseLogHook {
 	return func(_ retryablehttp.Logger, resp *http.Response) {
@@ -580,7 +615,7 @@ func ResponseLogHook(logger *logrus.Logger, logJSONBody bool) retryablehttp.Resp
 			if resp.StatusCode == 429 {
 				errMsg = errMsg + ". Retrying..."
 			}
-			logger.WithFields(fields).Error(errMsg)
+			logger.WithFields(fields).Log(responseLogLevel(body), errMsg)
 			// Restore the body content to the response
 			resp.Body = io.NopCloser(bytes.NewBuffer(body))
 		}

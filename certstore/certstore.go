@@ -65,12 +65,13 @@ func RevokeCertificateWithVerification(ctx context.Context, logger log.Logger, i
 		metrics.IncRevokedCertificate(issuer, owner, domain, name)
 		return false, nil // Freshly revoked, wait for next cycle
 	case strings.Contains(err.Error(), "Certificate is expired"):
+		// No revocation happened here, so nothing is counted.
 		_ = level.Info(logger).Log("msg", "certificate already expired"+versionStr, "domain", domain, "issuer", issuer, "name", name, "owner", owner)
-		metrics.IncRevokedCertificate(issuer, owner, domain, name)
 		return true, nil // Already expired, safe to destroy
 	case strings.Contains(err.Error(), "urn:ietf:params:acme:error:alreadyRevoked"):
+		// This is the verification pass of a revocation already counted in the
+		// previous cycle: counting it again would double every retired version.
 		_ = level.Info(logger).Log("msg", "certificate already revoked in previous cycle"+versionStr, "domain", domain, "issuer", issuer, "name", name, "owner", owner)
-		metrics.IncRevokedCertificate(issuer, owner, domain, name)
 		return true, nil // Already revoked, safe to destroy now
 	default:
 		_ = level.Error(logger).Log("msg", "failed to revoke certificate"+versionStr, "domain", domain, "issuer", issuer, "name", name, "owner", owner, "err", err)
