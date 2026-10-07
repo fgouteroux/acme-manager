@@ -24,7 +24,7 @@ import (
 	"github.com/go-acme/lego/v5/certificate"
 	"github.com/go-acme/lego/v5/challenge/dns01"
 	"github.com/go-acme/lego/v5/lego"
-	"github.com/go-acme/lego/v5/platform/config/env"
+	"github.com/go-acme/lego/v5/platform/env"
 	"github.com/go-acme/lego/v5/providers/dns"
 
 	"github.com/fgouteroux/acme-manager/config"
@@ -81,9 +81,13 @@ func RevokeCertificateWithVerification(ctx context.Context, logger log.Logger, i
 }
 
 func SaveResource(logger log.Logger, filepath string, certRes *certificate.Resource) {
-	domain, err := utils.SanitizedDomain(logger, certRes.Domain)
+	if len(certRes.Domains) == 0 {
+		_ = level.Error(logger).Log("msg", "unable to save certificate: resource has no domain")
+		return
+	}
+	domain, err := utils.SanitizedDomain(logger, certRes.Domains[0])
 	if err != nil {
-		_ = level.Error(logger).Log("msg", "unable to save certificate: invalid domain", "domain", certRes.Domain, "err", err)
+		_ = level.Error(logger).Log("msg", "unable to save certificate: invalid domain", "domain", certRes.Domains[0], "err", err)
 		return
 	}
 	err = os.WriteFile(filepath+domain+".crt", certRes.Certificate, 0600)
@@ -211,14 +215,18 @@ func CreateRemoteCertificateResource(ctx context.Context, certData *models.Certi
 		dns01.SetDefaultClient(dns01.NewClient(dnsClientOpts))
 
 		err = issuerAcmeClient.Challenge.SetDNS01Provider(dnsProvider,
-			dns01.CondOption(dnsPropagationDisableANS,
+			dns01.CondOptions(dnsPropagationDisableANS,
 				dns01.DisableAuthoritativeNssPropagationRequirement(),
 			),
-			dns01.CondOption(wait > 0,
+			dns01.CondOptions(wait > 0,
 				dns01.PropagationWait(wait, true),
 			),
-			dns01.CondOption(dnsPropagationRNS,
-				dns01.RecursiveNSsPropagationRequirement(),
+			// lego requires recursive NS propagation by default since v5.5.2,
+			// where it used to be opt-in. Disabling it unless
+			// ACME_MANAGER_DNS_PROPAGATIONRNS asks for it keeps that flag
+			// meaning what it did before.
+			dns01.CondOptions(!dnsPropagationRNS,
+				dns01.DisableRecursiveNSsPropagationRequirement(),
 			),
 		)
 		if err != nil {

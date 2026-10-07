@@ -18,6 +18,7 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 
+	"github.com/go-acme/lego/v5/acme"
 	"github.com/go-acme/lego/v5/certcrypto"
 	"github.com/go-acme/lego/v5/challenge"
 	"github.com/go-acme/lego/v5/lego"
@@ -43,9 +44,50 @@ var (
 
 // Account represents a users local saved credentials.
 type Account struct {
-	Email        string                 `json:"email"`
-	Registration *registration.Resource `json:"registration"`
-	key          crypto.PrivateKey
+	Email        string                `json:"email"`
+	Registration *acme.ExtendedAccount `json:"registration"`
+	key          crypto.Signer
+}
+
+// legacyRegistration is the pre-v5.5.2 on-disk shape of the registration
+// field: the ACME account nested under "body", with its URL in "uri". lego
+// v5.5.2 replaced registration.Resource with acme.ExtendedAccount, which
+// serializes the account fields flat and names the URL "accountURL".
+type legacyRegistration struct {
+	Body *acme.Account `json:"body"`
+	URI  string        `json:"uri"`
+}
+
+// UnmarshalJSON reads both the current and the legacy account file layouts, so
+// that upgrading does not lose the account URL and send every issuer through
+// registration recovery against the CA.
+func (a *Account) UnmarshalJSON(data []byte) error {
+	type plain Account // sheds this method, so no recursion
+	var current plain
+	if err := json.Unmarshal(data, &current); err != nil {
+		return err
+	}
+	*a = Account(current)
+
+	if a.Registration != nil && a.Registration.Status != "" {
+		return nil
+	}
+
+	var legacy struct {
+		Registration *legacyRegistration `json:"registration"`
+	}
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return nil
+	}
+	if legacy.Registration == nil || legacy.Registration.Body == nil {
+		return nil
+	}
+	a.Registration = &acme.ExtendedAccount{
+		Account:  *legacy.Registration.Body,
+		Location: legacy.Registration.URI,
+	}
+
+	return nil
 }
 
 /** Implementation of the registration.User interface **/
@@ -56,12 +98,12 @@ func (a *Account) GetEmail() string {
 }
 
 // GetPrivateKey returns the private RSA account key.
-func (a *Account) GetPrivateKey() crypto.PrivateKey {
+func (a *Account) GetPrivateKey() crypto.Signer {
 	return a.key
 }
 
 // GetRegistration returns the server registration.
-func (a *Account) GetRegistration() *registration.Resource {
+func (a *Account) GetRegistration() *acme.ExtendedAccount {
 	return a.Registration
 }
 
@@ -79,7 +121,7 @@ func accountSave(account *Account, accountFilePath string) error {
 	return nil
 }
 
-func tryRecoverRegistration(customLogger *logrus.Logger, cfg config.Config, privateKey crypto.PrivateKey, email, caDirURL, userAgent string) (*lego.Client, *registration.Resource, error) {
+func tryRecoverRegistration(customLogger *logrus.Logger, cfg config.Config, privateKey crypto.Signer, email, caDirURL, userAgent string) (*lego.Client, *acme.ExtendedAccount, error) {
 	// couldn't load account but got a key. Try to look the account up.
 	conf := lego.NewConfig(&Account{key: privateKey, Email: email})
 	conf.CADirURL = caDirURL
@@ -150,7 +192,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 
 		userAgent := fmt.Sprintf("acme-manager/%s", version)
 
-		if account.Registration == nil || account.Registration.Body.Status == "" {
+		if account.Registration == nil || account.Registration.Status == "" {
 			_ = level.Info(logger).Log("msg", "trying to recover registration account", "issuer", issuer, "private_key_path", privateKeyPath)
 			client, reg, err := tryRecoverRegistration(customLogger, cfg, account.key, issuerConf.Contact, issuerConf.CADirURL, userAgent)
 			if err != nil {
@@ -183,11 +225,11 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 				}
 			} else {
 				var contact string
-				if len(reg.Body.Contact) > 0 {
-					contact = strings.TrimPrefix(reg.Body.Contact[0], "mailto:")
+				if len(reg.Contact) > 0 {
+					contact = strings.TrimPrefix(reg.Contact[0], "mailto:")
 				}
 				if contact != issuerConf.Contact {
-					conf := lego.NewConfig(&Account{key: account.key, Email: issuerConf.Contact, Registration: &registration.Resource{URI: reg.URI}})
+					conf := lego.NewConfig(&Account{key: account.key, Email: issuerConf.Contact, Registration: &acme.ExtendedAccount{Location: reg.Location}})
 					conf.CADirURL = issuerConf.CADirURL
 					conf.UserAgent = userAgent
 
@@ -205,8 +247,8 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 				}
 			}
 			var contact string
-			if len(reg.Body.Contact) > 0 {
-				contact = strings.TrimPrefix(reg.Body.Contact[0], "mailto:")
+			if len(reg.Contact) > 0 {
+				contact = strings.TrimPrefix(reg.Contact[0], "mailto:")
 			}
 			account.Email = contact
 			account.Registration = reg
@@ -219,7 +261,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 
 		} else if account.Registration != nil && account.Email != issuerConf.Contact {
 
-			conf := lego.NewConfig(&Account{key: account.key, Email: issuerConf.Contact, Registration: &registration.Resource{URI: account.Registration.URI}})
+			conf := lego.NewConfig(&Account{key: account.key, Email: issuerConf.Contact, Registration: &acme.ExtendedAccount{Location: account.Registration.Location}})
 			conf.CADirURL = issuerConf.CADirURL
 			conf.UserAgent = userAgent
 
@@ -235,8 +277,8 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 				continue
 			}
 			var contact string
-			if len(reg.Body.Contact) > 0 {
-				contact = strings.TrimPrefix(reg.Body.Contact[0], "mailto:")
+			if len(reg.Contact) > 0 {
+				contact = strings.TrimPrefix(reg.Contact[0], "mailto:")
 			}
 			account.Email = contact
 			account.Registration = reg
@@ -248,7 +290,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 			_ = level.Info(logger).Log("msg", "account file updated", "issuer", issuer, "path", accountFilePath)
 		} else if account.Registration != nil && issuerConf.Unregister {
 
-			conf := lego.NewConfig(&Account{key: account.key, Email: issuerConf.Contact, Registration: &registration.Resource{URI: account.Registration.URI}})
+			conf := lego.NewConfig(&Account{key: account.key, Email: issuerConf.Contact, Registration: &acme.ExtendedAccount{Location: account.Registration.Location}})
 			conf.CADirURL = issuerConf.CADirURL
 			conf.UserAgent = userAgent
 
@@ -291,7 +333,6 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 
 		conf := lego.NewConfig(&account)
 		conf.CADirURL = issuerConf.CADirURL
-		conf.Certificate.KeyType = certcrypto.RSA2048
 		conf.Certificate.OverallRequestLimit = issuerConf.OverallRequestLimit
 		conf.Certificate.Timeout = time.Duration(issuerConf.CertificateTimeout) * time.Second
 		conf.UserAgent = userAgent
@@ -327,7 +368,6 @@ func NewAcmeClientForIssuer(logger log.Logger, issuer string) (*lego.Client, err
 
 	conf := lego.NewConfig(account)
 	conf.CADirURL = issuerConf.CADirURL
-	conf.Certificate.KeyType = certcrypto.RSA2048
 	conf.Certificate.OverallRequestLimit = issuerConf.OverallRequestLimit
 	conf.Certificate.Timeout = time.Duration(issuerConf.CertificateTimeout) * time.Second
 	conf.UserAgent = userAgent

@@ -284,7 +284,7 @@ func SetTLSConfig(cert string, key string, ca string, insecure bool) (*tls.Confi
 
 // GenerateCSRAndPrivateKey generates a Certificate Signing Request (CSR) and a private key.
 func GenerateCSRAndPrivateKey(privateKey, keyType, domain string, SAN []string) (string, []byte, error) {
-	var pKey crypto.PrivateKey
+	var pKey crypto.Signer
 	var err error
 	if privateKey == "" {
 		certKeyType, err := GetKeyType(keyType)
