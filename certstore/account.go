@@ -107,6 +107,20 @@ func (a *Account) GetRegistration() *acme.ExtendedAccount {
 	return a.Registration
 }
 
+// accountEmail returns the contact to record for the account. Not every CA
+// echoes the contact back in the account object -- Sectigo does, Let's Encrypt
+// does not -- and an empty value must never overwrite what we know. The
+// configured contact is the source of truth: recording anything else makes
+// Setup take the "contact changed" branch on the next start and re-send an
+// update on every restart without ever converging.
+func accountEmail(reg *acme.ExtendedAccount, configured string) string {
+	if reg != nil && len(reg.Contact) > 0 {
+		return strings.TrimPrefix(reg.Contact[0], "mailto:")
+	}
+
+	return configured
+}
+
 func accountSave(account *Account, accountFilePath string) error {
 	jsonBytes, err := json.MarshalIndent(account, "", "\t")
 	if err != nil {
@@ -246,11 +260,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 					}
 				}
 			}
-			var contact string
-			if len(reg.Contact) > 0 {
-				contact = strings.TrimPrefix(reg.Contact[0], "mailto:")
-			}
-			account.Email = contact
+			account.Email = accountEmail(reg, issuerConf.Contact)
 			account.Registration = reg
 			err = accountSave(&account, accountFilePath)
 			if err != nil {
@@ -276,11 +286,7 @@ func Setup(logger log.Logger, customLogger *logrus.Logger, cfg config.Config, ve
 				_ = level.Error(logger).Log("msg", "failed to update registration", "issuer", issuer, "err", err)
 				continue
 			}
-			var contact string
-			if len(reg.Contact) > 0 {
-				contact = strings.TrimPrefix(reg.Contact[0], "mailto:")
-			}
-			account.Email = contact
+			account.Email = accountEmail(reg, issuerConf.Contact)
 			account.Registration = reg
 			err = accountSave(&account, accountFilePath)
 			if err != nil {
