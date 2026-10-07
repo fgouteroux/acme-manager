@@ -260,7 +260,9 @@ func NewMemberlistKVWithConfig(ringConfig Config, instanceID string, joinMembers
 	}
 
 	// resolver defines how each peers IP address should be resolved.
-	resolver := dns.NewProvider(log.With(logger, "component", "dns"), reg, dns.GolangResolverType)
+	// The connection pool size only applies to the miekgdns resolver, so it is
+	// left at zero for the golang one.
+	resolver := dns.NewProvider(dns.GolangResolverType, 0, log.With(logger, "component", "dns"), reg)
 
 	// Set remaining defaults if not configured via flags
 	if config.NodeName == "" {
