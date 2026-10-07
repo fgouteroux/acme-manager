@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"testing"
+
+	"github.com/go-acme/lego/v5/acme"
 )
 
 const testAccountURL = "https://acme.example.com/acct/42"
@@ -79,5 +81,44 @@ func TestAccountUnmarshalJSONWithoutRegistration(t *testing.T) {
 	}
 	if account.Registration != nil {
 		t.Errorf("Registration = %+v, want nil", account.Registration)
+	}
+}
+
+func TestAccountEmail(t *testing.T) {
+	const configured = "ssl@example.com"
+
+	for _, tc := range []struct {
+		name string
+		reg  *acme.ExtendedAccount
+		want string
+	}{
+		{
+			name: "CA echoes the contact back",
+			reg:  &acme.ExtendedAccount{Account: acme.Account{Contact: []string{"mailto:ops@example.com"}}},
+			want: "ops@example.com",
+		},
+		{
+			// Let's Encrypt answers without a contact; the configured one must win
+			// instead of being overwritten with an empty string.
+			name: "CA echoes no contact",
+			reg:  &acme.ExtendedAccount{},
+			want: configured,
+		},
+		{
+			name: "no registration at all",
+			reg:  nil,
+			want: configured,
+		},
+		{
+			name: "contact without the mailto scheme",
+			reg:  &acme.ExtendedAccount{Account: acme.Account{Contact: []string{"ops@example.com"}}},
+			want: "ops@example.com",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := accountEmail(tc.reg, configured); got != tc.want {
+				t.Errorf("accountEmail() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
