@@ -36,7 +36,7 @@ builds:
 
 archives:
   - id: server-archive
-    builds: [acme-manager-server]
+    ids: [acme-manager-server]
     name_template: >-
       acme-manager-server_
       {{- title .Os }}_
@@ -45,7 +45,7 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end -}}
   - id: client-archive
-    builds: [acme-manager-client]
+    ids: [acme-manager-client]
     name_template: >-
       acme-manager-client_
       {{- title .Os }}_
@@ -54,7 +54,7 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end -}}
   - id: combined-archive
-    builds: [acme-manager-server, acme-manager-client]
+    ids: [acme-manager-server, acme-manager-client]
     name_template: >-
       acme-manager-complete_
       {{- title .Os }}_
