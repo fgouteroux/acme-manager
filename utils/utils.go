@@ -667,7 +667,7 @@ func (f *CustomTextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	timestamp := entry.Time.Format(f.TimestampFormat)
 	fmt.Fprintf(b, "ts=%s ", timestamp)
 
-	if entry.HasCaller() {
+	if entry.Caller != nil {
 		fmt.Fprintf(b, "caller=%s:%d ", FormatFilePath(entry.Caller.File), entry.Caller.Line)
 	}
 
