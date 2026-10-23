@@ -155,13 +155,7 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 
 		// Update Vault backup with certificate after successful creation
 		if GlobalConfig.Common.CertBackup {
-			data := CertBackup{Cert: newCert.Cert, Key: string(privateKey), CAIssuer: newCert.CAIssuer}
-			vaultSecretPath := certVaultPath(GlobalConfig.Storage.Vault.CertPrefix, newCert.Owner, newCert.Issuer, newCert.Name, newCert.Domain)
-			err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
-			if err != nil {
-				_ = level.Error(logger).Log("msg", "failed to backup certificate", "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
-			}
-			_ = level.Info(logger).Log("msg", "certificate and private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+			backupCertificate(logger, newCert, privateKey)
 		}
 
 		if GlobalConfig.Common.CertDeploy {
@@ -241,13 +235,13 @@ func applyCertFileChanges(acmeClient *restclient.Client, diff MapDiff, logger lo
 		_ = level.Info(logger).Log("msg", "certificate updated", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 
 		if GlobalConfig.Common.CertBackup {
-			data := CertBackup{Cert: newCert.Cert, Key: string(privateKey), CAIssuer: newCert.CAIssuer}
-			vaultSecretPath := certVaultPath(GlobalConfig.Storage.Vault.CertPrefix, newCert.Owner, newCert.Issuer, newCert.Name, newCert.Domain)
-			err = vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
-			if err != nil {
-				_ = level.Error(logger).Log("msg", "failed to backup certificate", "err", err, "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
+			if privateKey == nil {
+				// The CSR was reused (metadata-only update): the key did not change,
+				// back up the local one instead of overwriting the vault key with nothing.
+				backupCertificateWithLocalKey(logger, newCert, keyFilePath)
+			} else {
+				backupCertificate(logger, newCert, privateKey)
 			}
-			_ = level.Info(logger).Log("msg", "certificate and private key backed up in vault", "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 		}
 
 		if GlobalConfig.Common.CertDeploy && initCSR == newCert.Csr {
@@ -579,6 +573,11 @@ func CheckCertificate(logger log.Logger, GlobalConfigPath string, acmeClient *re
 							hasChange = true
 							_ = level.Info(logger).Log("msg", fmt.Sprintf("deployed local certificate %s", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 							metrics.IncCreatedLocalCertificate(certData.Issuer)
+							// The server renewed the certificate with the same CSR: keep the vault backup in sync.
+							if GlobalConfig.Common.CertBackup {
+								keyFilePath := certLocalPath(GlobalConfig.Common.CertDir, certData.Issuer, certData.Name, certData.Domain, GlobalConfig.Common.CertKeyFileExt)
+								backupCertificateWithLocalKey(logger, certificate, keyFilePath)
+							}
 						}
 
 						checkServerFingerprint(logger, old[idx], certificate.Cert)
@@ -913,6 +912,11 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 					hasChange = true
 					_ = level.Info(logger).Log("msg", fmt.Sprintf("deployed local certificate %s", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 					metrics.IncCreatedLocalCertificate(certData.Issuer)
+					// The server renewed the certificate with the same CSR: keep the vault backup in sync.
+					if GlobalConfig.Common.CertBackup {
+						keyFilePath := certLocalPath(GlobalConfig.Common.CertDir, certData.Issuer, certData.Name, certData.Domain, GlobalConfig.Common.CertKeyFileExt)
+						backupCertificateWithLocalKey(logger, certificate, keyFilePath)
+					}
 				}
 
 				checkServerFingerprint(logger, certData, certificate.Cert)
@@ -1037,6 +1041,34 @@ func executeCommand(logger log.Logger, cfg Common, preCmd bool) error {
 		metrics.IncRunSuccessLocalCmd(cmdPath)
 	}
 	return nil
+}
+
+// backupCertificate stores the certificate, its CA chain and private key in vault.
+func backupCertificate(logger log.Logger, cert models.CertMap, privateKey []byte) {
+	data := CertBackup{Cert: cert.Cert, Key: string(privateKey), CAIssuer: cert.CAIssuer}
+	vaultSecretPath := certVaultPath(GlobalConfig.Storage.Vault.CertPrefix, Owner, cert.Issuer, cert.Name, cert.Domain)
+	err := vault.GlobalClient.PutSecretWithAppRole(vaultSecretPath, utils.StructToMapInterface(data))
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "failed to backup certificate", "err", err, "domain", cert.Domain, "issuer", cert.Issuer, "name", cert.Name, "owner", Owner)
+		return
+	}
+	_ = level.Info(logger).Log("msg", "certificate and private key backed up in vault", "domain", cert.Domain, "issuer", cert.Issuer, "name", cert.Name, "owner", Owner)
+}
+
+// backupCertificateWithLocalKey backs up the certificate with the local private key,
+// only when that key matches the certificate, so a broken local state never
+// overwrites a good backup.
+func backupCertificateWithLocalKey(logger log.Logger, cert models.CertMap, keyFilePath string) {
+	privateKey, err := os.ReadFile(filepath.Clean(keyFilePath))
+	if err != nil {
+		_ = level.Warn(logger).Log("msg", "skipping vault backup, unable to read local private key", "err", err, "domain", cert.Domain, "issuer", cert.Issuer, "name", cert.Name, "owner", Owner)
+		return
+	}
+	if _, err := tls.X509KeyPair([]byte(cert.Cert), privateKey); err != nil {
+		_ = level.Warn(logger).Log("msg", "skipping vault backup, local private key does not match the certificate", "err", err, "domain", cert.Domain, "issuer", cert.Issuer, "name", cert.Name, "owner", Owner)
+		return
+	}
+	backupCertificate(logger, cert, privateKey)
 }
 
 func MapInterfaceToCertBackup(data map[string]interface{}) CertBackup {
