@@ -71,6 +71,15 @@ snapshot:
 
 changelog:
   sort: asc
+  groups:
+    - title: Client
+      regexp: '^.*?\w+\(client\)!?:.+$'
+      order: 0
+    - title: Server
+      regexp: '^.*?\w+\(server\)!?:.+$'
+      order: 1
+    - title: Other
+      order: 999
   filters:
     exclude:
       - '^docs:'
