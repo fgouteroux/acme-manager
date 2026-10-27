@@ -14,8 +14,8 @@ require (
 	github.com/hashicorp/vault/api/auth/approle v0.12.0
 	github.com/joho/godotenv v1.5.1
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.24.1
-	github.com/prometheus/common v0.72.0
+	github.com/prometheus/client_golang v1.25.0
+	github.com/prometheus/common v0.72.1
 	github.com/sirupsen/logrus v1.10.2
 	github.com/stretchr/testify v1.12.1
 	github.com/swaggo/http-swagger v1.3.4
