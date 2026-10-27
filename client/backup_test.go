@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -86,6 +87,22 @@ func TestBackupCertificateWithLocalKey(t *testing.T) {
 	got := readBackup(t)
 	if got.Cert != originalCert || got.Key != string(key) || got.CAIssuer != "ca chain" {
 		t.Fatalf("unexpected backup after renewal: %+v", got)
+	}
+
+	currentVersion := func(t *testing.T) int {
+		t.Helper()
+		meta, err := vault.GlobalClient.APIClient.KVv2(vault.GlobalClient.Config.SecretEngine).GetMetadata(context.Background(), secretPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return meta.CurrentVersion
+	}
+
+	// Another client deploying the same renewal must not stack an identical version.
+	version := currentVersion(t)
+	backupCertificateWithLocalKey(log.NewNopLogger(), cert(originalCert), keyFilePath)
+	if got := currentVersion(t); got != version {
+		t.Fatalf("identical backup created version %d, want %d", got, version)
 	}
 
 	// A local key that does not match the certificate must not overwrite the backup.
