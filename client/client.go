@@ -912,11 +912,6 @@ func PullAndCheckCertificateFromRing(logger log.Logger, GlobalConfigPath string,
 					hasChange = true
 					_ = level.Info(logger).Log("msg", fmt.Sprintf("deployed local certificate %s", certFilePath), "domain", certData.Domain, "issuer", certData.Issuer, "name", certData.Name, "owner", Owner)
 					metrics.IncCreatedLocalCertificate(certData.Issuer)
-					// The server renewed the certificate with the same CSR: keep the vault backup in sync.
-					if GlobalConfig.Common.CertBackup {
-						keyFilePath := certLocalPath(GlobalConfig.Common.CertDir, certData.Issuer, certData.Name, certData.Domain, GlobalConfig.Common.CertKeyFileExt)
-						backupCertificateWithLocalKey(logger, certificate, keyFilePath)
-					}
 				}
 
 				checkServerFingerprint(logger, certData, certificate.Cert)
@@ -1057,7 +1052,8 @@ func backupCertificate(logger log.Logger, cert models.CertMap, privateKey []byte
 
 // backupCertificateWithLocalKey backs up the certificate with the local private key,
 // only when that key matches the certificate, so a broken local state never
-// overwrites a good backup.
+// overwrites a good backup. Nothing is written when vault already holds the same
+// certificate and key, so clients sharing an owner don't stack identical versions.
 func backupCertificateWithLocalKey(logger log.Logger, cert models.CertMap, keyFilePath string) {
 	privateKey, err := os.ReadFile(filepath.Clean(keyFilePath))
 	if err != nil {
@@ -1068,6 +1064,21 @@ func backupCertificateWithLocalKey(logger log.Logger, cert models.CertMap, keyFi
 		_ = level.Warn(logger).Log("msg", "skipping vault backup, local private key does not match the certificate", "err", err, "domain", cert.Domain, "issuer", cert.Issuer, "name", cert.Name, "owner", Owner)
 		return
 	}
+
+	vaultSecretPath := certVaultPath(GlobalConfig.Storage.Vault.CertPrefix, Owner, cert.Issuer, cert.Name, cert.Domain)
+	secret, err := vault.GlobalClient.GetSecretWithAppRole(vaultSecretPath)
+	switch {
+	case err == nil:
+		current := MapInterfaceToCertBackup(secret)
+		if current.Cert == cert.Cert && current.Key == string(privateKey) && current.CAIssuer == cert.CAIssuer {
+			_ = level.Debug(logger).Log("msg", "vault backup already up to date", "domain", cert.Domain, "issuer", cert.Issuer, "name", cert.Name, "owner", Owner)
+			return
+		}
+	case !errors.Is(err, vault.ErrSecretNotFound):
+		// Could not compare: write anyway rather than leave a stale backup.
+		_ = level.Warn(logger).Log("msg", "unable to read current vault backup", "err", err, "domain", cert.Domain, "issuer", cert.Issuer, "name", cert.Name, "owner", Owner)
+	}
+
 	backupCertificate(logger, cert, privateKey)
 }
 
